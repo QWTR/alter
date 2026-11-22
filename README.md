@@ -37,12 +37,17 @@ Requirements: **Node.js 24+** and at least one AI CLI signed in with your accoun
 
 (Or skip this — Alter can open the install/sign-in terminal for you from **Settings → AI subscriptions**.)
 
+**Windows app:** download `Alter-Setup-x.y.z.exe` from [Releases](https://github.com/QWTR/alter/releases) and run it. Alter installs per-user (no admin), starts with Windows in the tray and keeps your agents running in the background. Node.js is not needed for the app itself. The installer is not code-signed yet, so SmartScreen may show "More info → Run anyway".
+
+**From source:**
+
 ```bash
 git clone https://github.com/QWTR/alter.git
 cd alter
 npm install
 npm start            # web UI on http://localhost:7420
 npm run desktop      # or: the desktop app (window + tray, keeps agents running)
+npm run dist -w @alter/desktop   # build the Windows installer → apps/desktop/release/
 ```
 
 **Phone:** Settings → *Pair a phone* → scan the QR code on the same Wi‑Fi → *Add to Home Screen*.
@@ -91,7 +96,8 @@ skills/         built-in skills (overlays)
 - [x] Long-term memory with automatic learning, editable
 - [x] Agents with schedules, history, skills, unattended tools
 - [x] Phone pairing (PWA), live sync between devices
-- [ ] Packaged installers (Windows / macOS / Linux) with bundled runtime, auto-start
+- [x] Windows installer with bundled runtime, tray, start with Windows
+- [ ] macOS / Linux packages, code signing, auto-update
 - [ ] Native phone app (Expo): push notifications, share sheet, voice
 - [ ] **Alter Relay** — reach your computer from anywhere, end-to-end encrypted
 - [ ] Connectors out of the box: Gmail, Google Calendar, Notion, Slack (via MCP)

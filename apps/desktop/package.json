@@ -1,13 +1,53 @@
 {
   "name": "@alter/desktop",
   "version": "0.1.0",
-  "description": "Alter desktop shell (Electron): runs the Alter core in the background and shows the app in a window + tray.",
+  "description": "Alter desktop app (Electron): runs the Alter core in the background and shows the app in a window + tray.",
   "license": "AGPL-3.0-only",
+  "author": "Alter contributors",
+  "homepage": "https://github.com/QWTR/alter",
   "main": "main.cjs",
   "scripts": {
-    "start": "electron ."
+    "build:core": "esbuild ../../packages/core/src/index.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/core.mjs --log-level=warning",
+    "icons": "node scripts/make-icons.mjs",
+    "start": "npm run build:core && npm run icons && electron .",
+    "dist": "npm run build:core && npm run icons && electron-builder --win nsis --publish never"
   },
   "devDependencies": {
-    "electron": "^38.0.0"
+    "electron": "44.11.5",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.25.12"
+  },
+  "build": {
+    "appId": "dev.alter.app",
+    "productName": "Alter",
+    "copyright": "Alter contributors — AGPL-3.0",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "dist/**",
+      "build/tray*.png",
+      "build/icon.png"
+    ],
+    "extraResources": [
+      { "from": "../web", "to": "web" },
+      { "from": "../../skills", "to": "skills" }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Alter",
+      "runAfterFinish": true,
+      "artifactName": "Alter-Setup-${version}.${ext}"
+    }
   }
 }

@@ -8,3 +8,5 @@ out/
 Thumbs.db
 # local Alter data when ALTER_HOME points inside the repo
 .alter/
+release/
+apps/desktop/build/
