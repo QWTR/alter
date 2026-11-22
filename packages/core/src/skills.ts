@@ -1,0 +1,53 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { userSkillsDir } from './config.ts';
+
+/**
+ * Skills ("nakładki") are Markdown instruction packs an agent can wear:
+ * how to triage e-mail, how to write a reel script, the house style for reports…
+ * Built-ins live in the repo's /skills, the user's own in ~/.alter/skills.
+ */
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  body: string;
+  builtIn: boolean;
+}
+
+const builtInDir = process.env.ALTER_SKILLS_DIR ?? resolve(import.meta.dirname, '../../../skills');
+
+function parse(id: string, raw: string, builtIn: boolean): Skill {
+  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  const meta: Record<string, string> = {};
+  if (m) {
+    for (const line of m[1].split(/\r?\n/)) {
+      const kv = line.match(/^(\w+):\s*(.*)$/);
+      if (kv) meta[kv[1]] = kv[2].trim();
+    }
+  }
+  return { id, name: meta.name ?? id, description: meta.description ?? '', body: (m ? m[2] : raw).trim(), builtIn };
+}
+
+export function listSkills(): Skill[] {
+  const out = new Map<string, Skill>();
+  for (const [dir, builtIn] of [[builtInDir, true], [userSkillsDir(), false]] as const) {
+    if (!existsSync(dir)) continue;
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith('.md') || file.toLowerCase() === 'readme.md') continue;
+      const id = file.slice(0, -3);
+      out.set(id, parse(id, readFileSync(join(dir, file), 'utf8'), builtIn)); // user skills override built-ins
+    }
+  }
+  return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function skillsText(ids: string[]): string {
+  if (!ids.length) return '';
+  const byId = new Map(listSkills().map((s) => [s.id, s]));
+  return ids
+    .map((id) => byId.get(id))
+    .filter((s): s is Skill => !!s)
+    .map((s) => `### Skill: ${s.name}\n${s.body}`)
+    .join('\n\n');
+}

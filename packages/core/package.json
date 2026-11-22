@@ -1,0 +1,11 @@
+{
+  "name": "@alter/core",
+  "version": "0.1.0",
+  "description": "Alter core daemon: subscription-backed AI providers, memory, agents, scheduler and the API used by the desktop and phone apps.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "node src/cli.ts start"
+  }
+}

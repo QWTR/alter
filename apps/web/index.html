@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f0e13" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Alter</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="stylesheet" href="/style.css" />
+  <!--ALTER_BOOT-->
+</head>
+<body>
+  <div id="app">
+    <nav class="nav">
+      <div class="brand"><span class="logo">◆</span> Alter</div>
+      <button data-view="chat" class="active"><span>💬</span><b>Chat</b></button>
+      <button data-view="agents"><span>🤖</span><b>Agents</b></button>
+      <button data-view="feed"><span>📰</span><b>Feed</b></button>
+      <button data-view="memory"><span>🧠</span><b>Memory</b></button>
+      <button data-view="settings"><span>⚙️</span><b>Settings</b></button>
+    </nav>
+    <main id="view"></main>
+  </div>
+  <div id="toast" hidden></div>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
