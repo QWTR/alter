@@ -38,7 +38,7 @@ Requirements: **Node.js 24+** and at least one AI CLI signed in with your accoun
 (Or skip this — Alter can open the install/sign-in terminal for you from **Settings → AI subscriptions**.)
 
 ```bash
-git clone https://github.com/<you>/alter.git
+git clone https://github.com/QWTR/alter.git
 cd alter
 npm install
 npm start            # web UI on http://localhost:7420
