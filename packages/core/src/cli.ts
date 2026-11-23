@@ -25,14 +25,14 @@ switch (cmd) {
     break;
   }
   case 'pair': {
-    // Asks the running Alter for a pairing code.
+    // Asks the running ALTTER for a pairing code.
     const cfg = loadConfig();
     const r = await fetch(`http://127.0.0.1:${cfg.port}/api/pair/start`, {
       method: 'POST',
       headers: { authorization: `Bearer ${cfg.ownerToken}` },
     }).catch(() => null);
     if (!r?.ok) {
-      console.error('Alter is not running. Start it with: npm start');
+      console.error('ALTTER is not running. Start it with: npm start');
       process.exit(1);
     }
     const p = (await r.json()) as { code: string; urls: string[] };
@@ -42,7 +42,7 @@ switch (cmd) {
     break;
   }
   case 'status': {
-    console.log(`Alter ${VERSION} — data in ${HOME}\n`);
+    console.log(`ALTTER ${VERSION} — data in ${HOME}\n`);
     for (const p of await providerStatuses(true)) {
       console.log(`  ${p.installed ? '●' : '○'} ${p.name.padEnd(16)} ${p.installed ? p.version : `not installed — ${p.installCmd}`}`);
     }

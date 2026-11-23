@@ -13,6 +13,8 @@ export interface Skill {
   description: string;
   body: string;
   builtIn: boolean;
+  /** When the chat message matches, the skill is added to the answer by itself. */
+  triggers?: string;
 }
 
 const builtInDir = process.env.ALTER_SKILLS_DIR ?? resolve(import.meta.dirname, '../../../skills');
@@ -26,7 +28,7 @@ function parse(id: string, raw: string, builtIn: boolean): Skill {
       if (kv) meta[kv[1]] = kv[2].trim();
     }
   }
-  return { id, name: meta.name ?? id, description: meta.description ?? '', body: (m ? m[2] : raw).trim(), builtIn };
+  return { id, name: meta.name ?? id, description: meta.description ?? '', body: (m ? m[2] : raw).trim(), builtIn, triggers: meta.triggers || undefined };
 }
 
 export function listSkills(): Skill[] {
@@ -50,4 +52,20 @@ export function skillsText(ids: string[]): string {
     .filter((s): s is Skill => !!s)
     .map((s) => `### Skill: ${s.name}\n${s.body}`)
     .join('\n\n');
+}
+
+/** Expert know-how for this message: up to 2 skills whose triggers match (websites, motion, video, automations…). */
+export function expertSkills(message: string): { names: string[]; text: string } {
+  const hits: { s: Skill; n: number }[] = [];
+  for (const sk of listSkills()) {
+    if (!sk.triggers) continue;
+    let re: RegExp;
+    try { re = new RegExp(sk.triggers, 'giu'); } catch { continue; }
+    const n = message.match(re)?.length ?? 0;
+    if (n) hits.push({ s: sk, n });
+  }
+  const top = hits.sort((a, b) => b.n - a.n).slice(0, 2).map((h) => h.s);
+  if (!top.length) return { names: [], text: '' };
+  const body = top.map((s) => `### ${s.name}\n${s.body}`).join('\n\n');
+  return { names: top.map((s) => s.name), text: `Expert know-how for this task (use it, do not quote it):\n\n${body}` };
 }

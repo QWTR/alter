@@ -1,0 +1,19 @@
+{
+  "name": "@alter/mobile",
+  "version": "0.13.0",
+  "private": true,
+  "description": "ALTTER for Android: a native shell that connects the phone to ALTTER on your computer (directly on Wi-Fi or through your relay).",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "sync": "cap sync android",
+    "apk": "cap sync android && node scripts/gradle.mjs assembleDebug",
+    "apk:release": "cap sync android && node scripts/gradle.mjs assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2"
+  }
+}

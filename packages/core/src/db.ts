@@ -70,8 +70,32 @@ export function getDb(): DatabaseSync {
       finished_at TEXT
     );
     CREATE INDEX IF NOT EXISTS runs_agent ON runs(agent_id, started_at);
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      data TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+  // v0.2 migrations: projects + access levels
+  addColumn('conversations', 'project_id', 'TEXT');
+  addColumn('conversations', 'access', "TEXT NOT NULL DEFAULT 'chat'");
+  addColumn('memories', 'project_id', 'TEXT');
+  addColumn('runs', 'detail', 'TEXT');
+  addColumn('conversations', 'agent_id', 'TEXT');
+  // v0.6: attachments + who wrote a message (online sessions)
+  addColumn('messages', 'attachments', 'TEXT');
+  addColumn('messages', 'author', 'TEXT');
+  // v0.12: crews — a helper's chat sits under the lead's chat
+  addColumn('conversations', 'parent_id', 'TEXT');
+  addColumn('conversations', 'crew', 'TEXT');
   return db;
+}
+
+function addColumn(table: string, column: string, type: string): void {
+  const cols = db!.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) db!.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
 }
 
 export const now = (): string => new Date().toISOString();

@@ -1,0 +1,37 @@
+{
+  "appId": "dev.alter.app",
+  "appName": "ALTTER",
+  "webDir": "shell",
+  "loggingBehavior": "debug",
+  "backgroundColor": "#0b0a12",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true,
+    "allowNavigation": [
+      "altter.v-room.app",
+      "*.v-room.app",
+      "*.sslip.io",
+      "*.trycloudflare.com",
+      "*.ts.net",
+      "*.local",
+      "192.168.*.*",
+      "10.*.*.*",
+      "172.*.*.*"
+    ]
+  },
+  "android": {
+    "appendUserAgent": "ALTTER-App/0.13.0",
+    "backgroundColor": "#0b0a12",
+    "allowMixedContent": false,
+    "captureInput": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "SystemBars": {
+      "insetsHandling": "disable",
+      "style": "DARK"
+    }
+  }
+}

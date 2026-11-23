@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en" data-lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ALTTER — your personal AI on the subscriptions you already have</title>
+<meta name="description" content="ALTTER: one personal AI on your computer and phone, on your own Claude, ChatGPT or Gemini subscription. Memory, agents, websites, videos, images. Free and open source." />
+<meta name="theme-color" content="#0b0a12" />
+<meta property="og:title" content="ALTTER — your personal AI" />
+<meta property="og:description" content="Claude, ChatGPT or Gemini on your own account — on your computer and your phone. Free and open source." />
+<meta property="og:image" content="https://qwtr.github.io/alter/img/icon.png" />
+<link rel="icon" href="img/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script>
+  // language: saved choice → browser → English
+  (function () {
+    var l = null;
+    try { l = localStorage.getItem('altter.site.lang'); } catch (e) {}
+    if (!l) l = /^pl\b/i.test(navigator.language || '') ? 'pl' : 'en';
+    document.documentElement.setAttribute('data-lang', l);
+    document.documentElement.lang = l;
+  })();
+</script>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0a12;
+    --surface: #13121d;
+    --surface-2: #1a1927;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --text: #efeef6;
+    --text-2: #c9c7d8;
+    --muted: #8c89a3;
+    --accent: #8b74ff;
+    --accent-2: #2ee6ff;
+    --radius: 20px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  html[data-lang="en"] [lang="pl"], html[data-lang="pl"] [lang="en"] { display: none !important; }
+  a { color: inherit; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+  /* top bar */
+  header.top { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(14px); background: rgba(11, 10, 18, 0.72); border-bottom: 1px solid var(--border); }
+  header.top .wrap { display: flex; align-items: center; gap: 14px; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: 0.04em; text-decoration: none; }
+  .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  .top nav { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .top nav a { text-decoration: none; color: var(--muted); font-size: 14px; padding: 6px 10px; border-radius: 10px; }
+  .top nav a:hover { color: var(--text); background: var(--surface-2); }
+  .lang { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; }
+  .lang button { all: unset; cursor: pointer; font-size: 12px; font-weight: 600; padding: 5px 9px; color: var(--muted); }
+  html[data-lang="en"] .lang [data-set="en"], html[data-lang="pl"] .lang [data-set="pl"] { background: var(--surface-2); color: var(--text); }
+  @media (max-width: 640px) { .top nav a.hide-sm { display: none; } }
+
+  /* hero */
+  .hero { position: relative; padding: 88px 0 56px; text-align: center; }
+  .hero::before {
+    content: ''; position: absolute; inset: -120px 0 auto; height: 620px; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(40% 50% at 35% 40%, rgba(139, 116, 255, 0.28), transparent 70%),
+      radial-gradient(35% 45% at 68% 35%, rgba(46, 230, 255, 0.14), transparent 70%);
+  }
+  .hero .logo { width: 84px; height: 84px; border-radius: 22px; box-shadow: 0 18px 60px rgba(139, 116, 255, 0.35); }
+  .pill { display: inline-flex; align-items: center; gap: 8px; margin: 22px 0 0; padding: 5px 12px; border: 1px solid var(--border-strong); border-radius: 999px; font-size: 13px; color: var(--text-2); background: rgba(255,255,255,0.03); }
+  .pill i { width: 7px; height: 7px; border-radius: 50%; background: #3ddc97; box-shadow: 0 0 10px #3ddc97; }
+  h1 { font-size: clamp(31px, 6.4vw, 72px); line-height: 1.04; letter-spacing: -0.035em; margin: 22px auto 18px; max-width: 900px; font-weight: 800; }
+  h1 .g { background: linear-gradient(90deg, #b9a8ff, var(--accent) 40%, var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { font-size: clamp(17px, 2vw, 20px); color: var(--text-2); max-width: 720px; margin: 0 auto; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 34px 0 14px; }
+  .btn { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; padding: 13px 20px; border-radius: 14px; font-weight: 600; border: 1px solid var(--border-strong); background: var(--surface-2); transition: transform .15s ease, background .15s ease, border-color .15s ease; text-align: left; }
+  .btn:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.24); }
+  .btn svg { width: 22px; height: 22px; flex: none; }
+  .btn small { display: block; font-weight: 500; font-size: 12px; color: var(--muted); line-height: 1.3; }
+  .btn.primary { background: linear-gradient(135deg, #8b74ff, #6d55f0); border-color: transparent; box-shadow: 0 10px 34px rgba(139, 116, 255, 0.4); }
+  .btn.primary small { color: rgba(255,255,255,0.75); }
+  .btn.primary:hover { background: linear-gradient(135deg, #9a85ff, #7a63f5); }
+  .fine { font-size: 13px; color: var(--muted); }
+  .fine a { color: var(--text-2); }
+
+  /* screenshots */
+  .shots { display: flex; gap: 18px; justify-content: center; margin: 56px auto 0; padding: 0 4px; }
+  .phone { flex: 0 1 230px; min-width: 0; border-radius: 30px; padding: 7px; background: linear-gradient(160deg, #2a2840, #121120); border: 1px solid var(--border-strong); box-shadow: 0 30px 70px rgba(0,0,0,0.55); }
+  .phone img { display: block; width: 100%; height: auto; border-radius: 24px; }
+  .phone:nth-child(2), .phone:nth-child(3) { transform: translateY(-22px); }
+  @media (max-width: 860px) { .phone:nth-child(4) { display: none; } }
+  @media (max-width: 600px) {
+    .shots { overflow-x: auto; justify-content: flex-start; scroll-snap-type: x mandatory; scroll-padding-left: 20px; padding-bottom: 18px; margin-left: -20px; margin-right: -20px; padding-left: 20px; padding-right: 20px; }
+    .phone { flex: 0 0 62%; scroll-snap-align: start; }
+    .phone:nth-child(4) { display: block; }
+    .phone:nth-child(2), .phone:nth-child(3) { transform: none; }
+  }
+
+  /* sections */
+  section { padding: 84px 0 0; }
+  .kicker { font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
+  h2 { font-size: clamp(28px, 4vw, 42px); letter-spacing: -0.025em; line-height: 1.12; margin: 0 0 14px; font-weight: 800; }
+  .sub { color: var(--text-2); max-width: 680px; margin: 0 0 34px; font-size: 17px; }
+
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 600px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; transition: border-color .2s ease, transform .2s ease; }
+  .card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+  .card .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 14px; background: var(--c, rgba(139,116,255,0.14)); color: var(--ci, #b9a8ff); }
+  .card .ico svg { width: 20px; height: 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; letter-spacing: -0.01em; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .card.wide { grid-column: span 2; }
+  .card.full { grid-column: 1 / -1; }
+  @media (max-width: 900px) { .card.full { grid-column: span 2; } }
+  @media (max-width: 600px) { .card.wide, .card.full { grid-column: auto; } }
+
+  .steps { counter-reset: s; display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 800px) { .steps { grid-template-columns: minmax(0, 1fr); } }
+  .step { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 22px 22px 70px; }
+  .step::before { counter-increment: s; content: counter(s); position: absolute; left: 22px; top: 22px; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; background: rgba(139,116,255,0.16); color: #b9a8ff; }
+  .step h3 { margin: 4px 0 6px; font-size: 17px; }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; }
+  code { font: 13px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; color: var(--text-2); }
+
+  .table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 14px; }
+  .table-wrap { margin-top: 14px; overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 18px; }
+  .table th, .table td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .table tr:last-child td { border-bottom: 0; }
+  .table th { color: var(--muted); font-weight: 600; font-size: 13px; }
+
+  .final { margin: 96px 0 0; padding: 48px 24px; text-align: center; border-radius: 28px; border: 1px solid var(--border-strong); background: radial-gradient(60% 120% at 50% 0%, rgba(139,116,255,0.22), transparent 70%), var(--surface); }
+  .final h2 { margin-bottom: 8px; }
+  footer { padding: 48px 0 56px; color: var(--muted); font-size: 13px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; }
+  footer p { margin: 0; max-width: 640px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-win" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5.5 10.5 4.4v7.1H3zm8.5-1.2L21 3v8.5h-9.5zM3 12.5h7.5v7.1L3 18.5zm8.5 0H21V21l-9.5-1.3z"/></symbol>
+    <symbol id="i-android" viewBox="0 0 24 24"><path fill="currentColor" d="M17.6 9.48 19.44 6.3a.38.38 0 0 0-.66-.38l-1.86 3.22A11.4 11.4 0 0 0 12 8.1c-1.77 0-3.42.38-4.92 1.04L5.22 5.92a.38.38 0 1 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52M7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5m10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5"/></symbol>
+    <symbol id="i-gh" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.16 1.18a11 11 0 0 1 5.75 0c2.19-1.49 3.16-1.18 3.16-1.18.62 1.58.23 2.75.11 3.04.74.8 1.18 1.83 1.18 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></symbol>
+    <symbol id="i-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18M3 7.5h4M3 12h18M3 16.5h4M17 3v18M17 7.5h4M17 16.5h4"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+    <symbol id="i-mouse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 4 7.07 17 2.51-7.39L21 11.07z"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16M18 17V9M13 17V5M8 17v-3"/></symbol>
+    <symbol id="i-radar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34M4 6h.01M2.29 9.62A10 10 0 1 0 21.31 8.35M16.24 7.76A6 6 0 1 0 8.23 16.67M12 18h.01M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  </defs>
+</svg>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="img/icon-192.png" alt="" />ALTTER</a>
+    <nav>
+      <a class="hide-sm" href="#features"><span lang="en">Features</span><span lang="pl">Funkcje</span></a>
+      <a class="hide-sm" href="#start"><span lang="en">Get started</span><span lang="pl">Jak zacząć</span></a>
+      <a href="https://github.com/QWTR/alter" aria-label="GitHub"><svg width="18" height="18" style="vertical-align:-3px"><use href="#i-gh"/></svg></a>
+      <span class="lang" role="group" aria-label="Language"><button data-set="pl">PL</button><button data-set="en">EN</button></span>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <img class="logo" src="img/icon.png" alt="ALTTER" />
+    <div><span class="pill"><i></i><span lang="en">Version 0.13 · free &amp; open source</span><span lang="pl">Wersja 0.13 · darmowe i open source</span></span></div>
+    <h1>
+      <span lang="en">Your personal AI, on the <span class="g">subscription you already have</span></span>
+      <span lang="pl">Twoje osobiste AI na <span class="g">subskrypcji, którą już masz</span></span>
+    </h1>
+    <p class="lead">
+      <span lang="en">Plug in Claude, ChatGPT or Gemini with your normal account, with no API keys. You get one assistant on your computer and your phone that remembers you, runs agents in the background, builds websites and videos and generates images.</span>
+      <span lang="pl">Podłączasz Claude, ChatGPT albo Gemini zwykłym logowaniem, bez kluczy API. Dostajesz jednego asystenta na komputerze i telefonie: pamięta Cię, prowadzi agentów w tle, robi strony, wideo i obrazy.</span>
+    </p>
+    <div class="cta" id="download">
+      <a class="btn primary" href="https://github.com/QWTR/alter/releases/latest/download/ALTTER-Setup.exe">
+        <svg><use href="#i-win"/></svg>
+        <span><span lang="en">Download for Windows</span><span lang="pl">Pobierz na Windows</span><small>.exe · 116 MB · Windows 10/11</small></span>
+      </a>
+      <a class="btn" href="https://github.com/QWTR/alter/releases/latest/download/ALTTER.apk">
+        <svg style="color:#3ddc84"><use href="#i-android"/></svg>
+        <span><span lang="en">Download for Android</span><span lang="pl">Pobierz na Androida</span><small>.apk · 6 MB · Android 7+</small></span>
+      </a>
+    </div>
+    <p class="fine">
+      <span lang="en">No account, no cloud of ours: everything stays on your computer. <a href="https://github.com/QWTR/alter/releases">All releases</a> · <a href="https://github.com/QWTR/alter">Source code</a></span>
+      <span lang="pl">Bez konta i bez naszej chmury: wszystko zostaje na Twoim komputerze. <a href="https://github.com/QWTR/alter/releases">Wszystkie wersje</a> · <a href="https://github.com/QWTR/alter">Kod źródłowy</a></span>
+    </p>
+
+    <div class="shots" aria-label="Screenshots">
+      <div class="phone"><img src="img/studio.jpg" width="720" height="1440" loading="lazy" alt="Studio" /></div>
+      <div class="phone"><img src="img/media.jpg" width="720" height="1440" alt="Images & video" /></div>
+      <div class="phone"><img src="img/gallery.jpg" width="720" height="1440" alt="Gallery" /></div>
+      <div class="phone"><img src="img/prompts.jpg" width="720" height="1440" loading="lazy" alt="Prompt library" /></div>
+    </div>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <p class="kicker"><span lang="en">What it does</span><span lang="pl">Co potrafi</span></p>
+      <h2><span lang="en">One assistant that actually does things</span><span lang="pl">Jeden asystent, który naprawdę coś robi</span></h2>
+      <p class="sub"><span lang="en">Not another chat window. ALTTER knows you, works while you are away and shows everything on every device, live.</span><span lang="pl">Nie kolejne okno czatu. ALTTER Cię zna, pracuje, kiedy Cię nie ma, i pokazuje wszystko na każdym urządzeniu na żywo.</span></p>
+
+      <div class="grid">
+        <div class="card wide">
+          <div class="ico"><svg><use href="#i-key"/></svg></div>
+          <h3><span lang="en">Your subscription, no API keys</span><span lang="pl">Twoja subskrypcja, bez kluczy API</span></h3>
+          <p><span lang="en">ALTTER drives the official Claude Code, Codex and Gemini CLIs logged in with your account, so there is no extra bill. Switch AI mid-conversation. When one hits its limit, ALTTER asks or moves to another.</span><span lang="pl">ALTTER korzysta z oficjalnych Claude Code, Codex i Gemini CLI zalogowanych na Twoje konto, więc nie ma dodatkowych rachunków. AI zmienisz w trakcie rozmowy, a gdy jednemu skończy się limit, ALTTER zapyta albo przełączy na inne.</span></p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg><use href="#i-brain"/></svg></div>
+          <h3><span lang="en">Memory</span><span lang="pl">Pamięć</span></h3>
+          <p><span lang="en">It learns who you are, your projects and habits. You never explain twice, and you can edit or delete anything.</span><span lang="pl">Uczy się, kim jesteś, jakie masz projekty i nawyki. Nie tłumaczysz dwa razy, a wszystko możesz edytować i usunąć.</span></p>
+        </div>
+        <div class="card" style="--c:rgba(46,230,255,.12);--ci:#7eeeff">
+          <div class="ico"><svg><use href="#i-bot"/></svg></div>
+          <h3><span lang="en">Agents &amp; groups</span><span lang="pl">Agenci i grupy</span></h3>
+          <p><span lang="en">Morning brief, inbox triage, reel ideas, on a schedule. Mention a group with @ and its lead splits the work, even across different AIs.</span><span lang="pl">Poranny brief, maile, pomysły na rolki, według harmonogramu. Grupę wołasz przez @, a lider dzieli pracę, nawet między różne AI.</span></p>
+        </div>
+        <div class="card" style="--c:rgba(255,122,182,.13);--ci:#ff9cc8">
+          <div class="ico"><svg><use href="#i-film"/></svg></div>
+          <h3><span lang="en">Studio</span><span lang="pl">Studio</span></h3>
+          <p><span lang="en">Websites with a live preview: tap an element and say what to change. Reels, motion graphics and 3D from one sentence.</span><span lang="pl">Strony z podglądem na żywo: klikasz element i mówisz, co zmienić. Rolki, motion graphics i 3D z jednego zdania.</span></p>
+        </div>
+        <div class="card" style="--c:rgba(255,170,60,.13);--ci:#ffc070">
+          <div class="ico"><svg><use href="#i-mouse"/></svg></div>
+          <h3><span lang="en">Agents on your screen</span><span lang="pl">Agenci na ekranie</span></h3>
+          <p><span lang="en">With Full control they use the computer like a person: Blender, Excel, the browser. Each one has its own visible, named cursor.</span><span lang="pl">Z Pełną kontrolą używają komputera jak człowiek: Blender, Excel, przeglądarka. Każdy ma swój widoczny kursor z imieniem.</span></p>
+        </div>
+        <div class="card" style="--c:rgba(46,230,255,.12);--ci:#7eeeff">
+          <div class="ico"><svg><use href="#i-image"/></svg></div>
+          <h3><span lang="en">Images &amp; video</span><span lang="pl">Obrazy i wideo</span></h3>
+          <p><span lang="en">Images are free, with no key. With your own key you get FLUX, Kling, Veo, GPT Image and Gemini. The AI in any chat can make them too.</span><span lang="pl">Obrazy są za darmo, bez klucza. Na własnym kluczu dostajesz FLUX, Kling, Veo, GPT Image i Gemini. AI w czacie też je zrobi.</span></p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg><use href="#i-book"/></svg></div>
+          <h3><span lang="en">Prompt library</span><span lang="pl">Biblioteka promptów</span></h3>
+          <p><span lang="en">Ready prompts and your own, with blanks to fill in. One tap sends one to a chat or to Images &amp; video.</span><span lang="pl">Gotowe prompty i Twoje własne, z polami do uzupełnienia. Jedno stuknięcie i lecą do czatu albo do obrazów.</span></p>
+        </div>
+        <div class="card" style="--c:rgba(61,220,151,.12);--ci:#6fe9b4">
+          <div class="ico"><svg><use href="#i-chart"/></svg></div>
+          <h3><span lang="en">Token usage</span><span lang="pl">Zużycie tokenów</span></h3>
+          <p><span lang="en">What Claude Code, Codex and Gemini CLI used on this computer, per day, model and project. It is read locally and never sent anywhere.</span><span lang="pl">Ile zużyły Claude Code, Codex i Gemini CLI na tym komputerze, dziennie, per model i projekt. Liczone lokalnie, nic nie jest wysyłane.</span></p>
+        </div>
+        <div class="card" style="--c:rgba(255,122,182,.13);--ci:#ff9cc8">
+          <div class="ico"><svg><use href="#i-radar"/></svg></div>
+          <h3><span lang="en">Automations</span><span lang="pl">Automatyzacje</span></h3>
+          <p><span lang="en">It watches sites, servers and ports. When something breaks, an agent finds the cause from your computer and fixes it.</span><span lang="pl">Pilnuje stron, serwerów i portów. Gdy coś padnie, agent znajduje przyczynę z Twojego komputera i naprawia.</span></p>
+        </div>
+        <div class="card" style="--c:rgba(255,170,60,.13);--ci:#ffc070">
+          <div class="ico"><svg><use href="#i-folder"/></svg></div>
+          <h3><span lang="en">Projects</span><span lang="pl">Projekty</span></h3>
+          <p><span lang="en">Their own chats, agents, memory and a real folder. Import a folder, repo or link and every chat already knows it.</span><span lang="pl">Własne czaty, agenci, pamięć i prawdziwy folder. Importujesz folder, repo albo link i każdy czat już go zna.</span></p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg><use href="#i-lock"/></svg></div>
+          <h3><span lang="en">You decide the access</span><span lang="pl">Ty decydujesz o dostępie</span></h3>
+          <p><span lang="en">Every chat and agent runs as Chat only, Read files &amp; web, or Full control.</span><span lang="pl">Każdy czat i agent działa jako Tylko czat, Odczyt plików i sieci albo Pełna kontrola.</span></p>
+        </div>
+        <div class="card full" style="--c:rgba(61,220,151,.12);--ci:#6fe9b4">
+          <div class="ico"><svg><use href="#i-phone"/></svg></div>
+          <h3><span lang="en">Your phone, live</span><span lang="pl">Telefon, na żywo</span></h3>
+          <p><span lang="en">The Android app shows everything on your computer, live in both directions. Pair it once by scanning a QR code. At home it connects over Wi-Fi, and anywhere else through your own relay. Dictation and voice conversation included.</span><span lang="pl">Aplikacja na Androida pokazuje wszystko z komputera, na żywo w obie strony. Parujesz raz, skanując kod QR. W domu łączy przez Wi-Fi, a wszędzie indziej przez Twój relay. Dyktowanie i rozmowa głosowa w zestawie.</span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="start">
+    <div class="wrap">
+      <p class="kicker"><span lang="en">Get started</span><span lang="pl">Jak zacząć</span></p>
+      <h2><span lang="en">Running in three minutes</span><span lang="pl">Działa w trzy minuty</span></h2>
+      <p class="sub"><span lang="en">You need at least one AI subscription, or a free Google account for Gemini.</span><span lang="pl">Potrzebujesz co najmniej jednej subskrypcji AI albo darmowego konta Google dla Gemini.</span></p>
+      <div class="steps">
+        <div class="step">
+          <h3><span lang="en">Install on your computer</span><span lang="pl">Zainstaluj na komputerze</span></h3>
+          <p><span lang="en">Run <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER-Setup.exe">ALTTER-Setup.exe</a> and pick any drive. It needs no admin rights. If SmartScreen asks, choose “More info → Run anyway”, because the installer is not signed yet.</span><span lang="pl">Uruchom <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER-Setup.exe">ALTTER-Setup.exe</a> i wybierz dowolny dysk. Nie potrzeba uprawnień administratora. Jeśli SmartScreen zapyta, wybierz „Więcej informacji → Uruchom mimo to”, bo instalator nie jest jeszcze podpisany.</span></p>
+        </div>
+        <div class="step">
+          <h3><span lang="en">Connect your AI</span><span lang="pl">Podłącz swoje AI</span></h3>
+          <p><span lang="en">The first-run setup signs in Claude, ChatGPT or Gemini with your account and tests the connection for real. It can install the CLIs for you.</span><span lang="pl">Kreator przy pierwszym uruchomieniu loguje Claude, ChatGPT albo Gemini na Twoje konto i sprawdza połączenie naprawdę. Może sam zainstalować narzędzia CLI.</span></p>
+        </div>
+        <div class="step">
+          <h3><span lang="en">Add your phone</span><span lang="pl">Dodaj telefon</span></h3>
+          <p><span lang="en">Install <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER.apk">ALTTER.apk</a>. On the computer go to Settings → Devices → Connect a phone, then tap “Scan the QR code” in the app.</span><span lang="pl">Zainstaluj <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER.apk">ALTTER.apk</a>. Na komputerze otwórz Ustawienia → Urządzenia → Połącz telefon, a w aplikacji stuknij „Zeskanuj kod QR”.</span></p>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th><span lang="en">Subscription</span><span lang="pl">Subskrypcja</span></th><th><span lang="en">Tool</span><span lang="pl">Narzędzie</span></th><th><span lang="en">Sign in</span><span lang="pl">Logowanie</span></th></tr></thead>
+          <tbody>
+            <tr><td>Claude Pro / Max</td><td><code>claude</code></td><td><code>/login</code></td></tr>
+            <tr><td>ChatGPT Plus / Pro</td><td><code>codex</code></td><td><code>codex login</code></td></tr>
+            <tr><td><span lang="en">Google AI Pro / free Google account</span><span lang="pl">Google AI Pro / darmowe konto Google</span></td><td><code>gemini</code></td><td><span lang="en">Login with Google</span><span lang="pl">Login with Google</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap">
+    <div class="final">
+      <h2><span lang="en">Free. Open source. Yours.</span><span lang="pl">Za darmo. Open source. Twoje.</span></h2>
+      <p class="sub" style="margin:0 auto 26px"><span lang="en">No account, no subscription of ours, nothing to pay. The code is on GitHub under AGPL-3.0.</span><span lang="pl">Bez konta, bez naszej subskrypcji, nic do zapłacenia. Kod jest na GitHubie na licencji AGPL-3.0.</span></p>
+      <div class="cta" style="margin:0">
+        <a class="btn primary" href="https://github.com/QWTR/alter/releases/latest/download/ALTTER-Setup.exe"><svg><use href="#i-win"/></svg><span>Windows<small>.exe · 116 MB</small></span></a>
+        <a class="btn" href="https://github.com/QWTR/alter/releases/latest/download/ALTTER.apk"><svg style="color:#3ddc84"><use href="#i-android"/></svg><span>Android<small>.apk · 6 MB</small></span></a>
+        <a class="btn" href="https://github.com/QWTR/alter"><svg><use href="#i-gh"/></svg><span>GitHub<small><span lang="en">source code</span><span lang="pl">kod źródłowy</span></small></span></a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><span lang="en">ALTTER only automates the official CLIs on your own computer, for you. It never extracts tokens or shares your subscription. Claude, ChatGPT and Gemini are trademarks of their owners; ALTTER is not affiliated with them.</span><span lang="pl">ALTTER tylko automatyzuje oficjalne narzędzia CLI na Twoim komputerze, dla Ciebie. Nie wyciąga tokenów i nie udostępnia Twojej subskrypcji. Claude, ChatGPT i Gemini są znakami towarowymi ich właścicieli; ALTTER nie jest z nimi powiązany.</span></p>
+    <p>© ALTTER contributors · <a href="https://github.com/QWTR/alter/blob/main/LICENSE">AGPL-3.0</a></p>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.lang button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var l = b.getAttribute('data-set');
+      document.documentElement.setAttribute('data-lang', l);
+      document.documentElement.lang = l;
+      try { localStorage.setItem('altter.site.lang', l); } catch (e) {}
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,14 +1,14 @@
 {
   "name": "@alter/desktop",
-  "version": "0.1.0",
-  "description": "Alter desktop app (Electron): runs the Alter core in the background and shows the app in a window + tray.",
+  "version": "0.13.0",
+  "description": "ALTTER desktop app (Electron): runs the ALTTER core in the background and shows the app in a window + tray.",
   "license": "AGPL-3.0-only",
-  "author": "Alter contributors",
+  "author": "ALTTER contributors",
   "homepage": "https://github.com/QWTR/alter",
   "main": "main.cjs",
   "scripts": {
-    "build:core": "esbuild ../../packages/core/src/index.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/core.mjs --log-level=warning",
-    "icons": "node scripts/make-icons.mjs",
+    "build:core": "esbuild ../../packages/core/src/index.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/core.mjs --log-level=warning && esbuild ../../packages/core/src/cli.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/altter-server.mjs --log-level=warning",
+    "icons": "electron scripts/render-art.cjs",
     "start": "npm run build:core && npm run icons && electron .",
     "dist": "npm run build:core && npm run icons && electron-builder --win nsis --publish never"
   },
@@ -19,21 +19,43 @@
   },
   "build": {
     "appId": "dev.alter.app",
-    "productName": "Alter",
-    "copyright": "Alter contributors — AGPL-3.0",
+    "productName": "ALTTER",
+    "copyright": "ALTTER contributors — AGPL-3.0",
     "directories": {
       "output": "release",
       "buildResources": "build"
     },
     "files": [
       "main.cjs",
+      "preload.cjs",
+      "overlay/**",
       "dist/**",
       "build/tray*.png",
       "build/icon.png"
     ],
     "extraResources": [
-      { "from": "../web", "to": "web" },
-      { "from": "../../skills", "to": "skills" }
+      {
+        "from": "../web/dist",
+        "to": "web"
+      },
+      {
+        "from": "../../skills",
+        "to": "skills"
+      },
+      {
+        "from": "../../studio-kit",
+        "to": "studio-kit",
+        "filter": [
+          "**/*",
+          "!node_modules/**",
+          "!public/ext/**",
+          "!.progress/**"
+        ]
+      },
+      {
+        "from": "../relay",
+        "to": "relay"
+      }
     ],
     "win": {
       "target": "nsis",
@@ -45,9 +67,26 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Alter",
+      "shortcutName": "ALTTER",
       "runAfterFinish": true,
-      "artifactName": "Alter-Setup-${version}.${ext}"
+      "artifactName": "ALTTER-Setup-${version}.${ext}",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "include": "installer/installer.nsh",
+      "multiLanguageInstaller": true,
+      "installerLanguages": [
+        "en_US",
+        "pl_PL",
+        "de_DE",
+        "es_ES",
+        "fr_FR",
+        "uk_UA"
+      ],
+      "deleteAppDataOnUninstall": false
     }
   }
 }

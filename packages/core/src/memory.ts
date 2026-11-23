@@ -12,6 +12,8 @@ export interface Memory {
   tags: string[];
   importance: number;
   source: string | null;
+  /** null = about the user in general; otherwise belongs to one project. */
+  projectId: string | null;
   uses: number;
   createdAt: string;
   updatedAt: string;
@@ -24,6 +26,7 @@ interface Row {
   tags: string;
   importance: number;
   source: string | null;
+  project_id: string | null;
   uses: number;
   created_at: string;
   updated_at: string;
@@ -36,6 +39,7 @@ const toMemory = (r: Row): Memory => ({
   tags: JSON.parse(r.tags),
   importance: r.importance,
   source: r.source,
+  projectId: r.project_id ?? null,
   uses: r.uses,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
@@ -67,6 +71,7 @@ export interface NewMemory {
   tags?: string[];
   importance?: number;
   source?: string;
+  projectId?: string | null;
 }
 
 /** Adds a memory, or reinforces an existing near-duplicate instead of storing it twice. */
@@ -75,9 +80,10 @@ export function addMemory(m: NewMemory): Memory {
   if (!content) throw new Error('Memory content is empty');
   const kind: MemoryKind = MEMORY_KINDS.includes(m.kind as MemoryKind) ? (m.kind as MemoryKind) : 'fact';
   const importance = Math.min(5, Math.max(1, Math.round(m.importance ?? 3)));
+  const projectId = m.projectId ?? null;
   const t = tokens(content);
 
-  for (const existing of all<Row>('SELECT * FROM memories WHERE kind = ?', kind)) {
+  for (const existing of all<Row>("SELECT * FROM memories WHERE kind = ? AND IFNULL(project_id, '') = ?", kind, projectId ?? '')) {
     if (similarity(t, tokens(existing.content)) >= 0.75) {
       const newer = content.length >= existing.content.length ? content : existing.content;
       run(
@@ -94,13 +100,14 @@ export function addMemory(m: NewMemory): Memory {
   const id = randomUUID();
   const ts = now();
   run(
-    'INSERT INTO memories (id, kind, content, tags, importance, source, uses, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)',
+    'INSERT INTO memories (id, kind, content, tags, importance, source, project_id, uses, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)',
     id,
     kind,
     content,
     JSON.stringify(m.tags ?? []),
     importance,
     m.source ?? null,
+    projectId,
     ts,
     ts,
   );
@@ -128,11 +135,11 @@ export function deleteMemory(id: string): boolean {
   return Number(run('DELETE FROM memories WHERE id = ?', id).changes) > 0;
 }
 
-export function listMemories(opts: { q?: string; kind?: string; limit?: number } = {}): Memory[] {
+export function listMemories(opts: { q?: string; kind?: string; projectId?: string; limit?: number } = {}): Memory[] {
   const rows = opts.kind
     ? all<Row>('SELECT * FROM memories WHERE kind = ? ORDER BY updated_at DESC', opts.kind)
     : all<Row>('SELECT * FROM memories ORDER BY updated_at DESC');
-  const mems = rows.map(toMemory);
+  const mems = rows.map(toMemory).filter((m) => !opts.projectId || m.projectId === opts.projectId);
   if (!opts.q?.trim()) return mems.slice(0, opts.limit ?? 500);
   return rank(mems, opts.q).slice(0, opts.limit ?? 100);
 }
@@ -151,13 +158,15 @@ function rank(mems: Memory[], query: string): Memory[] {
     .map((x) => x.m);
 }
 
-/** What Alter should keep in mind for this request: the core profile + whatever matches the query. */
-export function relevantMemories(query: string, limit = 14): Memory[] {
-  const allMems = all<Row>('SELECT * FROM memories').map(toMemory);
+/** What ALTTER should keep in mind: the core profile, this project's memories, and whatever matches the query. */
+export function relevantMemories(query: string, limit = 14, projectId?: string | null): Memory[] {
+  const allMems = all<Row>('SELECT * FROM memories')
+    .map(toMemory)
+    .filter((m) => !m.projectId || m.projectId === projectId);
   const core = allMems
-    .filter((m) => (m.kind === 'profile' || m.kind === 'preference' || m.kind === 'routine') && m.importance >= 3)
+    .filter((m) => (projectId && m.projectId === projectId) || ((m.kind === 'profile' || m.kind === 'preference' || m.kind === 'routine') && m.importance >= 3))
     .sort((a, b) => b.importance - a.importance)
-    .slice(0, 8);
+    .slice(0, 10);
   const picked = new Map(core.map((m) => [m.id, m]));
   for (const m of rank(allMems, query)) {
     if (picked.size >= limit) break;
@@ -170,5 +179,5 @@ export function relevantMemories(query: string, limit = 14): Memory[] {
 
 export function formatMemories(mems: Memory[]): string {
   if (!mems.length) return '(nothing yet — you are just getting to know the user)';
-  return mems.map((m) => `- [${m.kind}] ${m.content}`).join('\n');
+  return mems.map((m) => `- [${m.kind}${m.projectId ? ', this project' : ''}] ${m.content}`).join('\n');
 }

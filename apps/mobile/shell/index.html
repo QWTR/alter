@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0a12" />
+<title>ALTTER</title>
+<style>
+  :root { --bg: #0b0a12; --card: #15131f; --line: #262236; --text: #efeef6; --muted: #9d99b3; --accent: #8b74ff; --ok: #3ddc97; --bad: #ff6b6b; --warn: #ffb347; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; padding: calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 20px); }
+  .glow { position: fixed; inset: -30% -30% auto; height: 70%; background: radial-gradient(closest-side, rgba(139,116,255,.28), transparent); pointer-events: none; }
+  main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 18px; position: relative; max-width: 440px; width: 100%; margin: 0 auto; }
+  .logo { width: 92px; height: 92px; border-radius: 24px; box-shadow: 0 18px 50px rgba(124,92,255,.35); }
+  h1 { margin: 0; font-size: 26px; letter-spacing: .5px; }
+  .status { display: inline-flex; align-items: center; gap: 9px; padding: 8px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.wait { background: var(--warn); animation: pulse 1.2s infinite; }
+  .dot.ok { background: var(--ok); }
+  .dot.bad { background: var(--bad); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  p { margin: 0; color: var(--muted); font-size: 15px; }
+  .card { width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; text-align: left; }
+  .card b { display: block; margin-bottom: 4px; }
+  .card ol { margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+  .card li { margin: 3px 0; }
+  .row { display: flex; gap: 10px; width: 100%; }
+  button { flex: 1; height: 48px; border-radius: 14px; border: 0; font: inherit; font-weight: 600; cursor: pointer; }
+  .primary { background: linear-gradient(180deg, #9a86ff, #7a60ff); color: #fff; }
+  .ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); }
+  input { width: 100%; height: 48px; border-radius: 14px; border: 1px solid var(--line); background: #0f0d18; color: var(--text); font: inherit; padding: 0 14px; outline: none; }
+  input:focus { border-color: var(--accent); }
+  .small { font-size: 13px; color: var(--muted); }
+  .scanbtn { width: 100%; flex: none; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .scanbtn svg { width: 20px; height: 20px; }
+  .or { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; color: var(--muted); font-size: 12px; }
+  .or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+  #scan { position: fixed; inset: 0; z-index: 50; background: #000; }
+  #scan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #scan .frame { position: absolute; left: 50%; top: 46%; width: min(68vw, 300px); aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 26px; box-shadow: 0 0 0 200vmax rgba(5,4,12,.62); border: 3px solid #a993ff; }
+  #scan .frame.wrong { border-color: var(--bad); }
+  #scan .line { position: absolute; left: 10%; right: 10%; height: 2px; background: linear-gradient(90deg, transparent, #b9a8ff, transparent); box-shadow: 0 0 14px #8b74ff; animation: sweep 2.2s ease-in-out infinite; }
+  @keyframes sweep { 0%, 100% { top: 12%; } 50% { top: 86%; } }
+  #scan .close { position: absolute; top: calc(env(safe-area-inset-top) + 14px); left: 14px; width: 46px; height: 46px; flex: none; border-radius: 50%; background: rgba(20,18,32,.6); color: #fff; font-size: 22px; }
+  #scan .hint { position: absolute; left: 20px; right: 20px; bottom: calc(env(safe-area-inset-bottom) + 40px); text-align: center; color: #fff; font-weight: 500; text-shadow: 0 1px 8px rgba(0,0,0,.6); }
+  [hidden] { display: none !important; }
+  .err { color: var(--bad); font-size: 13px; min-height: 18px; }
+  footer { text-align: center; position: relative; }
+  .link { background: none; border: 0; color: var(--muted); font-size: 14px; height: auto; padding: 8px; text-decoration: underline; text-underline-offset: 3px; flex: none; }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<main>
+  <img class="logo" src="icon.png" alt="" />
+  <h1>ALTTER</h1>
+  <div class="status" id="status"><span class="dot wait" id="dot"></span><span id="statusText">Łączę z Twoim komputerem…</span></div>
+
+  <!-- the computer is off / not connected -->
+  <section id="offline" hidden>
+    <p id="offlineText">Twój komputer z ALTTER jest teraz wyłączony albo nie ma internetu. Wszystko — czaty, pamięć, agenci — jest na Twoim komputerze, więc telefon łączy się, gdy on działa.</p>
+    <div class="card" style="margin-top:14px">
+      <b id="howTitle">Jak to włączyć</b>
+      <ol id="howList">
+        <li>Włącz komputer i uruchom ALTTER.</li>
+        <li>ALTTER sam połączy się z Twoim serwerem.</li>
+        <li>Ta aplikacja otworzy się sama — nic nie musisz klikać.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- server address -->
+  <section id="setup" class="card" hidden>
+    <b id="addrTitle">Adres Twojego ALTTER</b>
+    <p class="small" id="addrHelp" style="margin:4px 0 10px">Np. https://altter.v-room.app albo adres z ALTTER → Ustawienia → Urządzenia (w tej samej sieci Wi‑Fi).</p>
+    <input id="addr" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://…" />
+    <div class="err" id="addrErr"></div>
+    <div class="row"><button class="ghost" id="cancel">Anuluj</button><button class="primary" id="save">Połącz</button></div>
+    <div class="or" data-scan hidden><span id="orText">albo</span></div>
+    <button class="ghost scanbtn" id="scanBtn" data-scan hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/></svg><span id="scanText">Zeskanuj kod QR z komputera</span></button>
+  </section>
+  <div id="scan" hidden>
+    <video id="cam" playsinline muted></video>
+    <div class="frame" id="frame"><span class="line"></span></div>
+    <button class="close" id="scanClose" aria-label="close">✕</button>
+    <div class="hint" id="scanHint">Skieruj na kod QR: ALTTER → Ustawienia → Urządzenia → Połącz telefon</div>
+  </div>
+
+  <div class="row" id="actions" hidden><button class="primary" id="retry">Spróbuj teraz</button></div>
+</main>
+<footer><button class="link" id="change">Zmień adres serwera</button></footer>
+
+<script>
+(() => {
+  const DEFAULT = 'https://altter.v-room.app';
+  const KEY = 'altter.server';
+  const pl = (navigator.language || 'pl').toLowerCase().startsWith('pl');
+  const T = pl ? {
+    connecting: 'Łączę z Twoim komputerem…', opening: 'Połączono — otwieram…', off: 'Komputer jest offline — czekam', noServer: 'Serwer nie odpowiada — czekam', noNet: 'Brak internetu w telefonie', bad: 'To nie wygląda na adres ALTTER',
+    noServerText: 'Nie mogę połączyć się z serwerem. Sprawdź internet w telefonie albo adres serwera.',
+  } : {
+    connecting: 'Connecting to your computer…', opening: 'Connected — opening…', off: 'Your computer is offline — waiting', noServer: 'The server does not answer — waiting', noNet: 'No internet on this phone', bad: 'That does not look like an ALTTER address',
+    noServerText: 'Cannot reach the server. Check the phone’s internet or the server address.',
+  };
+  if (!pl) {
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    document.documentElement.lang = 'en';
+    set('offlineText', 'Your ALTTER computer is off or has no internet right now. Everything — chats, memory, agents — lives on your computer, so the phone connects while it runs.');
+    set('howTitle', 'How to turn it on');
+    document.getElementById('howList').innerHTML = '<li>Turn on the computer and start ALTTER.</li><li>ALTTER connects to your server by itself.</li><li>This app opens by itself — nothing to tap.</li>';
+    set('orText', 'or'); set('scanText', 'Scan the QR code on your computer'); set('scanHint', 'Point at the QR code: ALTTER → Settings → Devices → Connect a phone');
+    set('addrTitle', 'Your ALTTER address'); set('addrHelp', 'E.g. https://altter.v-room.app or the address from ALTTER → Settings → Devices (same Wi‑Fi).');
+    set('statusText', T.connecting);
+    set('cancel', 'Cancel'); set('save', 'Connect'); set('retry', 'Try now'); set('change', 'Change server address');
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const store = { get: () => { try { return localStorage.getItem(KEY); } catch { return null; } }, set: (v) => { try { localStorage.setItem(KEY, v); } catch {} } };
+  const norm = (v) => { v = String(v || '').trim().replace(/\/+$/, ''); if (!v) return ''; if (!/^https?:\/\//i.test(v)) v = (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?$|\.local(:\d+)?$/.test(v) ? 'http://' : 'https://') + v; return v; };
+  const params = new URLSearchParams(location.search);
+  let server = norm(store.get()) || DEFAULT;
+  let timer = null, busy = false, editing = params.has('pick');
+
+  function state(kind, text) {
+    $('status').hidden = false;
+    $('dot').className = 'dot ' + kind;
+    $('statusText').textContent = text;
+  }
+
+  // fetch with a timeout (CapacitorHttp makes this a native request: no CORS in the way)
+  async function get(url, ms) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), ms);
+    try { return await fetch(url, { signal: ctl.signal, cache: 'no-store', headers: { accept: 'application/json' } }); }
+    finally { clearTimeout(t); }
+  }
+
+  /** 'ok' (ALTTER answers), 'off' (relay up, computer not connected), 'down' (nothing answers), 'bad' (answers, but not ALTTER) */
+  async function probe(base) {
+    try {
+      const r = await get(base + '/_alter/health', 7000);
+      if (r.ok) {
+        const j = await r.json().catch(() => null);
+        if (j && j.ok) return j.connected ? 'ok' : 'off';
+      }
+    } catch {}
+    try { // straight to ALTTER on the computer (same Wi‑Fi, no relay in between)
+      const r = await get(base + '/api/health', 6000);
+      if (r.ok) { const j = await r.json().catch(() => null); return j && j.ok ? 'ok' : 'bad'; }
+      if (r.status === 503) return 'off';
+      return 'bad';
+    } catch { return 'down'; }
+  }
+
+  async function check() {
+    if (busy || editing) return;
+    busy = true;
+    try {
+      if (navigator.onLine === false) { show('down'); state('bad', T.noNet); return; }
+      const s = await probe(server);
+      if (editing) return;
+      if (s === 'ok') {
+        state('ok', T.opening);
+        clearInterval(timer);
+        location.replace(server + '/');
+        return;
+      }
+      show(s);
+    } finally { busy = false; }
+  }
+
+  function show(s) {
+    $('offline').hidden = false;
+    $('actions').hidden = false;
+    $('setup').hidden = true;
+    if (s === 'off') { state('wait', T.off); $('offlineText').textContent = pl ? 'Twój komputer z ALTTER jest teraz wyłączony albo nie ma internetu. Wszystko — czaty, pamięć, agenci — jest na Twoim komputerze, więc telefon łączy się, gdy on działa.' : 'Your ALTTER computer is off or has no internet right now. Everything — chats, memory, agents — lives on your computer, so the phone connects while it runs.'; }
+    else if (s === 'bad') { state('bad', T.bad); $('offlineText').textContent = T.bad + ': ' + server; }
+    else { state('bad', T.noServer); $('offlineText').textContent = T.noServerText; }
+  }
+
+  function openSetup() {
+    editing = true;
+    $('status').hidden = true;
+    $('setup').hidden = false;
+    $('offline').hidden = true;
+    $('actions').hidden = true;
+    $('addr').value = server;
+    $('addrErr').textContent = '';
+    setTimeout(() => $('addr').focus(), 50);
+  }
+
+  $('change').onclick = openSetup;
+  $('cancel').onclick = () => { editing = false; $('setup').hidden = true; state('wait', T.connecting); check(); };
+  $('retry').onclick = () => { state('wait', T.connecting); check(); };
+  $('addr').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save').click(); });
+  $('save').onclick = async () => {
+    const v = norm($('addr').value);
+    if (!v) return;
+    $('save').disabled = true;
+    $('addrErr').textContent = '';
+    const s = await probe(v);
+    $('save').disabled = false;
+    if (s === 'bad' || s === 'down') { $('addrErr').textContent = s === 'bad' ? T.bad : T.noServerText; return; }
+    server = v;
+    store.set(v);
+    editing = false;
+    $('setup').hidden = true;
+    state('wait', T.connecting);
+    check();
+  };
+
+  // ---------- QR: the code on the computer is "<server>/#pair=123456" → set that server and pair in one go ----------
+  const canScan = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  document.querySelectorAll('[data-scan]').forEach((e) => { e.hidden = !canScan; });
+  let stream = null, scanTimer = 0;
+  async function detector() {
+    if ('BarcodeDetector' in window) {
+      try {
+        const f = await BarcodeDetector.getSupportedFormats();
+        if (f.includes('qr_code')) { const d = new BarcodeDetector({ formats: ['qr_code'] }); return async (v) => { const r = await d.detect(v); return r[0] ? r[0].rawValue : null; }; }
+      } catch {}
+    }
+    if (!window.jsQR) await new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'vendor/jsQR.js'; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+    const c = document.createElement('canvas'), g = c.getContext('2d', { willReadFrequently: true });
+    return async (v) => {
+      const w = v.videoWidth, h = v.videoHeight; if (!w || !h) return null;
+      const side = Math.min(w, h), size = Math.min(640, side);
+      c.width = c.height = size;
+      g.drawImage(v, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
+      const r = window.jsQR(g.getImageData(0, 0, size, size).data, size, size, { inversionAttempts: 'attemptBoth' });
+      return r ? r.data : null;
+    };
+  }
+  function stopScan() {
+    clearTimeout(scanTimer);
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    stream = null;
+    $('scan').hidden = true;
+  }
+  async function startScan() {
+    $('scan').hidden = false;
+    $('frame').classList.remove('wrong');
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      const v = $('cam');
+      v.srcObject = stream;
+      await v.play().catch(() => {});
+      const detect = await detector();
+      const tick = async () => {
+        if (!stream) return;
+        let text = null;
+        try { text = await detect(v); } catch {}
+        if (text) {
+          let url = null;
+          try { url = new URL(text.trim()); } catch {}
+          if (url && /^https?:$/.test(url.protocol)) {
+            if (navigator.vibrate) navigator.vibrate(40);
+            stopScan();
+            server = url.origin;
+            store.set(server);
+            editing = false;
+            $('setup').hidden = true;
+            state('ok', T.opening);
+            clearInterval(timer);
+            location.replace(url.origin + '/' + (url.hash || ''));
+            return;
+          }
+          $('frame').classList.add('wrong');
+          setTimeout(() => $('frame').classList.remove('wrong'), 1500);
+        }
+        scanTimer = setTimeout(tick, 200);
+      };
+      tick();
+    } catch (e) {
+      stopScan();
+      $('addrErr').textContent = pl ? 'Brak dostępu do aparatu — zezwól w ustawieniach telefonu.' : 'No camera access — allow it in the phone settings.';
+    }
+  }
+  $('scanBtn').onclick = startScan;
+  $('scanClose').onclick = stopScan;
+
+  window.addEventListener('online', check);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  if (editing) openSetup();
+  else if (params.has('offline')) show('off');
+  check();
+  timer = setInterval(check, 4000);
+})();
+</script>
+</body>
+</html>

@@ -39,3 +39,23 @@ test('agents validate schedules and keep nextRunAt', () => {
   const paused = updateAgent(a.id, { enabled: false })!;
   assert.equal(paused.nextRunAt, null);
 });
+
+test('automation proposals from chat', async () => {
+  const { wantsAutomation, proposalsIn, acceptProposal } = await import('../src/proposals.ts');
+  const { run, now } = await import('../src/db.ts');
+  const { getAgent } = await import('../src/agents.ts');
+  assert.ok(wantsAutomation('zrób mi automatyzację, która codziennie rano streszcza maile'));
+  assert.ok(wantsAutomation('remind me every morning to drink water'));
+  assert.ok(!wantsAutomation('jak się masz?'));
+  const block = '```alter-automation\n{"name":"Poranek","instructions":"Streść maile","schedule":"daily 07:30","access":"full","icon":"sunrise","palette":"amber"}\n```';
+  const text = `Proponuję tak:\n${block}\nMożna zmienić godzinę.`;
+  assert.equal(proposalsIn(text)[0].proposal?.name, 'Poranek');
+  run('INSERT INTO conversations (id, title, provider, project_id, access, agent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 'c1', 't', null, null, 'chat', null, now(), now());
+  const id = Number(run('INSERT INTO messages (conversation_id, role, content, provider, created_at) VALUES (?, ?, ?, ?, ?)', 'c1', 'assistant', text, 'demo', now()).lastInsertRowid);
+  const { agent, message } = acceptProposal('c1', id, 0, { schedule: 'weekdays 08:00' });
+  assert.equal(getAgent(agent.id)?.schedule, 'weekdays 08:00');
+  assert.equal(agent.access, 'full');
+  assert.equal(proposalsIn(message.content)[0].proposal?.createdId, agent.id);
+  assert.ok(message.content.endsWith('Można zmienić godzinę.'));
+  assert.throws(() => acceptProposal('c1', id, 0));
+});

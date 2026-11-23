@@ -1,0 +1,17 @@
+{
+  "name": "alter-studio",
+  "private": true,
+  "type": "module",
+  "description": "Alter Studio: motion graphics, 3D, video edits and graphics rendered from code (Remotion + ffmpeg). Installed once into ~/.alter/studio.",
+  "dependencies": {
+    "@react-three/fiber": "9.1.2",
+    "@remotion/bundler": "4.0.526",
+    "@remotion/google-fonts": "4.0.526",
+    "@remotion/renderer": "4.0.526",
+    "@remotion/three": "4.0.526",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.526",
+    "three": "0.170.0"
+  }
+}

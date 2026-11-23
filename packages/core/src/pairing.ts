@@ -11,7 +11,14 @@ import { emit } from './events.ts';
 let pending: { code: string; expiresAt: number } | null = null;
 let failures: number[] = [];
 
-export function lanUrls(port: number): string[] {
+/** Where the server is actually listening (set by startServer; --port / --local override the config). */
+let listening: { port: number; host: string } | null = null;
+export const setListening = (port: number, host: string) => (listening = { port, host });
+export const listeningPort = () => listening?.port ?? loadConfig().port;
+
+export function lanUrls(port = listening?.port ?? loadConfig().port): string[] {
+  const host = listening?.host ?? loadConfig().host;
+  if (host === '127.0.0.1' || host === 'localhost' || host === '::1') return [];
   const urls: string[] = [];
   for (const list of Object.values(networkInterfaces())) {
     for (const ni of list ?? []) {
@@ -21,11 +28,10 @@ export function lanUrls(port: number): string[] {
   return urls;
 }
 
-export function startPairing(): { code: string; expiresAt: string; urls: string[] } {
+export function startPairing(extra: (string | null)[] = []): { code: string; expiresAt: string; urls: string[] } {
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   pending = { code, expiresAt: Date.now() + 5 * 60_000 };
-  const { port } = loadConfig();
-  return { code, expiresAt: new Date(pending.expiresAt).toISOString(), urls: lanUrls(port).map((u) => `${u}/#pair=${code}`) };
+  return { code, expiresAt: new Date(pending.expiresAt).toISOString(), urls: [...extra.filter((u): u is string => !!u), ...lanUrls()].map((u) => `${u}/#pair=${code}`) };
 }
 
 export function claimPairing(code: string, name: string): Device {

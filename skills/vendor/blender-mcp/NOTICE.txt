@@ -1,0 +1,3 @@
+Third-party: blender-mcp add-on (addon.py) by Siddharth Ahuja, MIT License (see LICENSE).
+Source: https://github.com/ahujasid/blender-mcp
+ALTTER loads it inside the shared Blender for Poly Haven / Sketchfab / Poly Pizza / Hyper3D. Not registered as an add-on: no auto server, no update check, telemetry stays off.

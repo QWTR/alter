@@ -11,6 +11,16 @@ export interface Device {
   lastSeen?: string;
 }
 
+export interface ProviderHealth {
+  ok: boolean;
+  checkedAt: string;
+  error?: string;
+  latencyMs?: number;
+}
+
+export const LANGUAGES = ['en', 'pl', 'de', 'es', 'fr', 'uk'] as const;
+export type Language = (typeof LANGUAGES)[number];
+
 export interface AlterConfig {
   port: number;
   host: string;
@@ -20,6 +30,15 @@ export interface AlterConfig {
   defaultProvider: string;
   /** Learn durable facts about the user from conversations and agent runs. */
   learning: boolean;
+  /** UI + default reply language. */
+  language: Language;
+  userName: string;
+  /** First-run setup finished. */
+  onboarded: boolean;
+  /** When a subscription hits its usage limit: ask in chat, or switch to another connected AI by itself. */
+  onLimit: 'ask' | 'switch';
+  /** Result of the last real round-trip to each provider ("is my subscription actually connected?"). */
+  providerHealth: Record<string, ProviderHealth>;
   devices: Device[];
 }
 
@@ -27,7 +46,7 @@ export const HOME = process.env.ALTER_HOME ?? join(homedir(), '.alter');
 export const CONFIG_PATH = join(HOME, 'config.json');
 
 export function ensureHome(): void {
-  for (const dir of [HOME, workspaceDir(), userSkillsDir()]) mkdirSync(dir, { recursive: true });
+  for (const dir of [HOME, workspaceDir(), userSkillsDir(), projectsDir()]) mkdirSync(dir, { recursive: true });
 }
 
 /** Neutral working directory for the provider CLIs, so they don't pick up some random project's settings. */
@@ -35,11 +54,26 @@ export function workspaceDir(): string {
   return join(HOME, 'workspace');
 }
 
+/** AI images and videos made in ALTTER (Media). */
+export function generatedDir(): string {
+  return join(HOME, 'generated');
+}
+
 export function userSkillsDir(): string {
   return join(HOME, 'skills');
 }
 
+/** Project folders. Packaged installs put them next to the app (e.g. D:\ALTTER\projects). */
+export function projectsDir(): string {
+  return process.env.ALTER_PROJECTS_DIR ?? join(HOME, 'projects');
+}
+
 let cached: AlterConfig | null = null;
+
+function detectLanguage(): Language {
+  const loc = (Intl.DateTimeFormat().resolvedOptions().locale || 'en').slice(0, 2).toLowerCase();
+  return (LANGUAGES as readonly string[]).includes(loc) ? (loc as Language) : 'en';
+}
 
 export function loadConfig(): AlterConfig {
   if (cached) return cached;
@@ -50,6 +84,11 @@ export function loadConfig(): AlterConfig {
     ownerToken: randomBytes(24).toString('base64url'),
     defaultProvider: 'auto',
     learning: true,
+    language: detectLanguage(),
+    userName: '',
+    onboarded: false,
+    onLimit: 'ask',
+    providerHealth: {},
     devices: [],
   };
   let cfg = defaults;
@@ -72,3 +111,12 @@ export function updateConfig(patch: Partial<AlterConfig>): AlterConfig {
   saveConfig();
   return cfg;
 }
+
+export const LANGUAGE_NAMES: Record<Language, string> = {
+  en: 'English',
+  pl: 'Polish',
+  de: 'German',
+  es: 'Spanish',
+  fr: 'French',
+  uk: 'Ukrainian',
+};

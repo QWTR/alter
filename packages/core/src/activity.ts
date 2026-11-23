@@ -8,7 +8,7 @@ export interface Activity {
   created_at: string;
 }
 
-/** Everything that happens in Alter lands here; agents read it to learn what the user's day looks like. */
+/** Everything that happens in ALTTER lands here; agents read it to learn what the user's day looks like. */
 export function logActivity(kind: string, summary: string, ref?: string): void {
   run('INSERT INTO activity (kind, summary, ref, created_at) VALUES (?, ?, ?, ?)', kind, summary.slice(0, 500), ref ?? null, now());
 }

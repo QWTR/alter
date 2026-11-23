@@ -1,20 +1,52 @@
+import { deleteMedia, handleMediaMcp, listMedia, mediaOptions, mediaView, setMediaKeys, startMedia } from './media.ts';
+import { deletePrompt, listPrompts, savePrompt, usePrompt } from './prompts.ts';
+import { localUsage } from './usageLocal.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { acceptProposal } from './proposals.ts';
+import { addLink, applySetup, removeLink } from './setup.ts';
+import { deleteGroup, handleTeamMcp, listGroups, saveGroup } from './team.ts';
+import { agentStatuses } from './status.ts';
+import { ensureVoice, transcribe, voiceStatus } from './voice.ts';
+import { deleteRender, ensureStudio, publicBrand, listRenders, mediaIn, serveMedia, setBrand, studioStatus } from './studio.ts';
+import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
 import { recentActivity } from './activity.ts';
 import {
-  TEMPLATES, createAgent, createFromTemplate, deleteAgent, getAgent, isRunning, listAgents, listRuns, runAgent, updateAgent,
+  TEMPLATES, checkMonitor, createAgent, createFromTemplate, deleteAgent, getAgent, isRunning, listAgents, listRuns, runAgent, stopAgent, updateAgent,
 } from './agents.ts';
-import { chat, deleteConversation, getConversation, getMessages, listConversations } from './chat.ts';
-import { loadConfig, updateConfig } from './config.ts';
+import { chat, deleteConversation, getConversation, getMessages, listConversations, updateConversation } from './chat.ts';
+import { all as dbAll } from './db.ts';
+import { enhancePrompt } from './enhance.ts';
+import { addPushSub, notifyPhones, pushSubs, removePushForDevice, removePushSub, vapid } from './push.ts';
+import { getBoard, hasBoard } from './crewBoard.ts';
+import { crewSize, handleHandsMcp, handsEnabled, handsSessions, setHandsEnabled, stopAllHands, wantsHands } from './hands.ts';
+import { HOME, LANGUAGES, loadConfig, projectsDir, updateConfig, workspaceDir, type Language } from './config.ts';
 import { bus, emit, type AlterEvent } from './events.ts';
 import { addMemory, deleteMemory, listMemories, updateMemory } from './memory.ts';
-import { authenticate, claimPairing, lanUrls, revokeDevice, startPairing } from './pairing.ts';
-import { openLoginTerminal, providerStatuses } from './providers/index.ts';
+import { runCheck } from './monitor.ts';
+import { serverPackageReady, serverSetupScript } from './serverPkg.ts';
+import { applyTeam, stopSquad } from './squad.ts';
+import { CATALOG, installCustom, installFromCatalog, publicPlugins, removePlugin, setPluginEnabled } from './plugins.ts';
+import { domainFor, ensureRelayKey, vpsSetupScript, publicRemoteSettings, publicUrl, RELAY_HEADER, setRemoteSettings, startTunnel, stopTunnel, tunnelStatus } from './remote.ts';
+import { authenticate, claimPairing, lanUrls, revokeDevice, setListening, startPairing } from './pairing.ts';
+import { createProject, deleteProject, getProject, listProjects, updateProject } from './projects.ts';
+import { connectProvider, providerStatuses, testProvider } from './providers/index.ts';
+import { isLimited, LimitError, usageSummary } from './usage.ts';
+import { importProject, pickFolder, scanProject } from './projectImport.ts';
+import { previewFor, resolvePreview } from './preview.ts';
+import { PREVIEW_KIT } from './previewKit.ts';
 import { listSkills } from './skills.ts';
 import { VERSION } from './version.ts';
+import { MAX_UPLOAD, saveUpload, serveUpload } from './uploads.ts';
+import {
+  authenticateGuest, colorFor, isGuest, joinRoom, roomMembers, runEvent, runStarted, setPresence, shareByToken, shareFor, startShare,
+  stopRun, stopShare, type Guest,
+} from './rooms.ts';
 
-const WEB_DIR = process.env.ALTER_WEB_DIR ?? resolve(import.meta.dirname, '../../../apps/web');
+const WEB_ROOT = process.env.ALTER_WEB_DIR ?? resolve(import.meta.dirname, '../../../apps/web');
+// Built UI lives in /dist; fall back to the folder itself (packaged app copies dist contents directly).
+const WEB_DIR = existsSync(join(WEB_ROOT, 'dist', 'index.html')) ? join(WEB_ROOT, 'dist') : WEB_ROOT;
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -25,6 +57,7 @@ const MIME: Record<string, string> = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
 };
 
 class HttpError extends Error {
@@ -35,19 +68,44 @@ class HttpError extends Error {
   }
 }
 
-type Ctx = { req: IncomingMessage; res: ServerResponse; params: string[]; url: URL; body: any; auth: ReturnType<typeof authenticate> };
+type Auth = ReturnType<typeof authenticate> | Guest;
+type Ctx = { req: IncomingMessage; res: ServerResponse; params: string[]; url: URL; body: any; auth: Auth };
 type Handler = (ctx: Ctx) => unknown | Promise<unknown>;
-const routes: { method: string; re: RegExp; handler: Handler; open?: boolean }[] = [];
-const route = (method: string, path: string, handler: Handler, open = false) =>
-  routes.push({ method, re: new RegExp(`^${path.replace(/:\w+/g, '([^/]+)')}$`), handler, open });
+/** open: no token needed · guest: a share-link guest may call it (the handler checks the chat) · raw: the body is a file, not JSON */
+type RouteOpts = { open?: boolean; guest?: boolean; raw?: boolean };
+const routes: ({ method: string; re: RegExp; handler: Handler } & RouteOpts)[] = [];
+const route = (method: string, path: string, handler: Handler, opts: boolean | RouteOpts = false) =>
+  routes.push({ method, re: new RegExp(`^${path.replace(/:\w+/g, '([^/]+)')}$`), handler, ...(typeof opts === 'boolean' ? { open: opts } : opts) });
+
+/** A guest only ever reaches the one chat their link is for. */
+const guardChat = (auth: Auth, conversationId: unknown) => {
+  if (isGuest(auth) && auth.share.conversationId !== conversationId) throw new HttpError(403, 'This link is for another chat');
+};
 
 const isLoopback = (req: IncomingMessage) => {
   const a = req.socket.remoteAddress ?? '';
   return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
 };
+const isLocalHostHeader = (req: IncomingMessage) => {
+  // anything that came through the internet link is never "this computer"
+  if (req.headers[RELAY_HEADER] || req.headers['cf-connecting-ip'] || req.headers['cf-ray'] || req.headers['x-forwarded-for']) return false; // x-forwarded-for: Caddy on an ALTTER server
+  const host = (req.headers.host ?? '').replace(/:\d+$/, '');
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+};
+const ownerOnly = (auth: Auth, what: string) => {
+  if (auth !== 'owner') throw new HttpError(403, `Only the computer running ALTTER can ${what}`);
+};
 
-// ---------- status & settings ----------
+function settingsView() {
+  const c = loadConfig();
+  return { defaultProvider: c.defaultProvider, learning: c.learning, language: c.language, userName: c.userName, onboarded: c.onboarded, onLimit: c.onLimit };
+}
+
+// ---------- boot / status / settings ----------
 route('GET', '/api/health', () => ({ ok: true, name: 'alter', version: VERSION }), true);
+
+/** The computer's own window gets the owner token; any other device must pair. Cross-origin pages can't read this. */
+route('GET', '/api/boot', ({ req }) => (isLoopback(req) && isLocalHostHeader(req) ? { token: loadConfig().ownerToken } : {}), true);
 
 route('GET', '/api/status', async ({ auth }) => {
   const cfg = loadConfig();
@@ -55,9 +113,11 @@ route('GET', '/api/status', async ({ auth }) => {
     version: VERSION,
     you: auth === 'owner' ? { kind: 'computer' } : { kind: 'device', name: (auth as any)?.name },
     providers: await providerStatuses(),
-    counts: { agents: listAgents().length, memories: listMemories().length, conversations: listConversations(1000).length },
-    settings: { defaultProvider: cfg.defaultProvider, learning: cfg.learning },
-    lanUrls: lanUrls(cfg.port),
+    counts: { agents: listAgents().length, memories: listMemories().length, conversations: listConversations().length, projects: listProjects().length },
+    settings: settingsView(),
+    paths: { data: HOME, projects: projectsDir() },
+    lanUrls: lanUrls(),
+    publicUrl: publicUrl(),
   };
 });
 
@@ -65,60 +125,468 @@ route('PUT', '/api/settings', ({ body }) => {
   const patch: Record<string, unknown> = {};
   if (typeof body.defaultProvider === 'string') patch.defaultProvider = body.defaultProvider;
   if (typeof body.learning === 'boolean') patch.learning = body.learning;
-  const cfg = updateConfig(patch);
-  emit('settings.changed', { defaultProvider: cfg.defaultProvider, learning: cfg.learning });
-  return { defaultProvider: cfg.defaultProvider, learning: cfg.learning };
+  if (typeof body.userName === 'string') patch.userName = body.userName.slice(0, 60);
+  if (typeof body.onboarded === 'boolean') patch.onboarded = body.onboarded;
+  if (body.onLimit === 'ask' || body.onLimit === 'switch') patch.onLimit = body.onLimit;
+  if ((LANGUAGES as readonly string[]).includes(body.language)) patch.language = body.language as Language;
+  updateConfig(patch);
+  const s = settingsView();
+  emit('settings.changed', s);
+  return s;
+});
+
+/** Finishes first-run setup in one go. */
+route('POST', '/api/onboarding', ({ body, auth }) => {
+  const patch: Record<string, unknown> = { onboarded: true };
+  if (typeof body.userName === 'string') patch.userName = body.userName.trim().slice(0, 60);
+  if ((LANGUAGES as readonly string[]).includes(body.language)) patch.language = body.language;
+  if (typeof body.defaultProvider === 'string') patch.defaultProvider = body.defaultProvider;
+  updateConfig(patch);
+  if (patch.userName) addMemory({ kind: 'profile', content: `The user's name is ${patch.userName}`, importance: 5, source: 'onboarding' });
+  if (typeof body.about === 'string' && body.about.trim()) addMemory({ kind: 'profile', content: body.about.trim(), importance: 5, source: 'onboarding' });
+  if (typeof body.day === 'string' && body.day.trim()) addMemory({ kind: 'routine', content: body.day.trim(), importance: 4, source: 'onboarding' });
+  // folders / links the user works on: each becomes a project, scanned one by one in the background
+  const sources = (Array.isArray(body.sources) ? body.sources : []).filter((x: unknown): x is string => typeof x === 'string' && !!x.trim()).slice(0, 12);
+  if (sources.some((x: string) => !/^https?:|^git@/i.test(x.trim()))) ownerOnly(auth, 'import local folders');
+  (async () => {
+    for (const source of sources) await importProject({ source }).catch((err) => console.warn('[alter] import failed:', source, err.message));
+  })();
+  const created = [];
+  for (const t of Array.isArray(body.agents) ? body.agents : []) {
+    if (TEMPLATES.some((x) => x.templateId === t) && !listAgents().some((a) => a.templateId === t)) created.push(createFromTemplate(t, { templateId: t }));
+  }
+  const s = settingsView();
+  emit('settings.changed', s);
+  return { settings: s, agents: created };
 });
 
 // ---------- providers ----------
 route('GET', '/api/providers', ({ url }) => providerStatuses(url.searchParams.has('refresh')));
-route('POST', '/api/providers/:id/connect', ({ params }) => openLoginTerminal(params[0]));
+route('POST', '/api/providers/:id/connect', ({ params }) => connectProvider(params[0]));
+route('GET', '/api/usage', ({ url }) => usageSummary(Number(url.searchParams.get('days') ?? 30)));
+route('POST', '/api/providers/:id/test', ({ params }) => testProvider(params[0]));
+
+// ---------- projects ----------
+route('GET', '/api/projects', () => listProjects());
+route('POST', '/api/projects', ({ body }) => createProject(body));
+route('POST', '/api/projects/import', async ({ body, auth }) => {
+  const src = String(body.source ?? '');
+  if (!/^https?:|^git@/i.test(src.trim())) ownerOnly(auth, 'import local folders');
+  try {
+    return await importProject({ source: src, name: body.name, color: body.color, icon: body.icon });
+  } catch (e) {
+    throw new HttpError(400, (e as Error).message);
+  }
+});
+route('POST', '/api/projects/:id/scan', ({ params }) => {
+  if (!getProject(params[0])) notFound();
+  scanProject(params[0]).catch(() => {});
+  return { started: true };
+});
+route('POST', '/api/preview', ({ body, auth }) => {
+  if (isGuest(auth)) guardChat(auth, body.conversationId);
+  else ownerOnly(auth, 'preview files');
+  // relative paths are relative to where that chat works (its project folder or the workspace)
+  const conv = typeof body.conversationId === 'string' ? getConversation(body.conversationId) : undefined;
+  const cwd = getProject(conv?.project_id ?? null)?.folder ?? workspaceDir();
+  const p = typeof body.path === 'string' ? previewFor(body.path, cwd) : undefined;
+  if (!p) throw new HttpError(404, 'Nothing to preview');
+  // guests only see pages inside that chat's own folder
+  if (isGuest(auth) && !normalize(p.root).toLowerCase().startsWith(normalize(cwd).toLowerCase())) throw new HttpError(403, 'Not part of this chat');
+  return p;
+}, { guest: true });
+route('POST', '/api/pick-folder', async ({ auth }) => {
+  ownerOnly(auth, 'pick folders');
+  return { path: await pickFolder() };
+});
+route('GET', '/api/projects/:id', ({ params }) => getProject(params[0]) ?? notFound());
+route('PUT', '/api/projects/:id', ({ params, body }) => updateProject(params[0], body) ?? notFound());
+route('DELETE', '/api/projects/:id', ({ params }) => ({ ok: deleteProject(params[0]) }));
+route('POST', '/api/projects/:id/open', ({ params, auth }) => {
+  ownerOnly(auth, 'open folders');
+  const p = getProject(params[0]) ?? notFound();
+  const opener = process.platform === 'win32' ? 'explorer' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+  spawn(opener, [p.folder], { detached: true, stdio: 'ignore' }).unref();
+  return { ok: true };
+});
 
 // ---------- chat ----------
-route('GET', '/api/conversations', () => listConversations());
-route('GET', '/api/conversations/:id', ({ params }) => {
+route('GET', '/api/conversations', ({ url }) => {
+  const p = url.searchParams.get('projectId');
+  return listConversations({ projectId: p === null ? undefined : p === 'none' ? null : p });
+});
+route('GET', '/api/conversations/:id', ({ params, auth }) => {
+  guardChat(auth, params[0]);
   const c = getConversation(params[0]);
   if (!c) throw new HttpError(404, 'Conversation not found');
-  return { ...c, messages: getMessages(c.id) };
+  const cwd = getProject(c.project_id)?.folder ?? workspaceDir();
+  const messages = getMessages(c.id).map((m) => (m.role === 'assistant' ? { ...m, media: mediaIn(m.content, cwd).map(({ file, ...x }) => x) } : m));
+  return { ...c, messages, share: isGuest(auth) ? undefined : shareFor(c.id) ?? null };
+}, { guest: true });
+route('POST', '/api/conversations/:id/messages/:mid/proposals/:n', ({ params, body }) => acceptProposal(params[0], Number(params[1]), Number(params[2]), body ?? {}));
+route('POST', '/api/conversations/:id/messages/:mid/setup/:n', ({ auth, params, body }) => {
+  ownerOnly(auth, 'set up projects');
+  return applySetup(params[0], Number(params[1]), Number(params[2]), Array.isArray(body?.skip) ? body.skip.map(Number) : []);
 });
-route('DELETE', '/api/conversations/:id', ({ params }) => ({ ok: deleteConversation(params[0]) }));
+route('POST', '/api/projects/:id/links', ({ auth, params, body }) => {
+  ownerOnly(auth, 'change projects');
+  const kind = ['folder', 'site', 'api', 'repo'].includes(body.kind) ? body.kind : null;
+  if (!kind || !String(body.target ?? '').trim()) throw new HttpError(400, 'kind and target needed');
+  return addLink(params[0], { kind, name: String(body.name ?? '').trim() || String(body.target).trim(), target: String(body.target).trim(), agentId: null });
+});
+route('DELETE', '/api/projects/:id/links/:lid', ({ auth, params }) => {
+  ownerOnly(auth, 'change projects');
+  return { ok: removeLink(params[0], params[1]) };
+});
+route('PUT', '/api/conversations/:id', ({ params, body }) => updateConversation(params[0], body) ?? notFound());
+route('DELETE', '/api/conversations/:id', ({ params }) => {
+  // a chat that is still answering is stopped first; a crew lead takes its helpers' chats with it
+  const kids = dbAll<{ id: string }>(`SELECT id FROM conversations WHERE parent_id = ?`, params[0]).map((r) => r.id);
+  for (const id of [params[0], ...kids]) { try { stopRun(id); } catch {} }
+  for (const id of kids) deleteConversation(id);
+  return { ok: deleteConversation(params[0]) };
+});
 
-route('POST', '/api/chat', async ({ req, res, body }) => {
-  const sse = openSse(res);
+route('POST', '/api/chat', async ({ res, body, auth }) => {
+  const guest = isGuest(auth) ? auth : null;
+  if (guest) {
+    guardChat(auth, body.conversationId);
+    if (!guest.share.guestsCanSend) throw new HttpError(403, 'The host only lets guests watch');
+  }
+  const cid = typeof body.cid === 'string' ? body.cid.slice(0, 40) : '';
+  const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 40) : 'Guest';
+  const sse0 = openSse(res);
   const abort = new AbortController();
+  // everything the sender sees is mirrored to the others in that chat
+  let convId: string | null = typeof body.conversationId === 'string' ? body.conversationId : null;
+  const sse = (event: string, data: unknown) => {
+    sse0(event, data);
+    if (convId) runEvent(convId, event, data);
+  };
   res.on('close', () => {
     if (!res.writableFinished) abort.abort();
   });
+  // "3 agenci w Blenderze…" in a normal chat: this chat becomes the lead, the others start alongside
+  const msg = String(body.message ?? '');
+  // a team on the screen: asked for in this message, or earlier in this chat ("use computer use" after "make a team…")
+  const earlier = typeof body.conversationId === 'string' ? getMessages(body.conversationId, 8).filter((m) => m.role === 'user').map((m) => m.content).slice(-3).join('\n') : '';
+  const asked = (t: string) => wantsHands(t) || crewSize(t) > 1;
+  const crewText = asked(msg) ? `${earlier}\n${msg}` : msg;
+  const size = !guest && body.access === 'full' && !body.plan && process.platform === 'win32' && handsEnabled() && wantsHands(crewText) && (crewSize(msg) > 1 || /(agent|zesp|team|crew|computer|komputer|kursor|ekran|screen|na [żz]ywo|live)/i.test(msg)) ? Math.min(CREW.length, crewSize(crewText)) : 1;
+  // the lead is the agent this chat is with (its name on the cursor), the helpers come from CREW
+  const leadAgent = size > 1 ? getAgent(String(body.agentId ?? '') || (typeof body.conversationId === 'string' ? getConversation(body.conversationId)?.agent_id ?? '' : '')) : undefined;
+  const lead = leadAgent ? { name: leadAgent.name, color: '#ffa94d' } : CREW[0];
+  const crew = [lead, ...CREW.filter((c) => c.name.toLowerCase() !== lead.name.toLowerCase())].slice(0, size);
+  let helpersStarted = false;
+  const startHelpers = (leadConv: string) => {
+    if (size < 2 || helpersStarted) return;
+    helpersStarted = true;
+    crew.slice(1).forEach((c, k) => {
+      chat({ message: `${c.name}: ${msg}`, access: 'full', provider: body.provider, projectId: body.projectId ?? null, parentId: leadConv, hands: { ...c, brief: crewBrief(crew, k + 1) }, signal: abort.signal }).catch((e) => console.error('[alter] crew', c.name, (e as Error).message));
+    });
+  };
   try {
     const result = await chat({
+      hands: size > 1 ? { ...crew[0], brief: crewBrief(crew, 0) } : undefined,
       conversationId: body.conversationId,
+      // a guest can't move the chat, pick another AI, an agent or a higher access level: the host's settings apply
+      projectId: guest ? null : body.projectId ?? null,
+      agentId: guest ? null : body.agentId ?? null,
+      model: !guest && typeof body.model === 'string' ? body.model : undefined,
+      effort: !guest && typeof body.effort === 'string' ? body.effort : undefined,
       message: String(body.message ?? ''),
-      provider: body.provider,
+      attachments: Array.isArray(body.attachments) ? body.attachments.filter((x: unknown) => typeof x === 'string') : undefined,
+      author: guest ? { name, color: colorFor(cid || name) } : null,
+      provider: guest ? undefined : body.provider,
+      access: guest ? undefined : body.access,
+      plan: !!body.plan,
       signal: abort.signal,
-      onMeta: (m) => sse('meta', m),
+      onUserMessage: (m) => {
+        convId = m.conversationId;
+        runStarted(m.conversationId, { cid, author: m.author, user: m.content, attachments: m.attachments, abort });
+      },
+      onMeta: (m) => {
+        sse('meta', m);
+        startHelpers(m.conversationId);
+      },
       onDelta: (text) => sse('delta', { text }),
+      onActivity: (text) => sse('activity', { text }),
+      onPreview: (p) => sse('preview', p),
+      onDraft: (d) => sse('draft', d),
+      onProgress: (p) => sse('progress', p),
     });
     sse('done', result);
   } catch (err) {
-    sse('error', { message: (err as Error).message });
+    if (err instanceof LimitError) {
+      const alternatives = (await providerStatuses()).filter((p) => p.connected && p.id !== 'demo' && p.id !== err.provider && !isLimited(p.id)).map((p) => ({ id: p.id, name: p.name }));
+      sse('error', { message: err.limit.message, code: 'limit', provider: err.provider, until: err.limit.until, alternatives });
+    } else sse('error', { message: (err as Error).message });
   }
   res.end();
-  void req;
   return SSE_HANDLED;
+}, { guest: true });
+
+// ---------- studio (video, motion, 3D, graphics) ----------
+const projectFolders = () => listProjects().map((p) => p.folder).filter(Boolean) as string[];
+route('GET', '/api/studio', () => ({ ...studioStatus(), brand: publicBrand(), renders: listRenders(projectFolders()).map(({ file, ...x }) => x) }));
+route('POST', '/api/studio/install', () => {
+  ensureStudio().catch(() => {});
+  return studioStatus();
+});
+route('PUT', '/api/studio/brand', ({ body }) => (setBrand(body ?? {}), publicBrand()));
+route('DELETE', '/api/studio/renders', ({ body }) => ({ ok: deleteRender(String(body?.url ?? ''), projectFolders()) }));
+
+// ---------- attachments ----------
+route('POST', '/api/uploads', async ({ req, url }) => {
+  const name = url.searchParams.get('name') ?? 'file';
+  try {
+    return await saveUpload(req, name, (req.headers['content-type'] ?? '').split(';')[0] || undefined);
+  } catch (e) {
+    throw new HttpError((e as any).status ?? 400, (e as Error).message);
+  }
+}, { guest: true, raw: true });
+
+// ---------- voice: local dictation (whisper.cpp) ----------
+route('GET', '/api/voice', () => voiceStatus());
+route('POST', '/api/voice/install', ({ auth }) => {
+  ownerOnly(auth, 'install dictation');
+  ensureVoice().catch((e) => console.warn('[alter] voice:', (e as Error).message));
+  return voiceStatus();
+});
+route('POST', '/api/voice/transcribe', async ({ req, url, auth }) => {
+  if (isGuest(auth)) throw new HttpError(403, 'Not allowed');
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const c of req) {
+    size += (c as Buffer).length;
+    if (size > 25 * 1024 * 1024) throw new HttpError(413, 'Recording too long');
+    chunks.push(c as Buffer);
+  }
+  return { text: await transcribe(Buffer.concat(chunks), url.searchParams.get('lang') ?? undefined) };
+}, { raw: true });
+
+// ---------- online sessions ----------
+/** Share link for a chat (anyone with it can join that one chat). */
+route('POST', '/api/conversations/:id/share', ({ params, body, auth }) => {
+  if (isGuest(auth)) throw new HttpError(403, 'Only the host can share');
+  if (!getConversation(params[0])) notFound();
+  const s = startShare(params[0], body.guestsCanSend !== false);
+  return { ...s, members: roomMembers(params[0]) };
+});
+route('DELETE', '/api/conversations/:id/share', ({ params, auth }) => {
+  if (isGuest(auth)) throw new HttpError(403, 'Only the host can stop sharing');
+  return { ok: stopShare(params[0]) };
+});
+/** What a share link opens (guests call this before they have a name). */
+route('GET', '/api/share/:token', ({ params }) => {
+  const s = shareByToken(params[0]);
+  const c = s && getConversation(s.conversationId);
+  if (!s || !c) throw new HttpError(404, 'This link has expired');
+  return { conversationId: c.id, title: c.title, host: loadConfig().userName || 'ALTTER', guestsCanSend: s.guestsCanSend, members: roomMembers(c.id) };
+}, true);
+
+/** Presence stream for one chat: who is here, cursors, typing, picks, and the AI answer as it is written. */
+route('GET', '/api/room/:id', ({ res, params, url, auth }) => {
+  guardChat(auth, params[0]);
+  if (!getConversation(params[0])) notFound();
+  const cid = (url.searchParams.get('cid') ?? '').slice(0, 40) || Math.random().toString(36).slice(2);
+  const guest = isGuest(auth);
+  const fallback = guest ? 'Guest' : loadConfig().userName || (auth === 'owner' ? 'Host' : (auth as any)?.name ?? 'Device');
+  const name = (url.searchParams.get('name') ?? '').trim().slice(0, 40) || fallback;
+  const sse = openSse(res);
+  const ping = setInterval(() => res.write(': ping\n\n'), 20_000);
+  const leave = joinRoom(params[0], { cid, name, color: colorFor(cid), guest, send: sse, close: () => res.end() });
+  res.on('close', () => {
+    clearInterval(ping);
+    leave();
+  });
+  return SSE_HANDLED;
+}, { guest: true });
+route('POST', '/api/room/:id/state', ({ params, body, auth }) => {
+  guardChat(auth, params[0]);
+  setPresence(params[0], String(body.cid ?? ''), body ?? {});
+  return { ok: true };
+}, { guest: true });
+route('POST', '/api/room/:id/stop', ({ params, auth }) => {
+  guardChat(auth, params[0]);
+  return { ok: stopRun(params[0]) };
+}, { guest: true });
+
+/** Internet link through a Cloudflare quick tunnel (needs cloudflared installed). */
+route('GET', '/api/tunnel', () => tunnelStatus());
+route('POST', '/api/tunnel', async ({ auth }) => {
+  ownerOnly(auth, 'open an internet link');
+  return startTunnel(listeningPort);
+});
+route('GET', '/api/remote', ({ auth }) => {
+  ownerOnly(auth, 'see the internet settings');
+  return { ...publicRemoteSettings(), status: tunnelStatus() };
+});
+route('PUT', '/api/remote', ({ auth, body }) => {
+  ownerOnly(auth, 'change the internet settings');
+  const patch: Record<string, unknown> = {};
+  for (const k of ['mode', 'auto', 'relayUrl', 'relayKey', 'cfToken', 'cfHostname']) if (body[k] !== undefined && body[k] !== '') patch[k] = body[k];
+  if (patch.mode && !['quick', 'relay', 'cloudflare'].includes(patch.mode as string)) throw new HttpError(400, 'Unknown mode');
+  const before = publicRemoteSettings();
+  setRemoteSettings(patch);
+  // a changed address or key takes effect right away
+  if (tunnelStatus().running && (patch.mode !== before.mode || patch.relayUrl || patch.relayKey || patch.cfToken || patch.cfHostname)) stopTunnel();
+  return { ...publicRemoteSettings(), status: tunnelStatus() };
+});
+/** Improve prompt: rough draft → clear brief (fast model). */
+// ---------- media: AI images + videos ----------
+route('GET', '/api/media', () => listMedia());
+route('GET', '/api/media/options', () => mediaOptions());
+route('PUT', '/api/media/keys', ({ body, auth }) => {
+  ownerOnly(auth, 'change API keys');
+  return setMediaKeys(body ?? {});
+});
+route('POST', '/api/media', ({ body }) => {
+  try {
+    return mediaView(startMedia({ kind: body.kind, prompt: body.prompt, provider: body.provider || undefined, model: body.model || undefined, aspect: body.aspect, conversationId: body.conversationId ?? null }));
+  } catch (e) {
+    throw new HttpError(400, (e as Error).message);
+  }
+});
+route('DELETE', '/api/media/:id', ({ params }) => ({ ok: deleteMedia(params[0]) }));
+
+// ---------- prompt library ----------
+route('GET', '/api/prompts', () => listPrompts());
+route('POST', '/api/prompts', ({ body }) => savePrompt(body ?? {}));
+route('PUT', '/api/prompts/:id', ({ params, body }) => savePrompt({ ...(body ?? {}), id: params[0] }));
+route('DELETE', '/api/prompts/:id', ({ params }) => ({ ok: deletePrompt(params[0]) }));
+route('POST', '/api/prompts/:id/use', ({ params }) => usePrompt(params[0]));
+
+// ---------- usage across the AI apps on this computer (their own local logs) ----------
+route('GET', '/api/usage/local', ({ url }) => localUsage(Number(url.searchParams.get('days') ?? 30)));
+
+route('POST', '/api/prompt/enhance', async ({ body }) => ({ text: await enhancePrompt(String(body.text ?? ''), String(body.kind ?? 'general')) }));
+
+// ---------- hands: the AI on your screen ----------
+/** Briefing for agent i of a crew working on the same screen at once. */
+function crewBrief(crew: { name: string }[], i: number): string {
+  const n = crew.length;
+  if (n === 1) return '';
+  const names = crew.map((c) => c.name).join(', ');
+  const c = crew[i];
+  return `## You are ${c.name}, one of ${n} agents (${names}) working on this computer at the same time.
+${i === 0 ? `You lead. Right away (before any other work) call team_plan: one clear part for each of ${names}, all parts of the SAME result — e.g. in 3D one builds the body, another the wheels/lights in the same shared Blender scene; on a website one builds the page while the 3D part is made. Then do your own part, answer your teammates (team_note to: "Name"), and use wait_team while they work. Do not finish your answer before every teammate posted status "done". Then review like an art director: look at the whole result (blender_look from several angles, the page with show_page + screenshot); if anything looks amateurish (lumps, holes, wrong proportions, parts not fitting, a broken page) send concrete fixes to the right teammate with team_note(to) and wait_team for them — up to 2 review rounds. Only then sum it up for the user.` : `The lead is ${crew[0].name}. Read team_board (use wait_team up to ~30 s if the plan is not there yet), then do YOUR part only. Work in the shared windows (the one Blender, the one browser page) — never open your own copy. team_note(status: "working") when you start, ask teammates with team_note(to: "Name") when you need something from them, and team_note(status: "done", text: what you made and where) when finished.`}
+Everything you do must be visible on the screen — the user is watching the team work.`;
+}
+const CREW = [{ name: 'Nova', color: '#7c5cff' }, { name: 'Bolt', color: '#2ee6ff' }, { name: 'Iris', color: '#ff5fa2' }, { name: 'Echo', color: '#3ddc97' }];
+route('GET', '/api/hands/board/:crew', ({ params }) => (hasBoard(params[0]) ? getBoard(params[0]) : null));
+route('GET', '/api/hands', () => ({ enabled: handsEnabled(), supported: process.platform === 'win32', agents: handsSessions() }));
+route('PUT', '/api/hands', ({ auth, body }) => {
+  ownerOnly(auth, 'let the AI use the mouse');
+  setHandsEnabled(!!body.enabled);
+  if (!body.enabled) stopAllHands();
+  return { enabled: handsEnabled() };
+});
+route('POST', '/api/hands/stop', ({ auth }) => {
+  ownerOnly(auth, 'stop the agents');
+  stopAllHands();
+  return { ok: true };
+});
+/** A crew: several agents on one task at the same time, each with its own cursor, coordinating through a shared board. */
+route('POST', '/api/hands/crew', async ({ auth, body }) => {
+  ownerOnly(auth, 'start agents on the screen');
+  if (!handsEnabled()) throw new HttpError(400, 'Turn on “agents can use the mouse” first');
+  const task = String(body.task ?? '').trim();
+  if (!task) throw new HttpError(400, 'Describe the task');
+  const n = Math.max(1, Math.min(CREW.length, Number(body.size) || 1));
+  const crew = CREW.slice(0, n);
+  const ids = await Promise.all(crew.map((c, i) => new Promise<string>((resolveId) => {
+    const brief = crewBrief(crew, i);
+    chat({ message: n === 1 ? task : `${c.name}: ${task}`, access: 'full', provider: body.provider, hands: { ...c, brief }, onMeta: (m) => resolveId(m.conversationId) }).catch((e) => {
+      console.error('[alter] crew', c.name, (e as Error).message);
+      resolveId('');
+    });
+  })));
+  return { conversations: ids.filter(Boolean), crew };
+});
+
+/** The PowerShell script that turns a Windows VPS into this ALTTER's relay (address and key filled in). */
+route('POST', '/api/remote/vps', ({ auth, body }) => {
+  ownerOnly(auth, 'set up a server');
+  const domain = domainFor(String(body.host ?? ''));
+  if (!domain || !/^[a-z0-9.-]+$/.test(domain)) throw new HttpError(400, 'Enter the server IP or domain');
+  ensureRelayKey();
+  setRemoteSettings({ mode: 'relay', relayUrl: 'https://' + domain });
+  return { domain, url: 'https://' + domain, script: vpsSetupScript(domain) };
+});
+/** A whole ALTTER for a Windows VPS, running 24/7 (one PowerShell file). */
+route('GET', '/api/server/package', () => ({ ready: serverPackageReady() }));
+route('POST', '/api/server/package', ({ auth, body }) => {
+  ownerOnly(auth, 'prepare a server');
+  const host = String(body.host ?? '').trim();
+  if (host && !/^[a-z0-9.:/-]+$/i.test(host)) throw new HttpError(400, 'Enter the server IP or domain');
+  const r = serverSetupScript(host);
+  return { domain: r.domain, url: r.domain ? 'https://' + r.domain : '', script: r.script };
+});
+// ---------- plugins (MCP servers) ----------
+route('GET', '/api/plugins', () => ({ installed: publicPlugins(), catalog: CATALOG }));
+route('POST', '/api/plugins', async ({ auth, body }) => {
+  ownerOnly(auth, 'install plugins');
+  try {
+    if (body.catalogId) return { plugins: [await installFromCatalog(String(body.catalogId), (body.keys ?? {}) as Record<string, string>)] };
+    return { plugins: await installCustom({ title: body.title ? String(body.title) : undefined, source: String(body.source ?? ''), oauth: !!body.oauth }) };
+  } catch (e) {
+    throw new HttpError(400, (e as Error).message);
+  }
+});
+route('PUT', '/api/plugins/:id', ({ auth, params, body }) => {
+  ownerOnly(auth, 'change plugins');
+  setPluginEnabled(params[0], !!body.enabled);
+  return { ok: true };
+});
+route('DELETE', '/api/plugins/:id', async ({ auth, params }) => {
+  ownerOnly(auth, 'remove plugins');
+  await removePlugin(params[0]);
+  return { ok: true };
+});
+/** Sign-in plugins (Higgsfield, Notion…): opens Claude Code in a window where /mcp signs in. */
+route('POST', '/api/plugins/:id/login', ({ auth, params }) => {
+  ownerOnly(auth, 'sign in to plugins');
+  if (process.platform !== 'win32') throw new HttpError(400, 'Run "claude" in a terminal and type /mcp');
+  const p = publicPlugins().find((x) => x.id === params[0]);
+  if (!p) notFound();
+  spawn('cmd.exe', ['/c', 'start', '"ALTTER - sign in"', 'cmd', '/k', `echo. & echo   Type /mcp, choose "${p!.name}" and pick Authenticate. A browser opens to sign in. & echo. & claude`], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+  return { ok: true };
+});
+// ---------- self-running teams ----------
+route('POST', '/api/conversations/:id/messages/:mid/team/:n', ({ auth, params, body }) => {
+  ownerOnly(auth, 'create teams');
+  try {
+    return applyTeam(params[0], Number(params[1]), Number(params[2]), Array.isArray(body.skip) ? body.skip.map(Number) : []);
+  } catch (e) {
+    throw new HttpError(400, (e as Error).message);
+  }
+});
+route('POST', '/api/squads/:runId/stop', ({ auth, params }) => {
+  ownerOnly(auth, 'stop teams');
+  return { stopped: stopSquad(params[0]) };
+});
+route('DELETE', '/api/tunnel', ({ auth }) => {
+  ownerOnly(auth, 'close the internet link');
+  stopTunnel();
+  return { ok: true };
 });
 
 // ---------- memory ----------
 route('GET', '/api/memories', ({ url }) =>
-  listMemories({ q: url.searchParams.get('q') ?? undefined, kind: url.searchParams.get('kind') ?? undefined }),
+  listMemories({ q: url.searchParams.get('q') ?? undefined, kind: url.searchParams.get('kind') ?? undefined, projectId: url.searchParams.get('projectId') ?? undefined }),
 );
 route('POST', '/api/memories', ({ body }) => addMemory({ ...body, source: 'manual' }));
 route('PUT', '/api/memories/:id', ({ params, body }) => updateMemory(params[0], body) ?? notFound());
 route('DELETE', '/api/memories/:id', ({ params }) => ({ ok: deleteMemory(params[0]) }));
 
-// ---------- agents ----------
-route('GET', '/api/agents', () => listAgents().map((a) => ({ ...a, running: isRunning(a.id) })));
+// ---------- agents & automations ----------
+route('GET', '/api/agents', ({ url }) => listAgents(url.searchParams.get('projectId') ?? undefined).map((a) => ({ ...a, running: isRunning(a.id) })));
 route('GET', '/api/agents/templates', () => TEMPLATES);
-route('POST', '/api/agents', ({ body }) => (body.templateId ? createFromTemplate(body.templateId) : createAgent(body)));
+route('POST', '/api/agents', ({ body }) => {
+  const { templateId, ...rest } = body ?? {};
+  return templateId ? createFromTemplate(templateId, { ...rest, templateId }) : createAgent(rest);
+});
 route('GET', '/api/agents/:id', ({ params }) => getAgent(params[0]) ?? notFound());
 route('PUT', '/api/agents/:id', ({ params, body }) => updateAgent(params[0], body) ?? notFound());
 route('DELETE', '/api/agents/:id', ({ params }) => ({ ok: deleteAgent(params[0]) }));
@@ -127,14 +595,29 @@ route('POST', '/api/agents/:id/run', ({ params }) => {
   runAgent(params[0], 'manual').catch(() => {});
   return { started: true };
 });
-route('GET', '/api/runs', ({ url }) => listRuns(url.searchParams.get('agentId') ?? undefined));
+route('POST', '/api/agents/:id/stop', ({ params }) => ({ stopped: stopAgent(params[0]) }));
+route('POST', '/api/agents/:id/check', ({ params }) => checkMonitor(params[0]));
+route('GET', '/api/agent-status', () => agentStatuses());
+route('GET', '/api/groups', () => listGroups());
+route('POST', '/api/groups', ({ auth, body }) => {
+  ownerOnly(auth, 'change agent groups');
+  return saveGroup(body);
+});
+route('DELETE', '/api/groups/:id', ({ auth, params }) => {
+  ownerOnly(auth, 'change agent groups');
+  return { ok: deleteGroup(params[0]) };
+});
+route('POST', '/api/monitor/test', ({ body }) => runCheck({ type: body.type, target: String(body.target ?? '') }));
+route('GET', '/api/runs', ({ url }) =>
+  listRuns({ agentId: url.searchParams.get('agentId') ?? undefined, projectId: url.searchParams.get('projectId') ?? undefined }),
+);
 route('GET', '/api/skills', () => listSkills().map(({ body, ...s }) => ({ ...s, preview: body.slice(0, 200) })));
 route('GET', '/api/activity', () => recentActivity(72, 200).reverse());
 
 // ---------- devices / pairing ----------
 route('POST', '/api/pair/start', ({ auth }) => {
-  if (auth !== 'owner') throw new HttpError(403, 'Only the computer running Alter can start pairing');
-  return startPairing();
+  ownerOnly(auth, 'start pairing');
+  return startPairing([publicUrl()]);
 });
 route('POST', '/api/pair/claim', ({ body }) => {
   try {
@@ -146,11 +629,34 @@ route('POST', '/api/pair/claim', ({ body }) => {
 }, true);
 route('GET', '/api/devices', () => loadConfig().devices.map(({ token, ...d }) => d));
 route('DELETE', '/api/devices/:id', ({ auth, params }) => {
-  if (auth !== 'owner') throw new HttpError(403, 'Only the computer can revoke devices');
+  ownerOnly(auth, 'revoke devices');
+  removePushForDevice(params[0]);
   return { ok: revokeDevice(params[0]) };
 });
 
-// ---------- live events (keeps desktop and phone in sync) ----------
+// ---------- phone notifications (Web Push) ----------
+const deviceOf = (auth: Auth) => (auth && typeof auth === 'object' && 'token' in auth ? (auth as { id: string; name?: string }) : null);
+route('GET', '/api/push', ({ auth }) => {
+  if (auth !== 'owner' && !deviceOf(auth)) throw new HttpError(403, 'Not allowed');
+  return { publicKey: vapid().publicKey, phones: pushSubs().length };
+});
+route('POST', '/api/push/subscribe', ({ auth, body }) => {
+  const dev = deviceOf(auth);
+  if (auth !== 'owner' && !dev) throw new HttpError(403, 'Not allowed');
+  addPushSub({ endpoint: String(body.endpoint ?? ''), keys: body.keys, deviceId: dev?.id ?? null, label: dev?.name ?? 'This computer', createdAt: '' });
+  return { ok: true, phones: pushSubs().length };
+});
+route('POST', '/api/push/unsubscribe', ({ auth, body }) => {
+  if (auth !== 'owner' && !deviceOf(auth)) throw new HttpError(403, 'Not allowed');
+  removePushSub(String(body.endpoint ?? ''));
+  return { ok: true };
+});
+route('POST', '/api/push/test', async ({ auth, body }) => {
+  if (auth !== 'owner' && !deviceOf(auth)) throw new HttpError(403, 'Not allowed');
+  return notifyPhones({ title: 'ALTTER', body: String(body.text ?? '') || '🔔 OK', url: '/', tag: 'test', level: 'ok' });
+});
+
+// ---------- live events (keeps every device in sync) ----------
 route('GET', '/api/events', ({ res }) => {
   const sse = openSse(res);
   sse('hello', { at: new Date().toISOString() });
@@ -193,21 +699,42 @@ async function readBody(req: IncomingMessage): Promise<any> {
   }
 }
 
-function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string) {
+const fileCache = new Map<string, Buffer>();
+
+function serveStatic(res: ServerResponse, pathname: string) {
   const rel = pathname === '/' ? '/index.html' : decodeURIComponent(pathname);
   let file = normalize(join(WEB_DIR, rel));
   if (!file.startsWith(normalize(WEB_DIR))) return send(res, 403, { error: 'Forbidden' });
   if (!existsSync(file) || !statSync(file).isFile()) file = join(WEB_DIR, 'index.html'); // SPA fallback
-  let body: string | Buffer = readFileSync(file);
-  if (file.endsWith('index.html')) {
-    // The computer's own browser/desktop shell is trusted with the owner token; other devices must pair.
-    const host = (req.headers.host ?? '').split(':')[0];
-    const localHost = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
-    const inject = isLoopback(req) && localHost ? `<script>window.ALTER_TOKEN=${JSON.stringify(loadConfig().ownerToken)}</script>` : '';
-    body = body.toString('utf8').replace('<!--ALTER_BOOT-->', inject);
+  const hashed = /[\\/]assets[\\/]/.test(file);
+  let body = hashed ? fileCache.get(file) : undefined;
+  if (!body) {
+    body = readFileSync(file);
+    if (hashed) fileCache.set(file, body);
   }
-  res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
+  res.writeHead(200, {
+    'content-type': MIME[extname(file)] ?? 'application/octet-stream',
+    'cache-control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache',
+  });
   res.end(body);
+}
+
+const PREVIEW_MIME: Record<string, string> = { '.htm': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif', '.woff': 'font/woff', '.ttf': 'font/ttf', '.mp4': 'video/mp4', '.webm': 'video/webm' };
+const KIT_TAG = '<script src="/preview-kit.js" data-alter-kit></script>';
+function servePreview(res: ServerResponse, pathname: string) {
+  if (pathname === '/preview-kit.js') {
+    res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' });
+    return res.end(PREVIEW_KIT);
+  }
+  const found = resolvePreview(pathname);
+  if (!found) return send(res, 404, { error: 'Not found' });
+  const ext = extname(found.file).toLowerCase();
+  res.writeHead(200, { 'content-type': MIME[ext] ?? PREVIEW_MIME[ext] ?? 'application/octet-stream', 'cache-control': 'no-store' });
+  if (!/^\.html?$/.test(ext)) return res.end(readFileSync(found.file));
+  // pages get the preview kit (live build + element picking); a page still being written starts empty
+  const html = found.exists ? readFileSync(found.file, 'utf8') : '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>';
+  const at = html.toLowerCase().lastIndexOf('</body>');
+  res.end(at >= 0 ? html.slice(0, at) + KIT_TAG + html.slice(at) : html + KIT_TAG);
 }
 
 function send(res: ServerResponse, status: number, data: unknown) {
@@ -215,20 +742,47 @@ function send(res: ServerResponse, status: number, data: unknown) {
   res.end(JSON.stringify(data));
 }
 
+let listeningPort = loadConfig().port;
+
 export function startServer(port = loadConfig().port, host = loadConfig().host) {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://alter.local');
     try {
-      if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, url.pathname);
+      if (url.pathname.startsWith('/preview/') || url.pathname === '/preview-kit.js') return servePreview(res, url.pathname);
+      // the AI's mouse/keyboard (MCP) — only from this computer, never through the internet link
+      if (url.pathname.startsWith('/mcp/team/')) {
+        if (!isLoopback(req) || req.headers[RELAY_HEADER] || req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']) return send(res, 403, { error: 'Forbidden' });
+        return handleTeamMcp(req, res, url.pathname.slice('/mcp/team/'.length), listeningPort);
+      }
+      if (url.pathname.startsWith('/mcp/media/')) {
+        if (!isLoopback(req) || req.headers[RELAY_HEADER] || req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']) return send(res, 403, { error: 'Forbidden' });
+        return handleMediaMcp(req, res, url.pathname.slice('/mcp/media/'.length));
+      }
+      if (url.pathname.startsWith('/mcp/hands/')) {
+        if (!isLoopback(req) || req.headers[RELAY_HEADER] || req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']) return send(res, 403, { error: 'Forbidden' });
+        return handleHandsMcp(req, res, url.pathname.slice('/mcp/hands/'.length));
+      }
+      if (url.pathname.startsWith('/media/')) {
+        if (!serveMedia(req, res, url.pathname)) send(res, 404, { error: 'Not found' });
+        return;
+      }
+      if (url.pathname.startsWith('/files/')) {
+        if (!serveUpload(req, res, url.pathname)) send(res, 404, { error: 'Not found' });
+        return;
+      }
+      if (!url.pathname.startsWith('/api/')) return serveStatic(res, url.pathname);
 
       const r = routes.find((x) => x.method === req.method && x.re.test(url.pathname));
       if (!r) return send(res, 404, { error: 'Not found' });
       const header = req.headers.authorization?.replace(/^Bearer\s+/i, '');
-      const auth = authenticate(header ?? url.searchParams.get('token') ?? undefined);
+      const bearer = header ?? url.searchParams.get('token') ?? undefined;
+      const auth: Auth = authenticate(bearer) ?? authenticateGuest(bearer);
       if (!r.open && !auth) return send(res, 401, { error: 'Unauthorized — pair this device first' });
+      if (isGuest(auth) && !r.open && !r.guest) return send(res, 403, { error: 'Guests can only use the shared chat' });
 
       const params = (url.pathname.match(r.re) ?? []).slice(1).map(decodeURIComponent);
-      const body = await readBody(req);
+      if (r.raw && Number(req.headers['content-length'] ?? 0) > MAX_UPLOAD) return send(res, 413, { error: 'File too large (max 300 MB)' });
+      const body = r.raw ? {} : await readBody(req);
       const out = await r.handler({ req, res, params, url, body, auth });
       if (out !== SSE_HANDLED) send(res, 200, out ?? { ok: true });
     } catch (err) {
@@ -240,6 +794,10 @@ export function startServer(port = loadConfig().port, host = loadConfig().host) 
   });
   return new Promise<typeof server>((resolveP, reject) => {
     server.once('error', reject);
-    server.listen(port, host, () => resolveP(server));
+    server.listen(port, host, () => {
+      setListening(port, host);
+      listeningPort = port;
+      resolveP(server);
+    });
   });
 }

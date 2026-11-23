@@ -23,12 +23,16 @@ export interface ProcessOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   onLine?: (line: string) => void;
+  /** Treat `cmd` as a complete shell command line written by the user (monitor checks). */
+  raw?: boolean;
 }
 
 export interface ProcessResult {
   code: number | null;
   stdout: string;
   stderr: string;
+  /** Killed because it ran past timeoutMs. */
+  timedOut?: boolean;
 }
 
 /**
@@ -42,7 +46,7 @@ export function runProcess(cmd: string, args: string[], opts: ProcessOptions = {
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE_ENTRYPOINT;
 
-    const child = spawn([cmd, ...args].map(quote).join(' '), {
+    const child = spawn(opts.raw ? cmd : [cmd, ...args].map(quote).join(' '), {
       shell: true,
       cwd: opts.cwd,
       env,
@@ -53,7 +57,8 @@ export function runProcess(cmd: string, args: string[], opts: ProcessOptions = {
     let stdout = '';
     let stderr = '';
     let pending = '';
-    const timer = setTimeout(() => killTree(child.pid), opts.timeoutMs ?? 10 * 60_000);
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; killTree(child.pid); }, opts.timeoutMs ?? 10 * 60_000);
     const onAbort = () => killTree(child.pid);
     opts.signal?.addEventListener('abort', onAbort, { once: true });
 
@@ -79,7 +84,7 @@ export function runProcess(cmd: string, args: string[], opts: ProcessOptions = {
       clearTimeout(timer);
       opts.signal?.removeEventListener('abort', onAbort);
       if (opts.onLine && pending.trim()) opts.onLine(pending.trim());
-      resolve({ code, stdout, stderr });
+      resolve({ code, stdout, stderr, timedOut });
     });
     child.stdin.on('error', () => {});
     child.stdin.end(opts.input ?? '', 'utf8');

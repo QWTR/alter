@@ -1,22 +1,25 @@
-﻿{
+{
   "name": "alter",
-  "version": "0.1.0",
+  "version": "0.13.0",
   "private": true,
   "description": "Alter — your personal AI that runs on the AI subscriptions you already pay for (Claude, ChatGPT, Gemini). Desktop + phone, shared memory, agents that learn your day.",
   "license": "AGPL-3.0-only",
   "type": "module",
   "workspaces": [
     "packages/*",
+    "apps/web",
     "apps/desktop"
   ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "start": "node packages/core/src/cli.ts start",
+    "start": "npm run build:web && node packages/core/src/cli.ts start",
     "dev": "node --watch packages/core/src/cli.ts start",
+    "dev:web": "npm run dev -w @alter/web",
+    "build:web": "npm run build -w @alter/web",
     "desktop": "npm run start --workspace @alter/desktop",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json",
     "test": "node --test packages/core/test/*.test.ts"
   },
   "devDependencies": {

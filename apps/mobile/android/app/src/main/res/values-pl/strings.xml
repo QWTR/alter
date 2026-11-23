@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="download_started">Pobieram %1$s…</string>
+    <string name="download_failed">Nie udało się pobrać pliku</string>
+    <string name="download_unsupported">Ten plik da się zapisać tylko na komputerze</string>
+</resources>

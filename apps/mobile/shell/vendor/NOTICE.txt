@@ -1,0 +1,3 @@
+jsQR 1.4.0 — https://github.com/cozmo/jsQR
+Copyright 2017 Cosmo Wolfe. Licensed under the Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0).
+Used unmodified as a QR fallback when the WebView has no BarcodeDetector.
