@@ -10,6 +10,7 @@ import { getProject, listProjects } from './projects.ts';
 import { getAgent, listAgents, runAgent } from './agents.ts';
 import { resolveProvider } from './providers/index.ts';
 import { notifyPhones } from './push.ts';
+import { wsLog } from './wslog.ts';
 
 // ---------- people & departments ----------
 export interface Person {
@@ -151,6 +152,8 @@ export function touchMember(m: Person) {
   const ts = now();
   let dirty = false;
   if (!m.joinedAt) { m.joinedAt = ts; dirty = true; }
+  // back after a while (or for the first time): one line in each of their workspaces' logs
+  if (!m.lastSeen || Date.now() - Date.parse(m.lastSeen) > 15 * 60_000) for (const id of m.projectIds) wsLog(id, personActor(m), 'member.online', '');
   if (!m.lastSeen || Date.now() - Date.parse(m.lastSeen) > 25_000) { m.lastSeen = ts; dirty = true; }
   if (dirty) saveConfig();
 }

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useData, type Status } from '../api';
 import { useT } from '../i18n';
 import { isNativeApp } from '../native';
+import { navigate } from '../router';
 import { QrScanner, canScanQr } from './QrScanner';
 import { Field, Modal, ModalHead } from './ui';
 
@@ -42,9 +43,9 @@ export function openSession(link: string, name?: string) {
   const u = new URL(link);
   rememberWorkspace(u);
   const url = `${u.origin}/${name?.trim() ? `?as=${encodeURIComponent(name.trim().slice(0, 40))}` : ''}${u.hash}`;
-  if (window.alterDesktop?.openSession) return window.alterDesktop.openSession(url);
   if (isNativeApp) return location.assign(url); // the phone app's guest view has a "back to my ALTTER" button
-  if (!window.open(url, '_blank', 'noopener')) location.assign(url);
+  // computer (app or browser): inside this window, next to your own sidebar — never a second window
+  navigate(`/visit?u=${encodeURIComponent(url)}`);
 }
 
 export function JoinButton({ className = 'btn', label = true }: { className?: string; label?: boolean }) {

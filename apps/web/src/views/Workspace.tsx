@@ -8,7 +8,11 @@ import { Tabs } from '../components/ui';
 import { JoinModal, forgetWorkspace, joinedWorkspaces, openSession } from '../components/Join';
 import { Download, ExternalLink, LogIn } from 'lucide-react';
 import QRCode from 'qrcode';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MousePointer2, PenTool, ScrollText } from 'lucide-react';
+import { BoardPane } from './WorkspaceBoard';
+import { LogPane } from './WorkspaceLog';
+import { useCursorsHidden, useWsCursors, WsCursorLayer } from '../components/WsCursors';
 import { api, enterAsGuest, enterAsMember, invalidate, useData, type Agent, type Conversation, type Status } from '../api';
 import { MemberDot } from '../components/Presence';
 import { Empty, ICONS, Logo, Modal, ModalHead, PALETTES, Toasts, toast } from '../components/ui';
@@ -28,7 +32,7 @@ interface WsMe {
   workspaces?: { id: string; name: string; color: string; icon: string }[];
   rules?: { weeklyReport: boolean; dailyDigest: boolean; notifyDone: boolean };
 }
-type View = 'chat' | 'tasks' | 'docs' | 'sales' | 'calendar' | 'auto';
+type View = 'chat' | 'tasks' | 'docs' | 'board' | 'sales' | 'calendar' | 'log' | 'auto';
 
 const KEY = 'altter.wsKey';
 export const savedWorkspaceKey = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
@@ -72,7 +76,8 @@ export function WorkspaceGate({ wsKey }: { wsKey: string }) {
 function OpenInApp({ wsKey }: { wsKey: string }) {
   const t = useT();
   const [hide, setHide] = useState(() => { try { return sessionStorage.getItem('altter.noAppBar') === '1'; } catch { return false; } });
-  if (hide || isNativeApp || /Electron/i.test(navigator.userAgent)) return null;
+  const framed = (() => { try { return window.top !== window.self; } catch { return true; } })(); // shown inside ALTTER (Visit)
+  if (hide || framed || isNativeApp || /Electron/i.test(navigator.userAgent)) return null;
   const link = `${location.origin}/#/w/${wsKey}`;
   const android = /Android/i.test(navigator.userAgent);
   return (
@@ -107,6 +112,10 @@ export function WorkspaceView({ memberKey }: { memberKey?: string }) {
   const [tab, setTab] = useState<'chats' | 'agents' | 'team'>('chats');
   const [invite, setInvite] = useState(false);
   const [newAgent, setNewAgent] = useState(false);
+  const wsRoot = useRef<HTMLDivElement>(null);
+  const [cursorsHidden, setCursorsHidden] = useCursorsHidden();
+  const screen = view === 'chat' ? `chat:${tab}:${openId ?? ''}` : view;
+  const live = useWsCursors(wsRoot, me ? `?project=${me.project.id}` : q, screen, !!me);
 
   // presence + new chats from the others: refresh now and then
   useEffect(() => {
@@ -146,12 +155,12 @@ export function WorkspaceView({ memberKey }: { memberKey?: string }) {
   const switchWs = (id: string) => { setWsMenu(false); setMemberChat(null); if (member) { setMemberWs(id); try { localStorage.setItem('altter.wsProject', id); } catch {} } else navigate(`/workspace/${id}`); };
   const views: { value: View; label: string; icon: typeof Users }[] = [
     { value: 'chat', label: t('wt.v.chat'), icon: MessageSquare }, { value: 'tasks', label: t('wt.v.tasks'), icon: KanbanSquare },
-    { value: 'docs', label: t('wt.v.docs'), icon: FileText }, { value: 'sales', label: t('wt.v.sales'), icon: Receipt },
-    { value: 'calendar', label: t('wt.v.calendar'), icon: CalendarDays }, ...(me.isOwner ? [{ value: 'auto' as View, label: t('wt.v.auto'), icon: Zap }] : []),
+    { value: 'docs', label: t('wt.v.docs'), icon: FileText }, { value: 'board', label: t('wt.v.board'), icon: PenTool }, { value: 'sales', label: t('wt.v.sales'), icon: Receipt },
+    { value: 'calendar', label: t('wt.v.calendar'), icon: CalendarDays }, { value: 'log', label: t('wt.v.log'), icon: ScrollText }, ...(me.isOwner ? [{ value: 'auto' as View, label: t('wt.v.auto'), icon: Zap }] : []),
   ];
 
   return (
-    <div className={`ws${chatOpen ? ' ws-chat-open' : ''}${view !== 'chat' ? ' ws-tool' : ''}`} style={{ ['--glow' as any]: glow }}>
+    <div ref={wsRoot} className={`ws${chatOpen ? ' ws-chat-open' : ''}${view !== 'chat' ? ' ws-tool' : ''}${cursorsHidden ? ' no-cursors' : ''}`} style={{ ['--glow' as any]: glow }}>
       <header className="ws-head">
         {(!member || isNativeApp) && (
           <button className="btn ghost icon sm" title={t('ws.leave')} onClick={() => (member ? location.replace('https://localhost/') : navigate(`/projects/${p.id}`))}><ArrowLeft /></button>
@@ -171,12 +180,16 @@ export function WorkspaceView({ memberKey }: { memberKey?: string }) {
             <span key={x.id} className={`ws-person${x.online ? ' on' : ''}`} title={`${x.name}${x.online ? ' · online' : ''}`}><MemberDot name={x.name} color={x.color} size={28} /></span>
           ))}
         </div>
+        <button className={`btn ghost icon sm${cursorsHidden ? '' : ' on'}`} title={t(cursorsHidden ? 'ws.cursorsShow' : 'ws.cursorsHide')} aria-pressed={!cursorsHidden} onClick={() => setCursorsHidden(!cursorsHidden)}><MousePointer2 size={16} style={cursorsHidden ? { opacity: .45 } : undefined} /></button>
         {me.isOwner && <button className="btn primary sm" onClick={() => setInvite(true)}><UserPlus size={15} /><span className="hide-narrow">{t('ws.invite')}</span></button>}
       </header>
 
+      {!cursorsHidden && <WsCursorLayer root={wsRoot} screen={screen} others={live.others} cursors={live.cursors} />}
       <nav className="ws-nav"><Tabs value={view} onChange={setView} tabs={views} /></nav>
       {view === 'tasks' && <TasksPane c={ctx} />}
       {view === 'docs' && <DocsPane c={ctx} />}
+      {view === 'board' && <BoardPane c={ctx} />}
+      {view === 'log' && <LogPane c={ctx} />}
       {view === 'sales' && <SalesPane c={ctx} />}
       {view === 'calendar' && <CalendarPane c={ctx} />}
       {view === 'auto' && <AutoPane c={ctx} rules={me.rules} />}

@@ -32,7 +32,8 @@ export interface AlterEvent {
     | 'prompts.changed'
     | 'update.available'
     | 'workspace.changed'
-    | 'update.progress';
+    | 'update.progress'
+    | 'wslog.added';
   data: unknown;
 }
 

@@ -14,6 +14,8 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
 import { recentActivity } from './activity.ts';
+import { listWsLog, wsLog } from './wslog.ts';
+import { getBoard as getWsBoard, saveBoard } from './board.ts';
 import {
   TEMPLATES, checkMonitor, createAgent, createFromTemplate, deleteAgent, getAgent, isRunning, listAgents, listRuns, runAgent, stopAgent, updateAgent,
 } from './agents.ts';
@@ -350,6 +352,8 @@ route('POST', '/api/chat', async ({ res, body, auth }) => {
       signal: abort.signal,
       onUserMessage: (m) => {
         convId = m.conversationId;
+        const wc = getConversation(m.conversationId);
+        if (wc?.project_id) wsLog(wc.project_id, member ? personActor(member) : ownerActor(), 'chat.prompt', `${wc.title}: ${m.content}`, m.conversationId);
         runStarted(m.conversationId, { cid, author: m.author, user: m.content, attachments: m.attachments, abort });
       },
       onMeta: (m) => {
@@ -460,6 +464,11 @@ route('DELETE', '/api/projects/:id/members/:mid', ({ params, auth }) => {
   return { ok };
 });
 const wsActor = (auth: Auth) => (isGuest(auth) && auth.member ? personActor(auth.member) : ownerActor());
+/** Writes one line of the workspace log and hands back what the route returns. */
+const logged = <T>(auth: Auth, projectId: string, action: string, detail: (r: T) => string, out: T, ref?: (r: T) => string | null, merge = false): T => {
+  wsLog(projectId, wsActor(auth), action, detail(out), ref?.(out) ?? null, merge);
+  return out;
+};
 /** Who am I, which workspace, who else is in it (also the member's heartbeat). */
 route('GET', '/api/ws/me', ({ auth, url }) => {
   const p = wsProject(auth, url);
@@ -488,6 +497,7 @@ route('POST', '/api/ws/chats', ({ auth, url, body }) => {
   const agent = typeof body?.agentId === 'string' ? listAgents(p.id).find((x) => x.id === body.agentId) : undefined;
   run('INSERT INTO conversations (id, title, provider, project_id, access, agent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', id, agent ? agent.name : title, null, p.id, agent?.access ?? loadConfig().defaultAccess ?? 'chat', agent?.id ?? null, ts, ts);
   emit('conversation.updated', { id });
+  wsLog(p.id, wsActor(auth), 'chat.new', agent ? agent.name : title, id);
   return getConversation(id);
 }, { guest: true });
 route('GET', '/api/ws/agents', ({ auth, url }) => {
@@ -501,26 +511,33 @@ route('POST', '/api/ws/agents', ({ auth, url, body }) => {
   if (!name || !instructions) throw new HttpError(400, 'Name and instructions are needed');
   const a = createAgent({ name, instructions, description: String(body?.description ?? '').slice(0, 200), projectId: p.id, access: 'full', learns: true });
   emit('workspace.changed', { projectId: p.id });
+  wsLog(p.id, wsActor(auth), 'agent.new', name, a.id);
   return a;
 }, { guest: true });
 
 // tasks
 route('GET', '/api/ws/tasks', ({ auth, url }) => listTasks(wsProject(auth, url).id), { guest: true });
-route('POST', '/api/ws/tasks', ({ auth, url, body }) => createTask(wsProject(auth, url).id, body ?? {}, wsActor(auth)), { guest: true });
+route('POST', '/api/ws/tasks', ({ auth, url, body }) => { const p = wsProject(auth, url); return logged(auth, p.id, 'task.new', (t) => t.title, createTask(p.id, body ?? {}, wsActor(auth)), (t) => t.id); }, { guest: true });
 const wsTask = (auth: Auth, url: URL, id: string) => {
   const p = wsProject(auth, url);
   const t = getTask(id);
   if (!t || t.project_id !== p.id) throw new HttpError(404, 'Task not found');
   return t;
 };
-route('PUT', '/api/ws/tasks/:id', ({ auth, url, params, body }) => (wsTask(auth, url, params[0]), updateTask(params[0], body ?? {}, wsActor(auth))), { guest: true });
-route('DELETE', '/api/ws/tasks/:id', ({ auth, url, params }) => (wsTask(auth, url, params[0]), { ok: deleteTask(params[0]) }), { guest: true });
+route('PUT', '/api/ws/tasks/:id', ({ auth, url, params, body }) => {
+  const before = wsTask(auth, url, params[0]);
+  const out = updateTask(params[0], body ?? {}, wsActor(auth));
+  const what = body?.status && body.status !== before.status ? `${before.status} → ${body.status}` : Object.keys(body ?? {}).filter((k) => k !== 'position').join(', ');
+  if (out && what) wsLog(before.project_id, wsActor(auth), body?.status && body.status !== before.status ? 'task.move' : 'task.edit', `${out.title} · ${what}`, out.id, !body?.status);
+  return out;
+}, { guest: true });
+route('DELETE', '/api/ws/tasks/:id', ({ auth, url, params }) => { const t = wsTask(auth, url, params[0]); return logged(auth, t.project_id, 'task.delete', () => t.title, { ok: deleteTask(params[0]) }); }, { guest: true });
 route('GET', '/api/ws/tasks/:id/comments', ({ auth, url, params }) => (wsTask(auth, url, params[0]), listComments(params[0])), { guest: true });
-route('POST', '/api/ws/tasks/:id/comments', ({ auth, url, params, body }) => (wsTask(auth, url, params[0]), addComment(params[0], wsActor(auth), String(body?.body ?? '')) ?? notFound()), { guest: true });
+route('POST', '/api/ws/tasks/:id/comments', ({ auth, url, params, body }) => { const t = wsTask(auth, url, params[0]); return logged(auth, t.project_id, 'task.comment', () => `${t.title}: ${String(body?.body ?? '')}`, addComment(params[0], wsActor(auth), String(body?.body ?? '')) ?? notFound(), () => t.id); }, { guest: true });
 route('POST', '/api/ws/plan', async ({ auth, url, body }) => {
   const goal = String(body?.goal ?? '').trim();
   if (goal.length < 4) throw new HttpError(400, 'Describe the goal');
-  try { return await planTasks(wsProject(auth, url).id, goal, wsActor(auth)); } catch (e) { throw new HttpError(502, (e as Error).message); }
+  try { const p = wsProject(auth, url); return logged(auth, p.id, 'task.plan', (l) => `${goal} (${l.length})`, await planTasks(p.id, goal, wsActor(auth))); } catch (e) { throw new HttpError(502, (e as Error).message); }
 }, { guest: true });
 // documents & reports
 route('GET', '/api/ws/docs', ({ auth, url }) => listDocs(wsProject(auth, url).id), { guest: true });
@@ -530,11 +547,11 @@ const wsDoc = (auth: Auth, url: URL, id: string) => {
   return d;
 };
 route('GET', '/api/ws/docs/:id', ({ auth, url, params }) => wsDoc(auth, url, params[0]), { guest: true });
-route('POST', '/api/ws/docs', ({ auth, url, body }) => saveDoc(wsProject(auth, url).id, { title: body?.title, body: body?.body, kind: body?.kind }, wsActor(auth)), { guest: true });
-route('PUT', '/api/ws/docs/:id', ({ auth, url, params, body }) => (wsDoc(auth, url, params[0]), saveDoc(wsProject(auth, url).id, { id: params[0], title: body?.title, body: body?.body }, wsActor(auth))), { guest: true });
-route('DELETE', '/api/ws/docs/:id', ({ auth, url, params }) => (wsDoc(auth, url, params[0]), { ok: deleteDoc(params[0]) }), { guest: true });
+route('POST', '/api/ws/docs', ({ auth, url, body }) => { const p = wsProject(auth, url); return logged(auth, p.id, 'doc.new', (d) => d.title, saveDoc(p.id, { title: body?.title, body: body?.body, kind: body?.kind }, wsActor(auth)), (d) => d.id); }, { guest: true });
+route('PUT', '/api/ws/docs/:id', ({ auth, url, params, body }) => { const d0 = wsDoc(auth, url, params[0]); return logged(auth, d0.project_id, 'doc.edit', (d) => d.title, saveDoc(d0.project_id, { id: params[0], title: body?.title, body: body?.body }, wsActor(auth)), (d) => d.id, true); }, { guest: true });
+route('DELETE', '/api/ws/docs/:id', ({ auth, url, params }) => { const d = wsDoc(auth, url, params[0]); return logged(auth, d.project_id, 'doc.delete', () => d.title, { ok: deleteDoc(params[0]) }); }, { guest: true });
 route('POST', '/api/ws/report', async ({ auth, url, body }) => {
-  try { return await makeReport(wsProject(auth, url).id, Math.min(90, Math.max(1, Number(body?.days) || 7)), wsActor(auth)); } catch (e) { throw new HttpError(502, (e as Error).message); }
+  try { const p = wsProject(auth, url); return logged(auth, p.id, 'doc.report', (d) => d.title, await makeReport(p.id, Math.min(90, Math.max(1, Number(body?.days) || 7)), wsActor(auth)), (d) => d.id); } catch (e) { throw new HttpError(502, (e as Error).message); }
 }, { guest: true });
 // calendar: deadlines (+ the owner's own calendars, only for the owner)
 route('GET', '/api/ws/calendar', async ({ auth, url }) => {
@@ -558,8 +575,23 @@ route('GET', '/api/ws/feed.ics', ({ url, res }) => {
 // automations
 route('PUT', '/api/ws/rules', ({ auth, url, body }) => {
   ownerOnly(auth, 'change automations');
-  return setRules(wsProject(auth, url).id, body ?? {});
+  const p = wsProject(auth, url);
+  return logged(auth, p.id, 'rules.edit', () => Object.entries(body ?? {}).map(([k, v]) => `${k}: ${v ? 'on' : 'off'}`).join(', '), setRules(p.id, body ?? {}));
 });
+// the workspace log: who did what and when
+route('GET', '/api/ws/log', ({ auth, url }) => {
+  const p = wsProject(auth, url);
+  return listWsLog(p.id, { before: Number(url.searchParams.get('before')) || undefined, who: url.searchParams.get('who') ?? undefined, action: url.searchParams.get('action') ?? undefined, limit: Number(url.searchParams.get('limit')) || 200 });
+}, { guest: true });
+// the whiteboard: shapes, text and drawing, live for everyone in the workspace
+route('GET', '/api/ws/board', ({ auth, url }) => getWsBoard(wsProject(auth, url).id), { guest: true });
+route('POST', '/api/ws/board', ({ auth, url, body }) => {
+  const p = wsProject(auth, url);
+  const out = saveBoard(p.id, body ?? {}, String(body?.cid ?? ''), wsActor(auth).name);
+  if (out.changed) wsLog(p.id, wsActor(auth), 'board.edit', out.summary, null, true);
+  return { rev: out.rev };
+}, { guest: true });
+
 // the company: departments and people (owner)
 route('GET', '/api/company', ({ auth }) => {
   ownerOnly(auth, 'manage the company');
@@ -584,9 +616,9 @@ const wsSale = (auth: Auth, url: URL, id: string) => {
   if (!d || d.project_id !== wsProject(auth, url).id) throw new HttpError(404, 'Document not found');
   return d;
 };
-route('POST', '/api/ws/sales', ({ auth, url, body }) => { const b = { ...(body ?? {}) }; delete b.id; return saveSale(wsProject(auth, url).id, b, wsActor(auth)); }, { guest: true });
-route('PUT', '/api/ws/sales/:id', ({ auth, url, params, body }) => (wsSale(auth, url, params[0]), saveSale(wsProject(auth, url).id, { ...(body ?? {}), id: params[0] }, wsActor(auth))), { guest: true });
-route('DELETE', '/api/ws/sales/:id', ({ auth, url, params }) => (wsSale(auth, url, params[0]), { ok: deleteSale(params[0]) }), { guest: true });
+route('POST', '/api/ws/sales', ({ auth, url, body }) => { const b = { ...(body ?? {}) }; delete b.id; const p = wsProject(auth, url); return logged(auth, p.id, 'sale.new', (d) => `${d.kind} ${d.number} · ${d.client?.name ?? ''} · ${d.gross} ${d.currency}`, saveSale(p.id, b, wsActor(auth)), (d) => d.id); }, { guest: true });
+route('PUT', '/api/ws/sales/:id', ({ auth, url, params, body }) => { const s0 = wsSale(auth, url, params[0]); return logged(auth, s0.project_id, 'sale.edit', (d) => `${d.kind} ${d.number} · ${d.client?.name ?? ''} · ${d.gross} ${d.currency}`, saveSale(s0.project_id, { ...(body ?? {}), id: params[0] }, wsActor(auth)), (d) => d.id, true); }, { guest: true });
+route('DELETE', '/api/ws/sales/:id', ({ auth, url, params }) => { const d = wsSale(auth, url, params[0]); return logged(auth, d.project_id, 'sale.delete', () => `${d.kind} ${d.number}`, { ok: deleteSale(params[0]) }); }, { guest: true });
 route('POST', '/api/ws/sales/:id/convert', ({ auth, url, params, body }) => (wsSale(auth, url, params[0]), convertSale(params[0], body?.kind === 'order' ? 'order' : 'invoice', wsActor(auth)) ?? notFound()), { guest: true });
 route('POST', '/api/ws/sales/draft', async ({ auth, url, body }) => {
   const text = String(body?.text ?? '').trim();
@@ -623,6 +655,26 @@ route('GET', '/api/room/:id', ({ res, params, url, auth }) => {
 route('POST', '/api/room/:id/state', ({ params, body, auth }) => {
   guardChat(auth, params[0]);
   setPresence(params[0], String(body.cid ?? ''), body ?? {});
+  return { ok: true };
+}, { guest: true });
+/** Presence for a whole workspace: everyone's pointer on whichever workspace screen they are on. */
+route('GET', '/api/wsroom', ({ res, url, auth }) => {
+  const p = wsProject(auth, url);
+  const cid = (url.searchParams.get('cid') ?? '').slice(0, 40) || Math.random().toString(36).slice(2);
+  const guest = isGuest(auth);
+  const name = (auth as any)?.member?.name ?? (loadConfig().userName || 'Host');
+  const sse = openSse(res);
+  const ping = setInterval(() => res.write(': ping\n\n'), 20_000);
+  const leave = joinRoom('ws:' + p.id, { cid, name, color: colorFor(cid), guest, send: sse, close: () => res.end() });
+  res.on('close', () => {
+    clearInterval(ping);
+    leave();
+  });
+  return SSE_HANDLED;
+}, { guest: true });
+route('POST', '/api/wsroom/state', ({ url, body, auth }) => {
+  const p = wsProject(auth, url);
+  setPresence('ws:' + p.id, String(body?.cid ?? ''), { cursor: body?.cursor ?? null });
   return { ok: true };
 }, { guest: true });
 route('POST', '/api/room/:id/stop', ({ params, auth }) => {

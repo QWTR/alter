@@ -28,6 +28,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { ReportHost, ReportQuestions } from './components/Report';
 import { savedWorkspaceKey, takeInviteFromUrl, WorkspaceGate, WorkspaceView, WorkspacesView } from './views/Workspace';
 import { joinedWorkspaces, openSession } from './components/Join';
+import { VisitHost } from './components/Visit';
 import { Users } from 'lucide-react';
 
 const VIEWS: Record<string, ComponentType> = {
@@ -44,6 +45,7 @@ const VIEWS: Record<string, ComponentType> = {
   prompts: PromptsView,
   workspace: WorkspacesView,
   usage: UsageView,
+  visit: () => null, // drawn by <VisitHost>, which keeps the joined workspace alive between visits
 };
 
 const NAV = [
@@ -295,7 +297,7 @@ function Shell() {
             ))}
             {joined.length > 0 && <div className="nav-section">{t('ws.joined')}</div>}
             {joined.map((j) => (
-              <button key={j.url} className="nav-item" onClick={() => openSession(j.url, status?.settings.userName)} title={j.url}>
+              <button key={j.url} className={`nav-item${route.section === 'visit' && (route.query.get('u') ?? '').startsWith(new URL(j.url).origin) ? ' active' : ''}`} onClick={() => openSession(j.url, status?.settings.userName)} title={j.url}>
                 <Users size={15} className="faint" />
                 <span className="truncate">{j.name}</span>
               </button>
@@ -313,12 +315,15 @@ function Shell() {
             <UpdateBanner />
             <ReportHost />
             <ReportQuestions />
-            <div
-              key={route.section + (route.section === 'projects' || route.section === 'agents' ? route.parts[1] ?? '' : '')}
-              className="view view-enter"
-            >
-              <View />
-            </div>
+            <VisitHost active={route.section === 'visit' ? route.query.get('u') : null} />
+            {route.section !== 'visit' && (
+              <div
+                key={route.section + (route.section === 'projects' || route.section === 'agents' ? route.parts[1] ?? '' : '')}
+                className="view view-enter"
+              >
+                <View />
+              </div>
+            )}
         </main>
 
         <nav className="mobile-bar">

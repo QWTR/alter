@@ -311,7 +311,7 @@ declare const __APP_VERSION__: string;
 export function connectEvents(handler: (type: string, data: any) => void): () => void {
   let es: EventSource | null = null;
   let closed = false;
-  const types = ['run.started', 'run.activity', 'run.finished', 'monitor.changed', 'memory.added', 'agent.changed', 'project.changed', 'conversation.updated', 'provider.tested', 'provider.progress', 'project.scan', 'usage.limit', 'device.paired', 'settings.changed', 'studio.progress', 'hands.session', 'hands.stopped', 'agent.status', 'alert', 'push.changed', 'squad.update', 'hands.board', 'crew.preview', 'media.updated', 'prompts.changed'];
+  const types = ['run.started', 'run.activity', 'run.finished', 'monitor.changed', 'memory.added', 'agent.changed', 'project.changed', 'conversation.updated', 'provider.tested', 'provider.progress', 'project.scan', 'usage.limit', 'device.paired', 'settings.changed', 'studio.progress', 'hands.session', 'hands.stopped', 'agent.status', 'alert', 'push.changed', 'squad.update', 'hands.board', 'crew.preview', 'media.updated', 'prompts.changed', 'wslog.added'];
   const open = () => {
     es = new EventSource(`/api/events?token=${encodeURIComponent(token ?? '')}`);
     // ALTTER on the computer was updated (or restarted with a new version): load the new app
