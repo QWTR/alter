@@ -43,7 +43,7 @@ export function SettingsView() {
           {tab === 'ai' && <AiTab />}
           {isComputer && tab === 'plugins' && <PluginsTab />}
           {status && tab === 'devices' && <Devices isComputer={isComputer} status={status} />}
-          {isComputer && tab === 'internet' && <><InternetCard /><ServerCard /></>}
+          {isComputer && tab === 'internet' && <div style={{ display: 'grid', gap: 16 }}><InternetCard /><ServerCard /></div>}
           {status && tab === 'data' && <DataTab status={status} />}
           {status && tab === 'about' && <About status={status} />}
         </motion.div>

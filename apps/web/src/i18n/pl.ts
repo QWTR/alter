@@ -1439,6 +1439,11 @@ const pl: Dict = {
   'rep.st.rejected': 'Nieprzyjęte',
   'rep.st.duplicate': 'Już zgłoszone',
   'rep.st.failed': 'Wymaga spojrzenia człowieka',
+  // report images
+  'rep.addImg': 'Dodaj zrzut ekranu',
+  'rep.imgHint': 'albo wklej (Ctrl+V) lub przeciągnij tutaj',
+  'rep.imgMax': 'Maksymalnie {n} zrzuty ekranu',
+  'rep.imgPrivacy': 'Zrzuty ekranu są wysyłane tak, jak są — najpierw wytnij to, co prywatne. Nigdy nie trafiają na GitHuba.',
 };
 
 export default pl;

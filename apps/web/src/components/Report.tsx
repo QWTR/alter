@@ -1,7 +1,7 @@
 // "Report a problem": the user writes what went wrong, sees exactly what is sent (scrubbed of tokens, paths and
 // emails), and the ALTTER repair server triages it, fixes it with AI and ships an update. Also lists my reports.
-import { Bug, CheckCircle2, ChevronDown, Clock, Lightbulb, MessageCircle, Palette, Send, XCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Bug, CheckCircle2, ChevronDown, Clock, ImagePlus, Lightbulb, MessageCircle, Palette, Send, X, XCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { api, useData } from '../api';
 import { ago, useT } from '../i18n';
 import { Modal, ModalHead, Segmented, Switch, toast } from './ui';
@@ -14,6 +14,27 @@ const keep = (s: string) => {
 };
 window.addEventListener('error', (e) => keep(`${e.message} @ ${(e.filename || '').split('/').pop()}:${e.lineno}`));
 window.addEventListener('unhandledrejection', (e) => keep(`unhandled: ${(e.reason as Error)?.message ?? String(e.reason)}`));
+
+const MAX_IMAGES = 4;
+/** A screenshot made smaller before it is sent: max 1600 px, JPEG (PNG stays PNG when small, so text stays sharp). */
+async function shrink(file: File): Promise<string | null> {
+  if (!/^image\/(png|jpeg|webp|gif|bmp)$/.test(file.type)) return null;
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * k);
+    c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+    const png = file.type === 'image/png' && file.size < 900_000 && k === 1 ? c.toDataURL('image/png') : '';
+    return png || c.toDataURL('image/jpeg', 0.85);
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 /** Opens the report window from anywhere: window.dispatchEvent(new Event('alter:report')). */
 export const openReport = () => window.dispatchEvent(new Event('alter:report'));
@@ -39,13 +60,26 @@ function ReportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
   const [preview, setPreview] = useState<unknown>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [busy, setBusy] = useState(false);
-  const body = () => ({ kind, text, includeTech: tech, route: location.hash, screen: `${innerWidth}x${innerHeight}`, clientErrors });
+  const [images, setImages] = useState<string[]>([]);
+  const [drag, setDrag] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const body = () => ({ kind, text, includeTech: tech, route: location.hash, screen: `${innerWidth}x${innerHeight}`, clientErrors, images });
+  const addFiles = async (files: Iterable<File>) => {
+    const list = [...files].filter((f) => f.type.startsWith('image/'));
+    if (!list.length) return;
+    const out = (await Promise.all(list.map(shrink))).filter((x): x is string => !!x);
+    setImages((cur) => {
+      const next = [...cur, ...out].slice(0, MAX_IMAGES);
+      if (cur.length + out.length > MAX_IMAGES) toast(t('rep.imgMax', { n: MAX_IMAGES }), 'info');
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!open || !showPreview) return;
     const id = setTimeout(() => api('/api/report/preview', { method: 'POST', body: body() }).then(setPreview).catch(() => {}), 250);
     return () => clearTimeout(id);
-  }, [open, showPreview, kind, text, tech]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, showPreview, kind, text, tech, images.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = async () => {
     setBusy(true);
@@ -53,6 +87,7 @@ function ReportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
       await api('/api/report', { method: 'POST', body: body() });
       toast(t('rep.sent'), 'ok');
       setText('');
+      setImages([]);
       onClose();
     } catch (e) {
       toast((e as Error).message, 'error');
@@ -64,7 +99,12 @@ function ReportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
   return (
     <Modal open={open} onClose={onClose}>
       <ModalHead icon={<Bug />} title={t('rep.title')} text={t('rep.lead')} onClose={onClose} />
-      <div style={{ display: 'grid', gap: 14 }}>
+      <div
+        className={`rep-body${drag ? ' drag' : ''}`}
+        onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDrag(true); } }}
+        onDragLeave={(e) => { if (e.currentTarget === e.target) setDrag(false); }}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); void addFiles(e.dataTransfer.files); }}
+      >
         <Segmented
           value={kind}
           onChange={setKind}
@@ -75,7 +115,29 @@ function ReportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
             { value: 'other', label: t('rep.k.other'), icon: MessageCircle },
           ]}
         />
-        <textarea className="input" rows={6} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={t(`rep.ph.${kind}`)} style={{ resize: 'vertical' }} />
+        <textarea className="input" rows={6} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={t(`rep.ph.${kind}`)} style={{ resize: 'vertical' }}
+          onPaste={(e) => {
+            const files = [...e.clipboardData.items].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter((f): f is File => !!f);
+            if (files.length) { e.preventDefault(); void addFiles(files); }
+          }}
+        />
+        <div className="rep-imgs">
+          {images.map((src, i) => (
+            <div key={i} className="rep-img">
+              <img src={src} alt="" />
+              <button type="button" className="rep-img-x" onClick={() => setImages((l) => l.filter((_, j) => j !== i))} aria-label={t('common.delete')}><X /></button>
+            </div>
+          ))}
+          {images.length < MAX_IMAGES && (
+            <button type="button" className="rep-img-add" onClick={() => fileRef.current?.click()}>
+              <ImagePlus />
+              <span>{t('rep.addImg')}</span>
+              <small>{t('rep.imgHint')}</small>
+            </button>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ''; }} />
+        </div>
+        {images.length > 0 && <p className="faint small" style={{ margin: 0 }}>{t('rep.imgPrivacy')}</p>}
         <div className="row" style={{ gap: 10 }}>
           <Switch on={tech} onChange={setTech} label={t('rep.tech')} />
           <span className="grow small">{t('rep.tech')}</span>

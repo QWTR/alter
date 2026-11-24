@@ -1439,6 +1439,11 @@ const uk: Dict = {
   'rep.st.rejected': 'Not accepted',
   'rep.st.duplicate': 'Already reported',
   'rep.st.failed': 'Needs a human look',
+  // report images
+  'rep.addImg': 'Add a screenshot',
+  'rep.imgHint': 'or paste it (Ctrl+V) or drop it here',
+  'rep.imgMax': 'Up to {n} screenshots',
+  'rep.imgPrivacy': 'Screenshots are sent as they are — crop out anything private first. They never go to GitHub.',
 };
 
 export default uk;

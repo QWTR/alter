@@ -744,7 +744,9 @@ route('GET', '/api/update', async ({ url }) => (url.searchParams.has('check') ||
 // "Report a problem": preview what is sent, send it to the repair server, list my reports and their state
 route('POST', '/api/report/preview', async ({ auth, body }) => {
   ownerOnly(auth, 'report problems');
-  return buildReport((body ?? {}) as any);
+  const { images, ...rest } = buildReport((body ?? {}) as any);
+  // the preview shows what is sent; the screenshots are already visible as thumbnails, so only count them here
+  return { ...rest, images: images.length ? `${images.length} × screenshot (${Math.round(images.reduce((n, x) => n + x.length * 0.75, 0) / 1024)} KB)` : [] };
 });
 route('POST', '/api/report', async ({ auth, body }) => {
   ownerOnly(auth, 'report problems');
@@ -955,13 +957,13 @@ function openSse(res: ServerResponse) {
   return (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
-async function readBody(req: IncomingMessage): Promise<any> {
+async function readBody(req: IncomingMessage, max = 1_000_000): Promise<any> {
   if (req.method === 'GET' || req.method === 'HEAD') return {};
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const c of req) {
     size += (c as Buffer).length;
-    if (size > 1_000_000) throw new HttpError(413, 'Body too large');
+    if (size > max) throw new HttpError(413, 'Body too large');
     chunks.push(c as Buffer);
   }
   if (!chunks.length) return {};
@@ -1055,7 +1057,8 @@ export function startServer(port = loadConfig().port, host = loadConfig().host) 
 
       const params = (url.pathname.match(r.re) ?? []).slice(1).map(decodeURIComponent);
       if (r.raw && Number(req.headers['content-length'] ?? 0) > MAX_UPLOAD) return send(res, 413, { error: 'File too large (max 300 MB)' });
-      const body = r.raw ? {} : await readBody(req);
+      // problem reports may carry a few screenshots
+      const body = r.raw ? {} : await readBody(req, url.pathname.startsWith('/api/report') ? 10_000_000 : 1_000_000);
       const out = await r.handler({ req, res, params, url, body, auth });
       if (out !== SSE_HANDLED) send(res, 200, out ?? { ok: true });
     } catch (err) {

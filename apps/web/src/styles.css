@@ -1924,3 +1924,15 @@ html, body, #root { overflow-x: clip; }
 .rep-ico { width: 17px; height: 17px; flex: none; margin-top: 2px; }
 .rep-ico.ok { color: var(--ok); } .rep-ico.muted { color: var(--faint); } .rep-ico.accent { color: var(--accent); }
 .rep-title { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rep-body { display: grid; gap: 14px; border-radius: 14px; transition: box-shadow .15s, background .15s; }
+.rep-body.drag { box-shadow: 0 0 0 2px var(--accent); background: var(--accent-soft); }
+.rep-imgs { display: flex; flex-wrap: wrap; gap: 10px; }
+.rep-img { position: relative; width: 96px; height: 72px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border-strong); background: var(--bg-2); }
+.rep-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rep-img-x { all: unset; cursor: pointer; position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(0,0,0,.65); color: #fff; }
+.rep-img-x svg { width: 13px; height: 13px; }
+.rep-img-add { all: unset; box-sizing: border-box; cursor: pointer; min-height: 72px; flex: 1 1 220px; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-content: center; padding: 10px 14px; border-radius: 10px; border: 1px dashed var(--border-strong); color: var(--text-2); transition: border-color .15s, background .15s; }
+.rep-img-add:hover { border-color: var(--accent); background: var(--accent-soft); }
+.rep-img-add svg { grid-row: span 2; width: 20px; height: 20px; color: var(--accent); align-self: center; }
+.rep-img-add span { font-weight: 600; font-size: 13.5px; }
+.rep-img-add small { color: var(--muted); font-size: 12px; }

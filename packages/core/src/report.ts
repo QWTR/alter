@@ -47,7 +47,16 @@ function installId(): string {
 }
 const repairUrl = () => String((loadConfig() as any).repairUrl || process.env.ALTER_REPAIR_URL || REPAIR_URL).replace(/\/$/, '');
 
-export interface ReportInput { kind?: string; text?: string; route?: string; clientErrors?: string[]; includeTech?: boolean; screen?: string; lang?: string }
+export interface ReportInput { kind?: string; text?: string; route?: string; clientErrors?: string[]; includeTech?: boolean; screen?: string; lang?: string; images?: string[] }
+
+/** Screenshots the user attached: up to 4 PNG/JPEG/WebP data URLs, 2.5 MB each. */
+export const MAX_IMAGES = 4;
+function cleanImages(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((x): x is string => typeof x === 'string' && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(x) && x.length < 3_500_000)
+    .slice(0, MAX_IMAGES);
+}
 
 /** What would be sent — the UI shows this to the user before they press Send. */
 export function buildReport(input: ReportInput) {
@@ -61,7 +70,7 @@ export function buildReport(input: ReportInput) {
     screen: String(input.screen ?? '').slice(0, 40),
     errors: [...(input.clientErrors ?? []).slice(-15).map((e) => `web: ${e}`), ...recent.slice(-15)].map((e) => scrub(e).slice(0, 600)),
   };
-  return { kind, text, lang: String(input.lang ?? loadConfig().language).slice(0, 5), version: VERSION, tech };
+  return { kind, text, lang: String(input.lang ?? loadConfig().language).slice(0, 5), version: VERSION, tech, images: cleanImages(input.images) };
 }
 
 function sentList(): SentReport[] {
@@ -76,7 +85,7 @@ export async function sendReport(input: ReportInput): Promise<SentReport> {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'user-agent': `ALTTER/${VERSION}` },
     body: JSON.stringify({ ...body, installId: installId() }),
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(body.images.length ? 90_000 : 20_000),
   }).catch(() => {
     throw new Error('The repair server cannot be reached — check the internet connection and try again');
   });
