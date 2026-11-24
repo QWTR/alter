@@ -1,5 +1,6 @@
 import { closeMediaTools, MEDIA_GUIDE, mediaMcpUrl, openMediaTools, wantsMedia } from './media.ts';
 import { randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
 import { draftFrom, pagesIn, previewFor, type Draft, type Preview } from './preview.ts';
 import type { ToolDraft } from './providers/types.ts';
 import { workspaceDir } from './config.ts';
@@ -37,6 +38,26 @@ import { generatedDir } from './config.ts';
 import type { FollowUp } from './providers/types.ts';
 
 export interface Author { name: string; color: string }
+
+/**
+ * In a shared chat or a workspace, several people write to the same AI, each from their own device. The AI runs on
+ * the owner's computer, so without this it answers everyone as if they were the owner sitting at it.
+ */
+function whoIsWriting(author: Author | null, history: { role: string; content: string; author?: Author | null }[], workspace: string | null): string {
+  const owner = loadConfig().userName || 'the owner';
+  const host = `${owner}'s computer (${hostname()}), where ALTTER and you run`;
+  // the history carries the writer as a "[Name] " prefix (see forPrompt)
+  const others = [...new Set(history.filter((m) => m.role === 'user').map((m) => m.author?.name ?? /^\[([^\]\n]{1,40})\] /.exec(m.content)?.[1]).filter(Boolean))] as string[];
+  if (author) {
+    return [
+      `WHO IS WRITING: this message comes from ${author.name}${workspace ? `, a member of the "${workspace}" workspace team` : ', a guest in this shared chat'}. ${author.name} is NOT ${owner} and is not at this computer: they write from their own device, connected over the internet (named "${author.name}" — e.g. a server, laptop or phone).`,
+      `You run on ${host}. Anything you do — files, commands, programs, the screen — happens on ${owner}'s computer, not on ${author.name}'s device; you cannot see or reach ${author.name}'s device. If they ask about "this computer", "here" or "my machine", say clearly which machine you mean; for work on their own device, give them the steps or commands to run there.`,
+      `Talk to ${author.name} directly by name, in their language. In the history, "[Name] text" marks who wrote each message; messages without a [Name] are from ${owner}.`,
+    ].join('\n');
+  }
+  if (!others.length) return '';
+  return `WHO IS WRITING: this message is from ${owner}, the owner, at this computer (${hostname()}). Others in this chat (${others.join(', ')}) write from their own devices; their messages start with "[Name]". Keep track of who asked what.`;
+}
 
 const HANDS_COLORS = ['#7c5cff', '#2ee6ff', '#ff6b6b', '#3ddc97', '#fcc419', '#ff2bd6'];
 
@@ -247,6 +268,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
   const useTeam = !planning && (mentioned.agents.length > 0 || mentioned.groups.length > 0 || (wantsTeam(message) && listAgents().some((a) => !a.monitor && a.id !== agent?.id)));
   const calendar = planning ? '' : await calendarContext(message).catch(() => '');
   const extra = planning ? PLAN_GUIDE : [
+    whoIsWriting(author, history, project?.name ?? null),
     calendar,
     useHands ? HANDS_GUIDE + (req.hands?.brief ? '\n\n' + req.hands.brief : '') : conv.access !== 'full' && handsEnabled() && process.platform === 'win32' && (!!req.hands || wantsHands(message)) ? HANDS_NEEDS_FULL : '',
     approved ? PLAN_APPROVED_GUIDE : '',

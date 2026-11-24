@@ -2,7 +2,7 @@
 // calendar, automations), not only over the chat prompt. A pointer is placed by the element under it when that
 // element has a data-anchor (so it lands right whatever the window size), otherwise by its spot in the workspace.
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { clientId, token, type RoomMember } from '../api';
+import { clientId, invalidate, token, type RoomMember } from '../api';
 
 type WsCursor = { s: string; x: number; y: number; a?: string; fx?: number; fy?: number; bx?: number; by?: number } | null;
 
@@ -49,8 +49,10 @@ export function useWsCursors(root: RefObject<HTMLElement | null>, q: string, scr
         setMembers(d.members ?? []);
         setCursors(Object.fromEntries(Object.entries(d.state ?? {}).map(([k, v]: [string, any]) => [k, v?.cursor ?? null])));
         boardBus.forEach((f) => f('hello'));
+        refresh(); // (re)connected: catch up on anything missed
       });
       sub('board', (d) => boardBus.forEach((f) => f(d)));
+      sub('changed', (d) => refresh(d?.kind));
       sub('members', setMembers);
       sub('state', ({ cid, gone, cursor }) =>
         setCursors((all) => {
@@ -180,4 +182,26 @@ export function WsCursorLayer({ root, screen, others, cursors }: { root: RefObje
       })}
     </div>
   );
+}
+
+// someone changed something in the workspace: refresh the screens that show it (gathered for a moment, once)
+const KINDS: Record<string, string[]> = {
+  task: ['/api/ws/tasks', '/api/ws/calendar'], tasks: ['/api/ws/tasks', '/api/ws/calendar'], plan: ['/api/ws/tasks', '/api/ws/calendar'],
+  doc: ['/api/ws/docs'], docs: ['/api/ws/docs'], report: ['/api/ws/docs'],
+  sale: ['/api/ws/sales'], sales: ['/api/ws/sales'],
+  chat: ['/api/ws/chats'], chats: ['/api/ws/chats'], agent: ['/api/ws/agents'], agents: ['/api/ws/agents'],
+  rules: ['/api/ws/me'], member: ['/api/ws/me'],
+};
+const due = new Set<string>(['/api/ws/log']);
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+function refresh(kind?: string) {
+  for (const k of KINDS[kind ?? ''] ?? ['/api/ws/']) due.add(k);
+  due.add('/api/ws/log');
+  if (refreshTimer) return;
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    const keys = [...due];
+    due.clear();
+    invalidate(...keys);
+  }, 120);
 }

@@ -6,6 +6,8 @@ import { api, invalidate, useData, type Status, type Template } from '../api';
 import { useDescribeSchedule } from '../components/schedule';
 import { ProviderCard, useProviders } from '../components/providers';
 import { Field, Logo, Orb, Segmented, ease, softSpring, spring } from '../components/ui';
+import { MemoryImport } from '../components/MemoryImport';
+import { Brain } from 'lucide-react';
 import { LANGS, getLang, setLang, useT, type Key } from '../i18n';
 
 const STEPS = ['welcome', 'ai', 'you', 'team', 'phone', 'done'] as const;
@@ -82,6 +84,7 @@ export function Onboarding({ status, onDone }: { status: Status; onDone: () => v
                   </Field>
                 </div>
                 <Sources value={sources} onChange={setSources} />
+                <ImportCard />
                 <Foot onBack={back} onNext={next} />
               </div>
             )}
@@ -96,6 +99,26 @@ export function Onboarding({ status, onDone }: { status: Status; onDone: () => v
 }
 
 /** Folders and links the user works on: imported as projects and read one by one in the background. */
+/** "Already told ChatGPT / Claude everything?" — bring that memory in now (it can also be done later in Memory). */
+function ImportCard() {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [n, setN] = useState<number | null>(null);
+  return (
+    <div className="card onb-import" style={{ padding: 20, marginTop: 14 }}>
+      <div className="row" style={{ gap: 12, alignItems: 'center' }}>
+        <span className="onb-import-ic"><Brain size={18} /></span>
+        <div className="grow" style={{ minWidth: 0 }}>
+          <b>{t('mimp.onbTitle')}</b> <span className="faint small">· {t('common.optional')}</span>
+          <p className="small muted" style={{ margin: '2px 0 0' }}>{n !== null ? t('mimp.done', { n }) : t('mimp.onbLead')}</p>
+        </div>
+        <button className="btn" onClick={() => setOpen(true)}>{n !== null ? <Check size={15} /> : null}{t('mimp.button')}</button>
+      </div>
+      <MemoryImport open={open} onClose={() => setOpen(false)} onDone={setN} />
+    </div>
+  );
+}
+
 function Sources({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const t = useT();
   const [text, setText] = useState('');

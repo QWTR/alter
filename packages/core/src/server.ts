@@ -14,7 +14,8 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
 import { recentActivity } from './activity.ts';
-import { listWsLog, wsLog } from './wslog.ts';
+import { listWsLog, wsChanged, wsLog } from './wslog.ts';
+import { importMemories } from './memoryImport.ts';
 import { getBoard as getWsBoard, saveBoard } from './board.ts';
 import {
   TEMPLATES, checkMonitor, createAgent, createFromTemplate, deleteAgent, getAgent, isRunning, listAgents, listRuns, runAgent, stopAgent, updateAgent,
@@ -921,6 +922,11 @@ route('GET', '/api/memories', ({ url }) =>
   listMemories({ q: url.searchParams.get('q') ?? undefined, kind: url.searchParams.get('kind') ?? undefined, projectId: url.searchParams.get('projectId') ?? undefined }),
 );
 route('POST', '/api/memories', ({ body }) => addMemory({ ...body, source: 'manual' }));
+/** Memory from ChatGPT / Claude / Gemini: their answer pasted in, or their data export. */
+route('POST', '/api/memories/import', async ({ auth, body }) => {
+  ownerOnly(auth, 'import memories');
+  try { return await importMemories(body ?? {}); } catch (e) { throw new HttpError(400, (e as Error).message); }
+});
 route('PUT', '/api/memories/:id', ({ params, body }) => updateMemory(params[0], body) ?? notFound());
 route('DELETE', '/api/memories/:id', ({ params }) => ({ ok: deleteMemory(params[0]) }));
 
@@ -1127,9 +1133,16 @@ export function startServer(port = loadConfig().port, host = loadConfig().host) 
       const params = (url.pathname.match(r.re) ?? []).slice(1).map(decodeURIComponent);
       if (r.raw && Number(req.headers['content-length'] ?? 0) > MAX_UPLOAD) return send(res, 413, { error: 'File too large (max 300 MB)' });
       // problem reports may carry a few screenshots
-      const body = r.raw ? {} : await readBody(req, url.pathname.startsWith('/api/report') ? 10_000_000 : 1_000_000);
+      const body = r.raw ? {} : await readBody(req, url.pathname.startsWith('/api/report') ? 10_000_000 : url.pathname === '/api/memories/import' ? 60_000_000 : 1_000_000);
       const out = await r.handler({ req, res, params, url, body, auth });
       if (out !== SSE_HANDLED) send(res, 200, out ?? { ok: true });
+      // any change in a workspace (a task dragged, a document saved…): everyone with it open refreshes that screen now
+      if (req.method !== 'GET' && out !== SSE_HANDLED && /^\/api\/ws\/(?!board|log)/.test(url.pathname)) {
+        try {
+          const pid = (out as any)?.project_id ?? (Array.isArray(out) ? (out[0] as any)?.project_id : undefined) ?? wsProject(auth, url).id;
+          wsChanged(pid, url.pathname.split('/')[3] ?? '');
+        } catch {}
+      }
     } catch (err) {
       const status = err instanceof HttpError ? err.status : 500;
       if (status === 500) console.error('[alter]', err);

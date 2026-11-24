@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { Brain, Plus, Search, Trash2 } from 'lucide-react';
+import { Brain, Download, Plus, Search, Trash2 } from 'lucide-react';
+import { MemoryImport } from '../components/MemoryImport';
 import { useDeferredValue, useState } from 'react';
 import { api, invalidate, setCached, useData, type Memory } from '../api';
 import { Empty, PageHead, spring, stagger } from '../components/ui';
@@ -13,6 +14,7 @@ export function MemoryView() {
   const [q, setQ] = useState('');
   const dq = useDeferredValue(q);
   const [text, setText] = useState('');
+  const [importing, setImporting] = useState(false);
   const { data: all } = useData<Memory[]>('/api/memories');
 
   const list = (all ?? []).filter((m) => (kind === 'all' || m.kind === kind) && (!dq.trim() || m.content.toLowerCase().includes(dq.toLowerCase())));
@@ -31,11 +33,12 @@ export function MemoryView() {
     invalidate('/api/memories', '/api/status');
   };
   const source = (s: string | null) =>
-    !s ? '' : s === 'manual' ? t('memory.manual') : s === 'onboarding' ? t('memory.onboarding') : s.startsWith('agent') ? t('memory.fromAgent') : t('memory.fromChat');
+    !s ? '' : s === 'manual' ? t('memory.manual') : s === 'onboarding' ? t('memory.onboarding') : s.startsWith('import:') ? t('mimp.from', { ai: ({ chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', copilot: 'Copilot' } as Record<string, string>)[s.slice(7)] ?? t('mimp.other') }) : s.startsWith('agent') ? t('memory.fromAgent') : t('memory.fromChat');
 
   return (
     <div className="page" style={{ maxWidth: 900 }}>
-      <PageHead title={t('memory.title')} lead={t('memory.lead')} />
+      <PageHead title={t('memory.title')} lead={t('memory.lead')} actions={<button className="btn" onClick={() => setImporting(true)}><Download size={15} />{t('mimp.button')}</button>} />
+      <MemoryImport open={importing} onClose={() => setImporting(false)} />
 
       <form className="hero-prompt" onSubmit={add} style={{ marginBottom: 18 }}>
         <Plus />

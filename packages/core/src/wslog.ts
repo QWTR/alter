@@ -3,6 +3,10 @@
 import { all, getDb, now, run } from './db.ts';
 import { emit } from './events.ts';
 import type { Actor } from './workspace.ts';
+import { broadcast } from './rooms.ts';
+
+/** Tells everyone with this workspace open that something changed, so their screens refresh at once. */
+export const wsChanged = (projectId: string, kind: string) => broadcast('ws:' + projectId, 'changed', { kind });
 
 export interface WsLogEntry { id: number; project_id: string; at: string; actor: Actor; action: string; detail: string; ref: string | null }
 
@@ -47,6 +51,7 @@ export function wsLog(projectId: string | null | undefined, actor: Actor, action
       if (recent.size > 500) recent.clear();
     }
     emit('wslog.added', { projectId });
+    wsChanged(projectId, action.split('.')[0]);
   } catch (e) {
     console.error('[alter] ws log', (e as Error).message);
   }

@@ -1770,8 +1770,6 @@ html.has-titlebar .sidebar { padding-top: 12px; }
 .wt-comment .md { font-size: 13.5px; }
 .wt-docs { flex-direction: row; gap: 0; padding: 0; }
 .wt-doclist { width: 300px; flex: none; border-right: 1px solid var(--border); padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
-.wt-report select { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
-.wt-report .btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .wt-docview { flex: 1; min-width: 0; overflow: auto; display: flex; flex-direction: column; }
 .wt-doc { display: flex; flex-direction: column; gap: 10px; padding: 18px 24px 30px; max-width: 900px; width: 100%; margin: 0 auto; flex: 1; }
 .wt-doc-edit { flex: 1; min-height: 360px; font-family: ui-monospace, Consolas, monospace; font-size: 13.5px; line-height: 1.55; resize: vertical; }
@@ -1864,8 +1862,10 @@ html.has-titlebar .sidebar { padding-top: 12px; }
 .wt-del:hover { color: #ef4f5f; }
 .wt-doc-actions { display: grid; grid-template-columns: 1fr; gap: 6px; }
 .wt-doc-actions > .btn { width: 100%; justify-content: center; }
-.wt-doc-actions .wt-report { display: flex; }
-.wt-doc-actions .wt-report .btn { flex: 1; justify-content: center; }
+.wt-doc-actions .wt-report { display: flex; align-items: stretch; min-height: 34px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.wt-doc-actions .wt-report .btn { flex: 1; min-width: 0; justify-content: center; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.wt-doc-actions .wt-report .btn:hover:not(:disabled) { background: var(--surface-2); }
+.wt-doc-actions .wt-report select { flex: none; width: auto; height: auto; margin: 0; padding: 0 26px 0 10px; border: 0; border-left: 1px solid var(--border); border-radius: 0; background-color: transparent; box-shadow: none; font-size: 12.5px; color: var(--text-2); cursor: pointer; }
 .wt-doclist .segmented { width: 100%; }
 .wt-doclist .segmented button { flex: 1; }
 .ws-page-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -2037,3 +2037,21 @@ html, body, #root { overflow-x: clip; }
 .wl-detail { margin-top: 2px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .wl-detail.prompt { margin-top: 5px; padding: 6px 10px; border-radius: 8px; background: var(--surface-2, var(--surface)); color: var(--text); }
 .wl-day::first-letter { text-transform: uppercase; }
+
+/* memory import from other AIs */
+.mimp { display: grid; gap: 16px; }
+.mimp-src { display: flex; gap: 6px; flex-wrap: wrap; }
+.mimp-src button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; font-weight: 500; cursor: pointer; }
+.mimp-src button.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.mimp-dot { width: 9px; height: 9px; border-radius: 50%; }
+.mimp-step { display: flex; gap: 12px; align-items: flex-start; }
+.mimp-n { flex: none; display: grid; place-items: center; width: 24px; height: 24px; margin-top: 1px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; }
+.mimp-h { font-weight: 600; margin-bottom: 8px; }
+.mimp-prompt { margin-bottom: 8px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; line-height: 1.45; color: var(--text-2); user-select: all; }
+.mimp-file { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--border); background: var(--surface); }
+.mimp-done { display: grid; gap: 12px; }
+.mimp-ok { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ok, #3ddc97); }
+.mimp-list { margin: 0; padding: 0; list-style: none; max-height: 340px; overflow: auto; display: grid; gap: 6px; }
+.mimp-list li { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: 13.5px; }
+.onb-import-ic { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 10px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.linkish { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
