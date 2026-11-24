@@ -20,6 +20,7 @@
     if (!l) l = /^pl\b/i.test(navigator.language || '') ? 'pl' : 'en';
     document.documentElement.setAttribute('data-lang', l);
     document.documentElement.lang = l;
+    document.documentElement.classList.add('js');
   })();
 </script>
 <style>
@@ -88,6 +89,7 @@
   .hero { position: relative; padding: 72px 0 40px; text-align: center; }
   .pill { display: inline-flex; align-items: center; gap: 9px; padding: 6px 14px 6px 6px; border: 1px solid var(--border-strong); border-radius: 999px; font-size: 13px; color: var(--text-2); background: rgba(255,255,255,0.04); text-decoration: none; transition: border-color .2s; }
   .pill:hover { border-color: rgba(139,116,255,.6); }
+  @media (max-width: 600px) { .pill { font-size: 12px; text-align: left; line-height: 1.35; padding-right: 12px; } }
   .pill b { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; background: linear-gradient(135deg, #8b74ff, #2ee6ff); color: #07060d; }
   h1 { font-size: clamp(38px, 7.2vw, 84px); line-height: 1.0; letter-spacing: -0.04em; margin: 26px auto 22px; max-width: 980px; font-weight: 900; }
   .g { background: linear-gradient(95deg, #c9bcff 0%, #8b74ff 35%, #2ee6ff 75%, #8b74ff 100%); background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shine 8s linear infinite; }
@@ -301,11 +303,11 @@
   footer p { margin: 0; max-width: 680px; }
 
   /* reveal */
-  .rv { opacity: 0; transform: translateY(26px); transition: opacity .9s var(--ease), transform .9s var(--ease); transition-delay: var(--d, 0s); }
-  .rv.in { opacity: 1; transform: none; }
+  html.js .rv { opacity: 0; transform: translateY(26px); transition: opacity .9s var(--ease), transform .9s var(--ease); transition-delay: var(--d, 0s); }
+  html.js .rv.in { opacity: 1; transform: none; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-    .rv { opacity: 1; transform: none; }
+    html.js .rv { opacity: 1; transform: none; }
     .win { transform: none; }
   }
 </style>
@@ -660,6 +662,8 @@
 </footer>
 
 <script>
+(function () {
+  "use strict";
   document.querySelectorAll('.lang button').forEach(function (b) {
     b.addEventListener('click', function () {
       var l = b.getAttribute('data-set');
@@ -668,13 +672,16 @@
       try { localStorage.setItem('altter.site.lang', l); } catch (e) {}
     });
   });
-  var top = document.getElementById('top');
-  var onScroll = function () { top.classList.toggle('scrolled', scrollY > 10); };
+  var bar = document.getElementById('top');
+  var onScroll = function () { bar.classList.toggle('scrolled', scrollY > 10); };
   addEventListener('scroll', onScroll, { passive: true }); onScroll();
   var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (es) {
     es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
   }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }) : null;
   document.querySelectorAll('.rv, #stage').forEach(function (el) { io ? io.observe(el) : el.classList.add('in'); });
+  // never leave content hidden: show everything above the fold at once, and the rest after a moment if the observer is slow
+  document.querySelectorAll('.hero .rv, #stage').forEach(function (el) { el.classList.add('in'); });
+  setTimeout(function () { document.querySelectorAll('.rv').forEach(function (el) { if (el.getBoundingClientRect().top < innerHeight) el.classList.add('in'); }); }, 1500);
   document.querySelectorAll('.tile').forEach(function (t) {
     t.addEventListener('pointermove', function (e) {
       var r = t.getBoundingClientRect();
@@ -682,6 +689,7 @@
       t.style.setProperty('--my', (e.clientY - r.top) + 'px');
     });
   });
+})();
 </script>
 </body>
 </html>
