@@ -12,6 +12,15 @@ const applyTheme = () => {
   } catch {}
   const dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  // palette: violet (default) | ocean | emerald | sunset | rose | graphite | midnight
+  let palette = 'violet';
+  try {
+    palette = localStorage.getItem('alter.palette') ?? 'violet';
+  } catch {}
+  if (palette && palette !== 'violet') document.documentElement.dataset.palette = palette;
+  else delete document.documentElement.dataset.palette;
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  if (bg) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
 };
 applyTheme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);

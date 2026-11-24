@@ -23,6 +23,8 @@ export interface ProcessOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   onLine?: (line: string) => void;
+  /** Keep stdin open after `input`: the caller writes more (follow-up messages) and ends it. */
+  onStdin?: (pipe: { write: (s: string) => void; end: () => void }) => void;
   /** Treat `cmd` as a complete shell command line written by the user (monitor checks). */
   raw?: boolean;
 }
@@ -87,7 +89,14 @@ export function runProcess(cmd: string, args: string[], opts: ProcessOptions = {
       resolve({ code, stdout, stderr, timedOut });
     });
     child.stdin.on('error', () => {});
-    child.stdin.end(opts.input ?? '', 'utf8');
+    if (opts.onStdin) {
+      let ended = false;
+      child.stdin.write(opts.input ?? '', 'utf8');
+      opts.onStdin({
+        write: (s) => { if (!ended && child.stdin.writable) child.stdin.write(s, 'utf8'); },
+        end: () => { if (!ended) { ended = true; child.stdin.end(); } },
+      });
+    } else child.stdin.end(opts.input ?? '', 'utf8');
   });
 }
 

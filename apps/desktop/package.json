@@ -1,6 +1,6 @@
 {
   "name": "@alter/desktop",
-  "version": "0.13.0",
+  "version": "0.15.0",
   "description": "ALTTER desktop app (Electron): runs the ALTTER core in the background and shows the app in a window + tray.",
   "license": "AGPL-3.0-only",
   "author": "ALTTER contributors",
@@ -87,6 +87,14 @@
         "uk_UA"
       ],
       "deleteAppDataOnUninstall": false
-    }
+    },
+    "protocols": [
+      {
+        "name": "ALTTER",
+        "schemes": [
+          "altter"
+        ]
+      }
+    ]
   }
 }

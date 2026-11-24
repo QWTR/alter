@@ -4,17 +4,16 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ALTTER — your personal AI on the subscriptions you already have</title>
-<meta name="description" content="ALTTER: one personal AI on your computer and phone, on your own Claude, ChatGPT or Gemini subscription. Memory, agents, websites, videos, images. Free and open source." />
-<meta name="theme-color" content="#0b0a12" />
+<meta name="description" content="ALTTER: one personal AI on your computer and phone, on your own Claude, ChatGPT or Gemini subscription. Memory, agents, a company workspace, websites, videos, images. Free and open source." />
+<meta name="theme-color" content="#07060d" />
 <meta property="og:title" content="ALTTER — your personal AI" />
-<meta property="og:description" content="Claude, ChatGPT or Gemini on your own account — on your computer and your phone. Free and open source." />
+<meta property="og:description" content="Claude, ChatGPT or Gemini on your own account — on your computer, your phone and with your team. Free and open source." />
 <meta property="og:image" content="https://qwtr.github.io/alter/img/icon.png" />
 <link rel="icon" href="img/icon-192.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 <script>
-  // language: saved choice → browser → English
   (function () {
     var l = null;
     try { l = localStorage.getItem('altter.site.lang'); } catch (e) {}
@@ -26,127 +25,293 @@
 <style>
   :root {
     color-scheme: dark;
-    --bg: #0b0a12;
-    --surface: #13121d;
-    --surface-2: #1a1927;
+    --bg: #07060d;
+    --bg-2: #0c0b15;
+    --surface: rgba(255, 255, 255, 0.035);
+    --surface-solid: #12111c;
+    --surface-2: #1a1928;
     --border: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.14);
-    --text: #efeef6;
-    --text-2: #c9c7d8;
-    --muted: #8c89a3;
+    --border-strong: rgba(255, 255, 255, 0.15);
+    --text: #f3f2fa;
+    --text-2: #c6c4d6;
+    --muted: #8a87a0;
     --accent: #8b74ff;
     --accent-2: #2ee6ff;
-    --radius: 20px;
+    --pink: #ff7ab6;
+    --green: #3ddc97;
+    --amber: #ffb547;
+    --radius: 22px;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
+    margin: 0; background: var(--bg); color: var(--text);
     font: 16px/1.6 Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
   }
   html[data-lang="en"] [lang="pl"], html[data-lang="pl"] [lang="en"] { display: none !important; }
   a { color: inherit; }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+  img { max-width: 100%; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+
+  /* background: soft grid + aurora */
+  .bg { position: fixed; inset: 0; z-index: -2; pointer-events: none; overflow: hidden; }
+  .bg::before {
+    content: ''; position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
+  }
+  .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .55; animation: drift 22s ease-in-out infinite alternate; }
+  .orb.a { width: 620px; height: 620px; left: -160px; top: -220px; background: #6d55f0; }
+  .orb.b { width: 520px; height: 520px; right: -140px; top: -120px; background: #1aa8d8; opacity: .35; animation-duration: 28s; }
+  .orb.c { width: 460px; height: 460px; left: 40%; top: 520px; background: #c1408e; opacity: .18; animation-duration: 34s; }
+  @keyframes drift { to { transform: translate3d(60px, 40px, 0) scale(1.08); } }
 
   /* top bar */
-  header.top { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(14px); background: rgba(11, 10, 18, 0.72); border-bottom: 1px solid var(--border); }
-  header.top .wrap { display: flex; align-items: center; gap: 14px; height: 60px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: 0.04em; text-decoration: none; }
-  .brand img { width: 30px; height: 30px; border-radius: 8px; }
-  .top nav { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-  .top nav a { text-decoration: none; color: var(--muted); font-size: 14px; padding: 6px 10px; border-radius: 10px; }
-  .top nav a:hover { color: var(--text); background: var(--surface-2); }
-  .lang { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; }
-  .lang button { all: unset; cursor: pointer; font-size: 12px; font-weight: 600; padding: 5px 9px; color: var(--muted); }
+  header.top { position: sticky; top: 0; z-index: 20; transition: background .3s, border-color .3s; border-bottom: 1px solid transparent; }
+  header.top.scrolled { background: rgba(7, 6, 13, 0.72); backdrop-filter: blur(16px) saturate(140%); border-bottom-color: var(--border); }
+  header.top .wrap { display: flex; align-items: center; gap: 14px; height: 66px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: 0.05em; text-decoration: none; font-size: 17px; }
+  .brand img { width: 32px; height: 32px; border-radius: 9px; }
+  .top nav { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .top nav a { text-decoration: none; color: var(--muted); font-size: 14px; font-weight: 500; padding: 7px 11px; border-radius: 10px; transition: color .2s, background .2s; }
+  .top nav a:hover { color: var(--text); background: rgba(255,255,255,.05); }
+  .top nav a.dl { color: #fff; background: linear-gradient(135deg, #8b74ff, #6d55f0); margin-left: 6px; box-shadow: 0 6px 22px -6px rgba(139,116,255,.7); }
+  .lang { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; margin-left: 6px; }
+  .lang button { all: unset; cursor: pointer; font-size: 12px; font-weight: 700; padding: 6px 9px; color: var(--muted); }
   html[data-lang="en"] .lang [data-set="en"], html[data-lang="pl"] .lang [data-set="pl"] { background: var(--surface-2); color: var(--text); }
-  @media (max-width: 640px) { .top nav a.hide-sm { display: none; } }
+  @media (max-width: 760px) { .top nav a.hide-sm { display: none; } }
 
   /* hero */
-  .hero { position: relative; padding: 88px 0 56px; text-align: center; }
-  .hero::before {
-    content: ''; position: absolute; inset: -120px 0 auto; height: 620px; z-index: -1; pointer-events: none;
-    background:
-      radial-gradient(40% 50% at 35% 40%, rgba(139, 116, 255, 0.28), transparent 70%),
-      radial-gradient(35% 45% at 68% 35%, rgba(46, 230, 255, 0.14), transparent 70%);
-  }
-  .hero .logo { width: 84px; height: 84px; border-radius: 22px; box-shadow: 0 18px 60px rgba(139, 116, 255, 0.35); }
-  .pill { display: inline-flex; align-items: center; gap: 8px; margin: 22px 0 0; padding: 5px 12px; border: 1px solid var(--border-strong); border-radius: 999px; font-size: 13px; color: var(--text-2); background: rgba(255,255,255,0.03); }
-  .pill i { width: 7px; height: 7px; border-radius: 50%; background: #3ddc97; box-shadow: 0 0 10px #3ddc97; }
-  h1 { font-size: clamp(31px, 6.4vw, 72px); line-height: 1.04; letter-spacing: -0.035em; margin: 22px auto 18px; max-width: 900px; font-weight: 800; }
-  h1 .g { background: linear-gradient(90deg, #b9a8ff, var(--accent) 40%, var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero { position: relative; padding: 72px 0 40px; text-align: center; }
+  .pill { display: inline-flex; align-items: center; gap: 9px; padding: 6px 14px 6px 6px; border: 1px solid var(--border-strong); border-radius: 999px; font-size: 13px; color: var(--text-2); background: rgba(255,255,255,0.04); text-decoration: none; transition: border-color .2s; }
+  .pill:hover { border-color: rgba(139,116,255,.6); }
+  .pill b { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; background: linear-gradient(135deg, #8b74ff, #2ee6ff); color: #07060d; }
+  h1 { font-size: clamp(38px, 7.2vw, 84px); line-height: 1.0; letter-spacing: -0.04em; margin: 26px auto 22px; max-width: 980px; font-weight: 900; }
+  .g { background: linear-gradient(95deg, #c9bcff 0%, #8b74ff 35%, #2ee6ff 75%, #8b74ff 100%); background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shine 8s linear infinite; }
+  @keyframes shine { to { background-position: 200% center; } }
   .lead { font-size: clamp(17px, 2vw, 20px); color: var(--text-2); max-width: 720px; margin: 0 auto; }
   .cta { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 34px 0 14px; }
-  .btn { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; padding: 13px 20px; border-radius: 14px; font-weight: 600; border: 1px solid var(--border-strong); background: var(--surface-2); transition: transform .15s ease, background .15s ease, border-color .15s ease; text-align: left; }
-  .btn:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.24); }
+  .btn { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; padding: 13px 20px; border-radius: 15px; font-weight: 650; border: 1px solid var(--border-strong); background: rgba(255,255,255,.05); backdrop-filter: blur(8px); transition: transform .2s var(--ease), background .2s, border-color .2s, box-shadow .2s; text-align: left; }
+  .btn:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.28); }
   .btn svg { width: 22px; height: 22px; flex: none; }
   .btn small { display: block; font-weight: 500; font-size: 12px; color: var(--muted); line-height: 1.3; }
-  .btn.primary { background: linear-gradient(135deg, #8b74ff, #6d55f0); border-color: transparent; box-shadow: 0 10px 34px rgba(139, 116, 255, 0.4); }
-  .btn.primary small { color: rgba(255,255,255,0.75); }
-  .btn.primary:hover { background: linear-gradient(135deg, #9a85ff, #7a63f5); }
-  .fine { font-size: 13px; color: var(--muted); }
+  .btn.primary { background: linear-gradient(135deg, #9a85ff, #6d55f0); border-color: rgba(255,255,255,.18); box-shadow: 0 14px 40px -10px rgba(139, 116, 255, 0.75), inset 0 1px 0 rgba(255,255,255,.25); }
+  .btn.primary small { color: rgba(255,255,255,0.78); }
+  .btn.primary:hover { box-shadow: 0 18px 50px -10px rgba(139, 116, 255, 0.9), inset 0 1px 0 rgba(255,255,255,.25); }
+  .fine { font-size: 13px; color: var(--muted); margin: 0; }
   .fine a { color: var(--text-2); }
+  .works { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin: 26px 0 0; font-size: 13px; color: var(--muted); }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 99px; border: 1px solid var(--border); background: rgba(255,255,255,.03); color: var(--text-2); font-weight: 550; }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; }
 
-  /* screenshots */
-  .shots { display: flex; gap: 18px; justify-content: center; margin: 56px auto 0; padding: 0 4px; }
-  .phone { flex: 0 1 230px; min-width: 0; border-radius: 30px; padding: 7px; background: linear-gradient(160deg, #2a2840, #121120); border: 1px solid var(--border-strong); box-shadow: 0 30px 70px rgba(0,0,0,0.55); }
-  .phone img { display: block; width: 100%; height: auto; border-radius: 24px; }
-  .phone:nth-child(2), .phone:nth-child(3) { transform: translateY(-22px); }
-  @media (max-width: 860px) { .phone:nth-child(4) { display: none; } }
-  @media (max-width: 600px) {
-    .shots { overflow-x: auto; justify-content: flex-start; scroll-snap-type: x mandatory; scroll-padding-left: 20px; padding-bottom: 18px; margin-left: -20px; margin-right: -20px; padding-left: 20px; padding-right: 20px; }
-    .phone { flex: 0 0 62%; scroll-snap-align: start; }
-    .phone:nth-child(4) { display: block; }
-    .phone:nth-child(2), .phone:nth-child(3) { transform: none; }
+  /* app mockup */
+  .stage { position: relative; margin: 60px auto 0; max-width: 1080px; perspective: 1800px; }
+  .stage::before { content: ''; position: absolute; inset: 8% 6% -4%; background: radial-gradient(closest-side, rgba(139,116,255,.45), transparent); filter: blur(50px); z-index: -1; }
+  .win { text-align: left; border-radius: 18px; border: 1px solid var(--border-strong); background: linear-gradient(180deg, #121120, #0c0b16); box-shadow: 0 50px 120px -30px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,255,255,.06); overflow: hidden; transform: rotateX(8deg) scale(.98); transform-origin: 50% 0; transition: transform 1.2s var(--ease); }
+  .stage.in .win { transform: rotateX(0) scale(1); }
+  .win-bar { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .win-bar i { width: 11px; height: 11px; border-radius: 50%; background: #2a2838; }
+  .win-bar span { margin-left: 10px; font-weight: 600; }
+  .win-body { display: grid; grid-template-columns: 210px minmax(0, 1fr); height: 520px; }
+  .m-side { border-right: 1px solid var(--border); padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+  .m-brand { display: flex; align-items: center; gap: 8px; font-weight: 800; padding: 2px 8px 12px; letter-spacing: .04em; }
+  .m-brand img { width: 22px; height: 22px; border-radius: 6px; }
+  .m-item { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 9px; color: var(--text-2); }
+  .m-item svg { width: 15px; height: 15px; color: var(--muted); }
+  .m-item.on { background: rgba(255,255,255,.06); color: var(--text); }
+  .m-item.on svg { color: var(--accent); }
+  .m-sep { margin: 12px 9px 6px; font-size: 10px; letter-spacing: .12em; color: var(--muted); font-weight: 700; }
+  .m-dot { width: 7px; height: 7px; border-radius: 50%; margin: 0 4px; }
+  .m-foot { margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 8px 9px; font-size: 12px; color: var(--muted); }
+  .m-foot b { color: var(--text); font-weight: 600; }
+  .m-main { display: flex; flex-direction: column; min-width: 0; position: relative; }
+  .m-head { display: flex; align-items: center; gap: 10px; padding: 12px 22px; border-bottom: 1px solid var(--border); font-size: 13.5px; font-weight: 650; }
+  .m-head .tag { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .m-chat { flex: 1; padding: 20px 26px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
+  .bubble { align-self: flex-end; max-width: 70%; padding: 10px 14px; border-radius: 16px 16px 4px 16px; background: linear-gradient(135deg, #7c66f5, #5c46e0); font-size: 13.5px; }
+  .ai { display: flex; gap: 11px; font-size: 13.5px; color: var(--text-2); }
+  .ai .av { flex: none; width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, #8b74ff, #2ee6ff); display: grid; place-items: center; font-weight: 900; font-size: 12px; color: #07060d; }
+  .ai > div { min-width: 0; flex: 1; }
+  .ai p { margin: 2px 0 10px; }
+  .tool { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); padding: 4px 10px; border-radius: 8px; background: rgba(255,255,255,.04); border: 1px solid var(--border); margin: 0 6px 8px 0; }
+  .tool i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .sched { border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.025); padding: 12px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .sched h5 { margin: 0 0 8px; font-size: 11.5px; color: var(--muted); font-weight: 650; letter-spacing: .02em; }
+  .ev { border-radius: 9px; padding: 7px 9px; font-size: 12px; margin-bottom: 6px; border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); color: var(--text); }
+  .ev small { display: block; color: var(--muted); font-size: 11px; }
+  .m-input { margin: 0 22px 18px; border: 1px solid rgba(139,116,255,.45); border-radius: 15px; padding: 12px 14px; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.02); box-shadow: 0 0 0 4px rgba(139,116,255,.08); }
+  .m-input .caret { width: 2px; height: 16px; background: var(--accent); animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .m-input .send { margin-left: auto; width: 28px; height: 28px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; color: #fff; }
+  .m-input .send svg { width: 14px; height: 14px; }
+  .m-pills { display: flex; gap: 6px; }
+  .m-pills span { font-size: 11.5px; padding: 3px 9px; border-radius: 8px; border: 1px solid var(--border); color: var(--text-2); }
+  .float-phone { position: absolute; right: -34px; bottom: -40px; width: 200px; border-radius: 30px; padding: 6px; background: linear-gradient(160deg, #2a2840, #121120); border: 1px solid var(--border-strong); box-shadow: 0 40px 80px -20px rgba(0,0,0,.8); transform: rotate(4deg); }
+  .float-phone img { display: block; width: 100%; height: auto; border-radius: 24px; }
+  .float-card { position: absolute; left: -38px; top: 120px; width: 230px; padding: 13px 14px; border-radius: 16px; background: rgba(18,17,30,.86); backdrop-filter: blur(14px); border: 1px solid var(--border-strong); box-shadow: 0 30px 60px -20px rgba(0,0,0,.8); text-align: left; font-size: 12.5px; animation: bob 6s ease-in-out infinite; }
+  .float-card b { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 6px; }
+  .float-card b i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); }
+  .float-card p { margin: 0; color: var(--muted); }
+  @keyframes bob { 50% { transform: translateY(-10px); } }
+  @media (max-width: 1100px) { .float-card { left: 12px; top: auto; bottom: -30px; } .float-phone { right: 8px; width: 150px; } }
+  @media (max-width: 760px) {
+    .win-body { grid-template-columns: minmax(0, 1fr); height: 470px; }
+    .m-side { display: none; }
+    .sched { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .sched > div:nth-child(3) { display: none; }
+    .float-phone { display: none; }
+    .float-card { position: relative; left: auto; bottom: auto; margin: -24px auto 0; width: min(300px, 90%); }
+    .m-pills span:nth-child(n+2) { display: none; }
   }
 
+  /* marquee */
+  .marquee { margin: 90px 0 0; position: relative; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+  .marquee-label { text-align: center; font-size: 13px; color: var(--muted); margin: 0 0 18px; letter-spacing: .02em; }
+  .track { display: flex; gap: 12px; width: max-content; animation: scroll 46s linear infinite; }
+  .marquee:hover .track { animation-play-state: paused; }
+  .track span { flex: none; padding: 10px 18px; border-radius: 13px; border: 1px solid var(--border); background: rgba(255,255,255,.03); font-weight: 600; font-size: 14px; color: var(--text-2); white-space: nowrap; }
+  @keyframes scroll { to { transform: translateX(-50%); } }
+
   /* sections */
-  section { padding: 84px 0 0; }
-  .kicker { font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
-  h2 { font-size: clamp(28px, 4vw, 42px); letter-spacing: -0.025em; line-height: 1.12; margin: 0 0 14px; font-weight: 800; }
-  .sub { color: var(--text-2); max-width: 680px; margin: 0 0 34px; font-size: 17px; }
+  section { padding: 120px 0 0; }
+  .head { max-width: 760px; }
+  .head.c { margin: 0 auto; text-align: center; }
+  .kicker { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #b9a8ff; margin: 0 0 14px; }
+  .kicker::before { content: ''; width: 18px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, #8b74ff, #2ee6ff); }
+  h2 { font-size: clamp(30px, 4.6vw, 52px); letter-spacing: -0.035em; line-height: 1.06; margin: 0 0 16px; font-weight: 850; }
+  .sub { color: var(--text-2); margin: 0 0 44px; font-size: 18px; }
+  .head.c .sub { margin-left: auto; margin-right: auto; }
 
-  .grid { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 600px) { .grid { grid-template-columns: minmax(0, 1fr); } }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; transition: border-color .2s ease, transform .2s ease; }
-  .card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
-  .card .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 14px; background: var(--c, rgba(139,116,255,0.14)); color: var(--ci, #b9a8ff); }
-  .card .ico svg { width: 20px; height: 20px; }
-  .card h3 { margin: 0 0 6px; font-size: 17px; letter-spacing: -0.01em; }
-  .card p { margin: 0; color: var(--muted); font-size: 15px; }
-  .card.wide { grid-column: span 2; }
-  .card.full { grid-column: 1 / -1; }
-  @media (max-width: 900px) { .card.full { grid-column: span 2; } }
-  @media (max-width: 600px) { .card.wide, .card.full { grid-column: auto; } }
+  /* bento */
+  .bento { display: grid; gap: 14px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .tile { position: relative; overflow: hidden; grid-column: span 2; background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015)); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; transition: border-color .3s, transform .3s var(--ease); }
+  .tile::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: radial-gradient(400px circle at var(--mx, 50%) var(--my, 0%), rgba(139,116,255,.13), transparent 45%); opacity: 0; transition: opacity .3s; }
+  .tile:hover { border-color: var(--border-strong); transform: translateY(-3px); }
+  .tile:hover::after { opacity: 1; }
+  .tile.w3 { grid-column: span 3; }
+  .tile.w4 { grid-column: span 4; }
+  .tile.w6 { grid-column: span 6; }
+  .tile .ico { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; margin-bottom: 16px; background: var(--c, rgba(139,116,255,0.15)); color: var(--ci, #b9a8ff); border: 1px solid rgba(255,255,255,.06); }
+  .tile .ico svg { width: 20px; height: 20px; }
+  .tile h3 { margin: 0 0 7px; font-size: 18px; letter-spacing: -0.015em; }
+  .tile p { margin: 0; color: var(--muted); font-size: 15px; }
+  .viz { margin-top: 20px; }
+  .ai-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ai-pill { display: flex; align-items: center; gap: 9px; padding: 9px 13px; border-radius: 12px; border: 1px solid var(--border); background: rgba(0,0,0,.25); font-size: 13.5px; font-weight: 600; }
+  .ai-pill i { width: 9px; height: 9px; border-radius: 50%; }
+  .ai-pill small { color: var(--muted); font-weight: 500; }
+  .mem { display: flex; flex-wrap: wrap; gap: 6px; }
+  .mem span { font-size: 12.5px; padding: 5px 10px; border-radius: 9px; background: rgba(139,116,255,.1); border: 1px solid rgba(139,116,255,.2); color: #d4cbff; }
+  .agents { display: grid; gap: 7px; }
+  .agent { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 12px; background: rgba(0,0,0,.25); border: 1px solid var(--border); font-size: 13px; }
+  .agent em { font-style: normal; color: var(--muted); margin-left: auto; font-size: 12px; }
+  .agent .st { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .agent .st.run { background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .bars { display: flex; align-items: flex-end; gap: 6px; height: 74px; }
+  .bars i { flex: 1; border-radius: 4px 4px 0 0; background: linear-gradient(180deg, #8b74ff, rgba(139,116,255,.25)); height: var(--h); }
+  .bars i:nth-child(3n) { background: linear-gradient(180deg, #2ee6ff, rgba(46,230,255,.2)); }
+  .access { display: grid; gap: 6px; }
+  .access div { display: flex; align-items: center; gap: 10px; padding: 8px 11px; border-radius: 11px; border: 1px solid var(--border); font-size: 13px; background: rgba(0,0,0,.2); }
+  .access div.on { border-color: rgba(139,116,255,.5); background: rgba(139,116,255,.1); }
+  .access b { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); }
+  .access .on b { border: 4px solid var(--accent); }
+  @media (max-width: 960px) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tile, .tile.w3, .tile.w4, .tile.w6 { grid-column: span 1; } .tile.w4, .tile.w6 { grid-column: span 2; } }
+  @media (max-width: 620px) { .bento { grid-template-columns: minmax(0, 1fr); } .tile, .tile.w3, .tile.w4, .tile.w6 { grid-column: auto; } }
 
+  /* split sections */
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 56px; align-items: center; }
+  .split.rev { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+  .split.rev > :first-child { order: 2; }
+  @media (max-width: 900px) { .split, .split.rev { grid-template-columns: minmax(0, 1fr); gap: 36px; } .split.rev > :first-child { order: 0; } }
+  .checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+  .checks li { display: flex; gap: 13px; color: var(--text-2); font-size: 15.5px; }
+  .checks li b { color: var(--text); font-weight: 650; }
+  .checks svg { flex: none; width: 22px; height: 22px; margin-top: 1px; padding: 4px; border-radius: 7px; background: rgba(61,220,151,.13); color: var(--green); }
+
+  .panel { border-radius: 20px; border: 1px solid var(--border-strong); background: linear-gradient(180deg, #121120, #0c0b16); box-shadow: 0 40px 100px -30px rgba(0,0,0,.85); padding: 16px; }
+  .panel-tabs { display: flex; gap: 4px; margin-bottom: 14px; flex-wrap: wrap; }
+  .panel-tabs span { font-size: 12.5px; padding: 6px 11px; border-radius: 9px; color: var(--muted); font-weight: 600; }
+  .panel-tabs span.on { background: rgba(255,255,255,.07); color: var(--text); }
+  .kanban { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .col h6 { margin: 0 0 9px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 7px; font-weight: 650; }
+  .col h6 i { width: 8px; height: 8px; border-radius: 50%; }
+  .col h6 em { margin-left: auto; font-style: normal; font-size: 11px; }
+  .task { border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,.03); padding: 10px 11px; margin-bottom: 8px; font-size: 12.5px; }
+  .task .meta { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--muted); font-size: 11px; }
+  .task .who { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 800; color: #07060d; }
+  .task .pr { margin-left: auto; padding: 1px 7px; border-radius: 6px; font-weight: 650; }
+  .task.drag { transform: rotate(-2deg); border-color: rgba(139,116,255,.6); box-shadow: 0 14px 30px -10px rgba(139,116,255,.5); }
+  @media (max-width: 520px) { .kanban { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .kanban .col:nth-child(3) { display: none; } }
+  .inv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .inv div { border-radius: 12px; border: 1px solid var(--border); padding: 10px 12px; background: rgba(0,0,0,.2); }
+  .inv small { display: block; color: var(--muted); font-size: 11px; }
+  .inv b { font-size: 16px; letter-spacing: -.01em; }
+
+  /* phones */
+  .phones { display: flex; gap: 18px; justify-content: center; }
+  .phone { flex: 0 1 230px; min-width: 0; border-radius: 32px; padding: 7px; background: linear-gradient(160deg, #2a2840, #121120); border: 1px solid var(--border-strong); box-shadow: 0 30px 70px rgba(0,0,0,0.55); }
+  .phone img { display: block; width: 100%; height: auto; border-radius: 26px; }
+  .phone:nth-child(2) { transform: translateY(-26px); }
+  @media (max-width: 900px) { .phone:nth-child(3) { display: none; } }
+
+  /* self-repair loop */
+  .loop { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; position: relative; }
+  .loop::before { content: ''; position: absolute; left: 8%; right: 8%; top: 41px; height: 2px; background: linear-gradient(90deg, transparent, rgba(139,116,255,.6), rgba(46,230,255,.6), transparent); }
+  .lstep { position: relative; text-align: center; padding: 0 8px; }
+  .lstep .n { width: 82px; height: 82px; margin: 0 auto 18px; border-radius: 24px; display: grid; place-items: center; background: #0f0e1a; border: 1px solid var(--border-strong); box-shadow: 0 0 0 6px var(--bg), 0 20px 40px -14px rgba(139,116,255,.5); color: var(--ci, #b9a8ff); }
+  .lstep .n svg { width: 30px; height: 30px; }
+  .lstep h3 { margin: 0 0 6px; font-size: 17px; }
+  .lstep p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  @media (max-width: 800px) { .loop { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); row-gap: 34px; } .loop::before { display: none; } }
+
+  /* steps */
   .steps { counter-reset: s; display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   @media (max-width: 800px) { .steps { grid-template-columns: minmax(0, 1fr); } }
-  .step { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 22px 22px 70px; }
-  .step::before { counter-increment: s; content: counter(s); position: absolute; left: 22px; top: 22px; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; background: rgba(139,116,255,0.16); color: #b9a8ff; }
-  .step h3 { margin: 4px 0 6px; font-size: 17px; }
+  .step { position: relative; background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015)); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px; }
+  .step::before { counter-increment: s; content: '0' counter(s); display: block; font-size: 38px; font-weight: 900; letter-spacing: -.04em; line-height: 1; margin-bottom: 18px; background: linear-gradient(135deg, #b9a8ff, #2ee6ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .step h3 { margin: 0 0 6px; font-size: 18px; }
   .step p { margin: 0; color: var(--muted); font-size: 15px; }
   code { font: 13px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; color: var(--text-2); }
-
-  .table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 14px; }
-  .table-wrap { margin-top: 14px; overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 18px; }
-  .table th, .table td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .table-wrap { margin-top: 14px; overflow-x: auto; background: rgba(255,255,255,.025); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 18px; }
+  .table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .table th, .table td { text-align: left; padding: 13px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   .table tr:last-child td { border-bottom: 0; }
   .table th { color: var(--muted); font-weight: 600; font-size: 13px; }
 
-  .final { margin: 96px 0 0; padding: 48px 24px; text-align: center; border-radius: 28px; border: 1px solid var(--border-strong); background: radial-gradient(60% 120% at 50% 0%, rgba(139,116,255,0.22), transparent 70%), var(--surface); }
-  .final h2 { margin-bottom: 8px; }
-  footer { padding: 48px 0 56px; color: var(--muted); font-size: 13px; }
-  footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; }
-  footer p { margin: 0; max-width: 640px; }
+  /* faq */
+  .faq { max-width: 820px; margin: 0 auto; display: grid; gap: 10px; }
+  details { border: 1px solid var(--border); border-radius: 16px; background: rgba(255,255,255,.025); transition: border-color .2s, background .2s; }
+  details[open] { border-color: var(--border-strong); background: rgba(255,255,255,.04); }
+  summary { cursor: pointer; list-style: none; padding: 18px 22px; font-weight: 650; font-size: 16px; display: flex; align-items: center; gap: 12px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: '+'; margin-left: auto; font-size: 22px; font-weight: 400; color: var(--muted); transition: transform .25s var(--ease); }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p { margin: 0; padding: 0 22px 20px; color: var(--text-2); font-size: 15px; }
 
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+  .final { position: relative; overflow: hidden; margin: 130px 0 0; padding: 72px 24px; text-align: center; border-radius: 32px; border: 1px solid var(--border-strong); background: radial-gradient(60% 120% at 50% 0%, rgba(139,116,255,0.32), transparent 70%), radial-gradient(40% 80% at 90% 100%, rgba(46,230,255,.14), transparent 70%), #0e0d18; }
+  .final img { width: 72px; height: 72px; border-radius: 20px; box-shadow: 0 18px 60px rgba(139, 116, 255, 0.5); }
+  .final h2 { margin: 22px 0 10px; }
+  .final .sub { max-width: 620px; margin: 0 auto 30px; }
+  footer { padding: 56px 0 64px; color: var(--muted); font-size: 13px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; }
+  footer p { margin: 0; max-width: 680px; }
+
+  /* reveal */
+  .rv { opacity: 0; transform: translateY(26px); transition: opacity .9s var(--ease), transform .9s var(--ease); transition-delay: var(--d, 0s); }
+  .rv.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    .rv { opacity: 1; transform: none; }
+    .win { transform: none; }
+  }
 </style>
 </head>
 <body>
+<div class="bg" aria-hidden="true"><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div></div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <symbol id="i-win" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5.5 10.5 4.4v7.1H3zm8.5-1.2L21 3v8.5h-9.5zM3 12.5h7.5v7.1L3 18.5zm8.5 0H21V21l-9.5-1.3z"/></symbol>
@@ -159,172 +324,328 @@
     <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
     <symbol id="i-mouse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 4 7.07 17 2.51-7.39L21 11.07z"/></symbol>
     <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
-    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
     <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16M18 17V9M13 17V5M8 17v-3"/></symbol>
     <symbol id="i-radar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34M4 6h.01M2.29 9.62A10 10 0 1 0 21.31 8.35M16.24 7.76A6 6 0 1 0 8.23 16.67M12 18h.01M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></symbol>
-    <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 12 3l9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-msg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-bug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2 1.88 1.88M14.12 3.88 16 2M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6M12 20v-9M6.53 9C4.6 8.8 3 7.1 3 5M6 13H2M3 21c0-2.1 1.7-3.9 3.8-4M20.97 5c0 2.1-1.6 3.8-3.5 4M22 13h-4M17.2 17c2.1.1 3.8 1.9 3.8 4"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 4-1 1M3 21l11-11M18 2v4M16 4h4M20 9v2M19 10h2M10 2v2M9 3h2"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16M16 16h5v5"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.56-2.5 5.56-5.55C21.97 6.01 17.46 2 12 2"/></symbol>
   </defs>
 </svg>
 
-<header class="top">
+<header class="top" id="top">
   <div class="wrap">
     <a class="brand" href="#"><img src="img/icon-192.png" alt="" />ALTTER</a>
     <nav>
       <a class="hide-sm" href="#features"><span lang="en">Features</span><span lang="pl">Funkcje</span></a>
+      <a class="hide-sm" href="#teams"><span lang="en">For teams</span><span lang="pl">Dla firm</span></a>
       <a class="hide-sm" href="#start"><span lang="en">Get started</span><span lang="pl">Jak zacząć</span></a>
+      <a class="hide-sm" href="#faq">FAQ</a>
       <a href="https://github.com/QWTR/alter" aria-label="GitHub"><svg width="18" height="18" style="vertical-align:-3px"><use href="#i-gh"/></svg></a>
       <span class="lang" role="group" aria-label="Language"><button data-set="pl">PL</button><button data-set="en">EN</button></span>
+      <a class="dl hide-sm" href="#download"><span lang="en">Download</span><span lang="pl">Pobierz</span></a>
     </nav>
   </div>
 </header>
 
 <main>
   <div class="wrap hero">
-    <img class="logo" src="img/icon.png" alt="ALTTER" />
-    <div><span class="pill"><i></i><span lang="en">Version 0.13 · free &amp; open source</span><span lang="pl">Wersja 0.13 · darmowe i open source</span></span></div>
-    <h1>
-      <span lang="en">Your personal AI, on the <span class="g">subscription you already have</span></span>
-      <span lang="pl">Twoje osobiste AI na <span class="g">subskrypcji, którą już masz</span></span>
+    <a class="pill rv" href="#teams"><b><span lang="en">New</span><span lang="pl">Nowość</span></b><span lang="en">v0.15 · Company workspace, invoices &amp; self-repair</span><span lang="pl">v0.15 · Workspace dla firm, faktury i samonaprawa</span></a>
+    <h1 class="rv" style="--d:.06s">
+      <span lang="en">Your own AI.<br /><span class="g">On the subscription you already pay for.</span></span>
+      <span lang="pl">Twoje własne AI.<br /><span class="g">Na subskrypcji, którą już płacisz.</span></span>
     </h1>
-    <p class="lead">
-      <span lang="en">Plug in Claude, ChatGPT or Gemini with your normal account, with no API keys. You get one assistant on your computer and your phone that remembers you, runs agents in the background, builds websites and videos and generates images.</span>
-      <span lang="pl">Podłączasz Claude, ChatGPT albo Gemini zwykłym logowaniem, bez kluczy API. Dostajesz jednego asystenta na komputerze i telefonie: pamięta Cię, prowadzi agentów w tle, robi strony, wideo i obrazy.</span>
+    <p class="lead rv" style="--d:.12s">
+      <span lang="en">Plug in Claude, ChatGPT or Gemini with your normal account, no API keys. One assistant on your computer, your phone and with your team: it remembers you, runs agents in the background, plans the work and builds websites, videos and images.</span>
+      <span lang="pl">Podłączasz Claude, ChatGPT albo Gemini zwykłym logowaniem, bez kluczy API. Jeden asystent na komputerze, telefonie i w zespole: pamięta Cię, prowadzi agentów w tle, planuje pracę i robi strony, wideo oraz obrazy.</span>
     </p>
-    <div class="cta" id="download">
+    <div class="cta rv" style="--d:.18s" id="download">
       <a class="btn primary" href="https://github.com/QWTR/alter/releases/latest/download/ALTTER-Setup.exe">
         <svg><use href="#i-win"/></svg>
-        <span><span lang="en">Download for Windows</span><span lang="pl">Pobierz na Windows</span><small>.exe · 116 MB · Windows 10/11</small></span>
+        <span><span lang="en">Download for Windows</span><span lang="pl">Pobierz na Windows</span><small>.exe · Windows 10/11</small></span>
       </a>
       <a class="btn" href="https://github.com/QWTR/alter/releases/latest/download/ALTTER.apk">
         <svg style="color:#3ddc84"><use href="#i-android"/></svg>
-        <span><span lang="en">Download for Android</span><span lang="pl">Pobierz na Androida</span><small>.apk · 6 MB · Android 7+</small></span>
+        <span><span lang="en">Download for Android</span><span lang="pl">Pobierz na Androida</span><small>.apk · Android 7+</small></span>
       </a>
     </div>
-    <p class="fine">
-      <span lang="en">No account, no cloud of ours: everything stays on your computer. <a href="https://github.com/QWTR/alter/releases">All releases</a> · <a href="https://github.com/QWTR/alter">Source code</a></span>
-      <span lang="pl">Bez konta i bez naszej chmury: wszystko zostaje na Twoim komputerze. <a href="https://github.com/QWTR/alter/releases">Wszystkie wersje</a> · <a href="https://github.com/QWTR/alter">Kod źródłowy</a></span>
+    <p class="fine rv" style="--d:.22s">
+      <span lang="en">Free and open source. No account, no cloud of ours. <a href="https://github.com/QWTR/alter/releases">All releases</a></span>
+      <span lang="pl">Za darmo i open source. Bez konta i bez naszej chmury. <a href="https://github.com/QWTR/alter/releases">Wszystkie wersje</a></span>
     </p>
+    <div class="works rv" style="--d:.26s">
+      <span lang="en">Works with</span><span lang="pl">Działa z</span>
+      <span class="chip"><i style="background:#d97757"></i>Claude</span>
+      <span class="chip"><i style="background:#10a37f"></i>ChatGPT · Codex</span>
+      <span class="chip"><i style="background:#4f8cff"></i>Gemini</span>
+    </div>
 
-    <div class="shots" aria-label="Screenshots">
-      <div class="phone"><img src="img/studio.jpg" width="720" height="1440" loading="lazy" alt="Studio" /></div>
-      <div class="phone"><img src="img/media.jpg" width="720" height="1440" alt="Images & video" /></div>
-      <div class="phone"><img src="img/gallery.jpg" width="720" height="1440" alt="Gallery" /></div>
-      <div class="phone"><img src="img/prompts.jpg" width="720" height="1440" loading="lazy" alt="Prompt library" /></div>
+    <div class="stage" id="stage">
+      <div class="win" aria-hidden="true">
+        <div class="win-bar"><i></i><i></i><i></i><span>ALTTER</span></div>
+        <div class="win-body">
+          <div class="m-side">
+            <div class="m-brand"><img src="img/icon-192.png" alt="" />ALTTER</div>
+            <div class="m-item"><svg><use href="#i-home"/></svg><span lang="en">Home</span><span lang="pl">Start</span></div>
+            <div class="m-item on"><svg><use href="#i-msg"/></svg><span lang="en">Chats</span><span lang="pl">Czaty</span></div>
+            <div class="m-item"><svg><use href="#i-users"/></svg>Workspace</div>
+            <div class="m-item"><svg><use href="#i-film"/></svg>Studio</div>
+            <div class="m-item"><svg><use href="#i-bot"/></svg><span lang="en">Agents</span><span lang="pl">Agenci</span></div>
+            <div class="m-item"><svg><use href="#i-image"/></svg><span lang="en">Images &amp; video</span><span lang="pl">Obrazy i wideo</span></div>
+            <div class="m-item"><svg><use href="#i-radar"/></svg><span lang="en">Automations</span><span lang="pl">Automatyzacje</span></div>
+            <div class="m-item"><svg><use href="#i-brain"/></svg><span lang="en">Memory</span><span lang="pl">Pamięć</span></div>
+            <div class="m-sep"><span lang="en">PROJECTS</span><span lang="pl">PROJEKTY</span></div>
+            <div class="m-item"><i class="m-dot" style="background:#8b74ff"></i>Bakery Online</div>
+            <div class="m-item"><i class="m-dot" style="background:#2ee6ff"></i><span lang="en">Spring campaign</span><span lang="pl">Kampania wiosna</span></div>
+            <div class="m-foot"><i class="m-dot" style="background:#3ddc97"></i><b>Claude</b> · <span lang="en">Connected</span><span lang="pl">Połączono</span></div>
+          </div>
+          <div class="m-main">
+            <div class="m-head"><span lang="en">Plan my week</span><span lang="pl">Zaplanuj mój tydzień</span><span class="tag"><i class="m-dot" style="background:#d97757;margin:0"></i>Claude · Opus</span></div>
+            <div class="m-chat">
+              <div class="bubble"><span lang="en">Plan my week around the bakery launch and put it in my calendar.</span><span lang="pl">Zaplanuj mi tydzień pod premierę piekarni i wrzuć to do kalendarza.</span></div>
+              <div class="ai">
+                <div class="av">A</div>
+                <div>
+                  <span class="tool"><i></i>Google Calendar · <span lang="en">3 events added</span><span lang="pl">dodano 3 wydarzenia</span></span><span class="tool"><i></i><span lang="en">Memory · launch on Thu</span><span lang="pl">Pamięć · premiera w czw.</span></span>
+                  <p><span lang="en">Done. Mornings stay free for deep work, and the launch is on Thursday as you said:</span><span lang="pl">Gotowe. Poranki zostawiłem na skupioną pracę, a premiera jest w czwartek, tak jak mówiłeś:</span></p>
+                  <div class="sched">
+                    <div><h5><span lang="en">Tue · 25.11</span><span lang="pl">Wt · 25.11</span></h5><div class="ev" style="--c:#8b74ff">09:00 <span lang="en">Landing page copy</span><span lang="pl">Teksty na stronę</span><small><span lang="en">focus</span><span lang="pl">skupienie</span></small></div><div class="ev" style="--c:#2ee6ff">14:00 <span lang="en">Call with printer</span><span lang="pl">Rozmowa z drukarnią</span><small><span lang="en">meeting</span><span lang="pl">spotkanie</span></small></div></div>
+                    <div><h5><span lang="en">Wed · 26.11</span><span lang="pl">Śr · 26.11</span></h5><div class="ev" style="--c:#ff7ab6">10:00 <span lang="en">Reel shoot</span><span lang="pl">Nagranie rolki</span><small>Studio</small></div><div class="ev" style="--c:#3ddc97">16:00 <span lang="en">Invoice for flour</span><span lang="pl">Faktura za mąkę</span><small><span lang="en">task</span><span lang="pl">zadanie</span></small></div></div>
+                    <div><h5><span lang="en">Thu · 27.11</span><span lang="pl">Czw · 27.11</span></h5><div class="ev" style="--c:#ffb547">08:00 <span lang="en">Launch day</span><span lang="pl">Dzień premiery</span><small>deadline</small></div><div class="ev" style="--c:#8b74ff">12:00 <span lang="en">Post the reel</span><span lang="pl">Publikacja rolki</span><small><span lang="en">agent</span><span lang="pl">agent</span></small></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="m-input"><span class="caret"></span><span lang="en">Ask ALTTER anything…</span><span lang="pl">Napisz do ALTTER-a…</span><span class="m-pills"><span>Claude</span><span><span lang="en">Full control</span><span lang="pl">Pełna kontrola</span></span></span><span class="send"><svg><use href="#i-send"/></svg></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="float-card"><b><i></i><span lang="en">Morning brief · done</span><span lang="pl">Poranny brief · gotowe</span></b><p><span lang="en">4 new emails, 1 invoice paid, the site is up. Have a good day.</span><span lang="pl">4 nowe maile, 1 faktura opłacona, strona działa. Miłego dnia.</span></p></div>
+      <div class="float-phone"><img src="img/studio.jpg" width="720" height="1440" alt="" /></div>
+    </div>
+  </div>
+
+  <div class="marquee" aria-label="Integrations">
+    <p class="marquee-label"><span lang="en">Connects to the tools you already use</span><span lang="pl">Łączy się z narzędziami, których już używasz</span></p>
+    <div class="track">
+      <span>Google Calendar</span><span>Gmail</span><span>Google Drive</span><span>Notion</span><span>Slack</span><span>GitHub</span><span>Microsoft 365</span><span>Outlook</span><span>Telegram</span><span>Discord</span><span>WhatsApp Business</span><span>inFakt</span><span>wFirma</span><span>KSeF</span><span>Allegro</span><span>WooCommerce</span><span>Stripe</span><span>HubSpot</span><span>Figma</span><span>Canva</span><span>Linear</span><span>Postgres</span>
+      <span>Google Calendar</span><span>Gmail</span><span>Google Drive</span><span>Notion</span><span>Slack</span><span>GitHub</span><span>Microsoft 365</span><span>Outlook</span><span>Telegram</span><span>Discord</span><span>WhatsApp Business</span><span>inFakt</span><span>wFirma</span><span>KSeF</span><span>Allegro</span><span>WooCommerce</span><span>Stripe</span><span>HubSpot</span><span>Figma</span><span>Canva</span><span>Linear</span><span>Postgres</span>
     </div>
   </div>
 
   <section id="features">
     <div class="wrap">
-      <p class="kicker"><span lang="en">What it does</span><span lang="pl">Co potrafi</span></p>
-      <h2><span lang="en">One assistant that actually does things</span><span lang="pl">Jeden asystent, który naprawdę coś robi</span></h2>
-      <p class="sub"><span lang="en">Not another chat window. ALTTER knows you, works while you are away and shows everything on every device, live.</span><span lang="pl">Nie kolejne okno czatu. ALTTER Cię zna, pracuje, kiedy Cię nie ma, i pokazuje wszystko na każdym urządzeniu na żywo.</span></p>
+      <div class="head rv">
+        <p class="kicker"><span lang="en">What it does</span><span lang="pl">Co potrafi</span></p>
+        <h2><span lang="en">Not another chat window.<br />An assistant that gets things done.</span><span lang="pl">Nie kolejne okno czatu.<br />Asystent, który robi robotę.</span></h2>
+        <p class="sub"><span lang="en">ALTTER knows you, works while you are away and shows everything on every device, live.</span><span lang="pl">ALTTER Cię zna, pracuje, kiedy Cię nie ma, i pokazuje wszystko na każdym urządzeniu na żywo.</span></p>
+      </div>
 
-      <div class="grid">
-        <div class="card wide">
+      <div class="bento">
+        <div class="tile w4 rv">
           <div class="ico"><svg><use href="#i-key"/></svg></div>
           <h3><span lang="en">Your subscription, no API keys</span><span lang="pl">Twoja subskrypcja, bez kluczy API</span></h3>
-          <p><span lang="en">ALTTER drives the official Claude Code, Codex and Gemini CLIs logged in with your account, so there is no extra bill. Switch AI mid-conversation. When one hits its limit, ALTTER asks or moves to another.</span><span lang="pl">ALTTER korzysta z oficjalnych Claude Code, Codex i Gemini CLI zalogowanych na Twoje konto, więc nie ma dodatkowych rachunków. AI zmienisz w trakcie rozmowy, a gdy jednemu skończy się limit, ALTTER zapyta albo przełączy na inne.</span></p>
+          <p><span lang="en">ALTTER drives the official Claude Code, Codex and Gemini CLIs signed in with your account, so there is no extra bill. Switch AI mid-conversation; when one hits its limit, ALTTER moves to another.</span><span lang="pl">ALTTER korzysta z oficjalnych Claude Code, Codex i Gemini CLI zalogowanych na Twoje konto, więc nie ma dodatkowych rachunków. AI zmienisz w trakcie rozmowy, a gdy jednemu skończy się limit, ALTTER przełączy na inne.</span></p>
+          <div class="viz ai-row">
+            <span class="ai-pill"><i style="background:#d97757"></i>Claude <small>Pro / Max</small></span>
+            <span class="ai-pill"><i style="background:#10a37f"></i>ChatGPT <small>Plus / Pro</small></span>
+            <span class="ai-pill"><i style="background:#4f8cff"></i>Gemini <small><span lang="en">free / AI Pro</span><span lang="pl">darmowe / AI Pro</span></small></span>
+          </div>
         </div>
-        <div class="card">
+        <div class="tile rv" style="--d:.06s">
           <div class="ico"><svg><use href="#i-brain"/></svg></div>
           <h3><span lang="en">Memory</span><span lang="pl">Pamięć</span></h3>
-          <p><span lang="en">It learns who you are, your projects and habits. You never explain twice, and you can edit or delete anything.</span><span lang="pl">Uczy się, kim jesteś, jakie masz projekty i nawyki. Nie tłumaczysz dwa razy, a wszystko możesz edytować i usunąć.</span></p>
+          <p><span lang="en">It learns who you are. You never explain twice.</span><span lang="pl">Uczy się, kim jesteś. Nie tłumaczysz dwa razy.</span></p>
+          <div class="viz mem"><span lang="en">runs a bakery</span><span lang="pl">prowadzi piekarnię</span><span lang="en">likes short answers</span><span lang="pl">lubi krótkie odpowiedzi</span><span lang="en">launch on Thu</span><span lang="pl">premiera w czw.</span></div>
         </div>
-        <div class="card" style="--c:rgba(46,230,255,.12);--ci:#7eeeff">
+        <div class="tile w3 rv" style="--c:rgba(46,230,255,.12);--ci:#7eeeff">
           <div class="ico"><svg><use href="#i-bot"/></svg></div>
-          <h3><span lang="en">Agents &amp; groups</span><span lang="pl">Agenci i grupy</span></h3>
-          <p><span lang="en">Morning brief, inbox triage, reel ideas, on a schedule. Mention a group with @ and its lead splits the work, even across different AIs.</span><span lang="pl">Poranny brief, maile, pomysły na rolki, według harmonogramu. Grupę wołasz przez @, a lider dzieli pracę, nawet między różne AI.</span></p>
+          <h3><span lang="en">Agents that work on a schedule</span><span lang="pl">Agenci, którzy pracują sami</span></h3>
+          <p><span lang="en">Morning brief, inbox triage, reel ideas. Mention a group with @ and its lead splits the work, even across different AIs.</span><span lang="pl">Poranny brief, maile, pomysły na rolki. Grupę wołasz przez @, a lider dzieli pracę, nawet między różne AI.</span></p>
+          <div class="viz agents">
+            <div class="agent"><span class="st"></span><span lang="en">Morning brief</span><span lang="pl">Poranny brief</span><em>07:30</em></div>
+            <div class="agent"><span class="st run"></span><span lang="en">Inbox triage</span><span lang="pl">Porządek w mailach</span><em><span lang="en">working…</span><span lang="pl">pracuje…</span></em></div>
+            <div class="agent"><span class="st"></span><span lang="en">Site watch</span><span lang="pl">Strażnik strony</span><em><span lang="en">every 5 min</span><span lang="pl">co 5 min</span></em></div>
+          </div>
         </div>
-        <div class="card" style="--c:rgba(255,122,182,.13);--ci:#ff9cc8">
+        <div class="tile w3 rv" style="--c:rgba(255,122,182,.13);--ci:#ff9cc8;--d:.06s">
           <div class="ico"><svg><use href="#i-film"/></svg></div>
-          <h3><span lang="en">Studio</span><span lang="pl">Studio</span></h3>
-          <p><span lang="en">Websites with a live preview: tap an element and say what to change. Reels, motion graphics and 3D from one sentence.</span><span lang="pl">Strony z podglądem na żywo: klikasz element i mówisz, co zmienić. Rolki, motion graphics i 3D z jednego zdania.</span></p>
+          <h3>Studio</h3>
+          <p><span lang="en">Websites with a live preview: tap an element and say what to change. Reels, motion graphics and 3D from one sentence. Images are free, and with your own key you get FLUX, Kling, Veo and GPT Image.</span><span lang="pl">Strony z podglądem na żywo: klikasz element i mówisz, co zmienić. Rolki, motion graphics i 3D z jednego zdania. Obrazy są za darmo, a na własnym kluczu masz FLUX, Kling, Veo i GPT Image.</span></p>
         </div>
-        <div class="card" style="--c:rgba(255,170,60,.13);--ci:#ffc070">
+        <div class="tile rv" style="--c:rgba(255,170,60,.13);--ci:#ffc070">
           <div class="ico"><svg><use href="#i-mouse"/></svg></div>
           <h3><span lang="en">Agents on your screen</span><span lang="pl">Agenci na ekranie</span></h3>
-          <p><span lang="en">With Full control they use the computer like a person: Blender, Excel, the browser. Each one has its own visible, named cursor.</span><span lang="pl">Z Pełną kontrolą używają komputera jak człowiek: Blender, Excel, przeglądarka. Każdy ma swój widoczny kursor z imieniem.</span></p>
+          <p><span lang="en">With Full control they use the computer like a person, each with its own named cursor.</span><span lang="pl">Z Pełną kontrolą używają komputera jak człowiek, każdy z własnym kursorem.</span></p>
         </div>
-        <div class="card" style="--c:rgba(46,230,255,.12);--ci:#7eeeff">
-          <div class="ico"><svg><use href="#i-image"/></svg></div>
-          <h3><span lang="en">Images &amp; video</span><span lang="pl">Obrazy i wideo</span></h3>
-          <p><span lang="en">Images are free, with no key. With your own key you get FLUX, Kling, Veo, GPT Image and Gemini. The AI in any chat can make them too.</span><span lang="pl">Obrazy są za darmo, bez klucza. Na własnym kluczu dostajesz FLUX, Kling, Veo, GPT Image i Gemini. AI w czacie też je zrobi.</span></p>
-        </div>
-        <div class="card">
-          <div class="ico"><svg><use href="#i-book"/></svg></div>
-          <h3><span lang="en">Prompt library</span><span lang="pl">Biblioteka promptów</span></h3>
-          <p><span lang="en">Ready prompts and your own, with blanks to fill in. One tap sends one to a chat or to Images &amp; video.</span><span lang="pl">Gotowe prompty i Twoje własne, z polami do uzupełnienia. Jedno stuknięcie i lecą do czatu albo do obrazów.</span></p>
-        </div>
-        <div class="card" style="--c:rgba(61,220,151,.12);--ci:#6fe9b4">
+        <div class="tile rv" style="--c:rgba(61,220,151,.12);--ci:#6fe9b4;--d:.06s">
           <div class="ico"><svg><use href="#i-chart"/></svg></div>
           <h3><span lang="en">Token usage</span><span lang="pl">Zużycie tokenów</span></h3>
-          <p><span lang="en">What Claude Code, Codex and Gemini CLI used on this computer, per day, model and project. It is read locally and never sent anywhere.</span><span lang="pl">Ile zużyły Claude Code, Codex i Gemini CLI na tym komputerze, dziennie, per model i projekt. Liczone lokalnie, nic nie jest wysyłane.</span></p>
+          <p><span lang="en">Per day, model and project. Counted locally.</span><span lang="pl">Dziennie, per model i projekt. Liczone lokalnie.</span></p>
+          <div class="viz bars"><i style="--h:40%"></i><i style="--h:62%"></i><i style="--h:35%"></i><i style="--h:80%"></i><i style="--h:55%"></i><i style="--h:92%"></i><i style="--h:68%"></i></div>
         </div>
-        <div class="card" style="--c:rgba(255,122,182,.13);--ci:#ff9cc8">
-          <div class="ico"><svg><use href="#i-radar"/></svg></div>
-          <h3><span lang="en">Automations</span><span lang="pl">Automatyzacje</span></h3>
-          <p><span lang="en">It watches sites, servers and ports. When something breaks, an agent finds the cause from your computer and fixes it.</span><span lang="pl">Pilnuje stron, serwerów i portów. Gdy coś padnie, agent znajduje przyczynę z Twojego komputera i naprawia.</span></p>
-        </div>
-        <div class="card" style="--c:rgba(255,170,60,.13);--ci:#ffc070">
-          <div class="ico"><svg><use href="#i-folder"/></svg></div>
-          <h3><span lang="en">Projects</span><span lang="pl">Projekty</span></h3>
-          <p><span lang="en">Their own chats, agents, memory and a real folder. Import a folder, repo or link and every chat already knows it.</span><span lang="pl">Własne czaty, agenci, pamięć i prawdziwy folder. Importujesz folder, repo albo link i każdy czat już go zna.</span></p>
-        </div>
-        <div class="card">
+        <div class="tile rv" style="--d:.12s">
           <div class="ico"><svg><use href="#i-lock"/></svg></div>
           <h3><span lang="en">You decide the access</span><span lang="pl">Ty decydujesz o dostępie</span></h3>
-          <p><span lang="en">Every chat and agent runs as Chat only, Read files &amp; web, or Full control.</span><span lang="pl">Każdy czat i agent działa jako Tylko czat, Odczyt plików i sieci albo Pełna kontrola.</span></p>
+          <div class="viz access">
+            <div><b></b><span lang="en">Chat only</span><span lang="pl">Tylko czat</span></div>
+            <div><b></b><span lang="en">Read files &amp; web</span><span lang="pl">Odczyt plików i sieci</span></div>
+            <div class="on"><b></b><span lang="en">Full control</span><span lang="pl">Pełna kontrola</span></div>
+          </div>
         </div>
-        <div class="card full" style="--c:rgba(61,220,151,.12);--ci:#6fe9b4">
-          <div class="ico"><svg><use href="#i-phone"/></svg></div>
-          <h3><span lang="en">Your phone, live</span><span lang="pl">Telefon, na żywo</span></h3>
-          <p><span lang="en">The Android app shows everything on your computer, live in both directions. Pair it once by scanning a QR code. At home it connects over Wi-Fi, and anywhere else through your own relay. Dictation and voice conversation included.</span><span lang="pl">Aplikacja na Androida pokazuje wszystko z komputera, na żywo w obie strony. Parujesz raz, skanując kod QR. W domu łączy przez Wi-Fi, a wszędzie indziej przez Twój relay. Dyktowanie i rozmowa głosowa w zestawie.</span></p>
+        <div class="tile w3 rv" style="--c:rgba(255,122,182,.13);--ci:#ff9cc8">
+          <div class="ico"><svg><use href="#i-radar"/></svg></div>
+          <h3><span lang="en">Automations that fix things</span><span lang="pl">Automatyzacje, które naprawiają</span></h3>
+          <p><span lang="en">It watches sites, servers and ports. When something breaks, an agent finds the cause from your computer and fixes it.</span><span lang="pl">Pilnuje stron, serwerów i portów. Gdy coś padnie, agent znajduje przyczynę z Twojego komputera i naprawia.</span></p>
         </div>
+        <div class="tile w3 rv" style="--c:rgba(139,116,255,.15);--d:.06s">
+          <div class="ico"><svg><use href="#i-palette"/></svg></div>
+          <h3><span lang="en">Make it yours</span><span lang="pl">Po swojemu</span></h3>
+          <p><span lang="en">Several themes, light and dark, six languages and projects with their own folder, chats, agents and memory.</span><span lang="pl">Kilka motywów, jasny i ciemny, sześć języków i projekty z własnym folderem, czatami, agentami i pamięcią.</span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="teams">
+    <div class="wrap split">
+      <div class="rv">
+        <p class="kicker"><span lang="en">For teams</span><span lang="pl">Dla firm</span></p>
+        <h2><span lang="en">Run the company in the same app.</span><span lang="pl">Cała firma w tej samej aplikacji.</span></h2>
+        <p class="sub" style="margin-bottom:28px"><span lang="en">Invite people with a link or a QR code. They join in the app, and the AI works next to them.</span><span lang="pl">Zapraszasz ludzi linkiem albo kodem QR. Dołączają w aplikacji, a AI pracuje obok nich.</span></p>
+        <ul class="checks">
+          <li><svg><use href="#i-check"/></svg><span><b><span lang="en">Tasks for people and agents.</span><span lang="pl">Zadania dla ludzi i agentów.</span></b> <span lang="en">A board with drag &amp; drop, deadlines and comments. The AI plans a whole project from one sentence.</span><span lang="pl">Tablica z przeciąganiem, terminami i komentarzami. AI rozpisze cały projekt z jednego zdania.</span></span></li>
+          <li><svg><use href="#i-check"/></svg><span><b><span lang="en">Invoices, quotes and orders.</span><span lang="pl">Faktury, oferty i zlecenia.</span></b> <span lang="en">VAT, numbering, PDF and paid / overdue at a glance.</span><span lang="pl">VAT, numeracja, PDF i od razu widać, co zapłacone, a co po terminie.</span></span></li>
+          <li><svg><use href="#i-check"/></svg><span><b><span lang="en">Departments, documents and reports.</span><span lang="pl">Działy, dokumenty i raporty.</span></b> <span lang="en">Weekly reports written for you.</span><span lang="pl">Raporty tygodniowe pisze za Ciebie.</span></span></li>
+          <li><svg><use href="#i-check"/></svg><span><b><span lang="en">Calendar for everyone.</span><span lang="pl">Kalendarz dla wszystkich.</span></b> <span lang="en">Every deadline lands in Google, Outlook or Apple Calendar.</span><span lang="pl">Każdy termin ląduje w Google, Outlook albo Apple.</span></span></li>
+        </ul>
+      </div>
+      <div class="panel rv" style="--d:.1s" aria-hidden="true">
+        <div class="panel-tabs"><span><span lang="en">Chat</span><span lang="pl">Czat</span></span><span class="on"><span lang="en">Tasks</span><span lang="pl">Zadania</span></span><span><span lang="en">Docs</span><span lang="pl">Dokumenty</span></span><span><span lang="en">Invoices</span><span lang="pl">Faktury</span></span><span><span lang="en">Calendar</span><span lang="pl">Kalendarz</span></span></div>
+        <div class="kanban">
+          <div class="col">
+            <h6><i style="background:#8c89a3"></i><span lang="en">To do</span><span lang="pl">Do zrobienia</span><em>3</em></h6>
+            <div class="task"><span lang="en">Price list for Q1</span><span lang="pl">Cennik na Q1</span><div class="meta"><span class="who" style="background:#ffb547">M</span>2.12<span class="pr" style="background:rgba(255,107,129,.15);color:#ff8fa1">!!</span></div></div>
+            <div class="task"><span lang="en">Supplier contract</span><span lang="pl">Umowa z dostawcą</span><div class="meta"><span class="who" style="background:#7eeeff">K</span>5.12</div></div>
+          </div>
+          <div class="col">
+            <h6><i style="background:#8b74ff"></i><span lang="en">Doing</span><span lang="pl">W trakcie</span><em>2</em></h6>
+            <div class="task drag"><span lang="en">Instagram reel</span><span lang="pl">Rolka na Instagram</span><div class="meta"><span class="who" style="background:linear-gradient(135deg,#8b74ff,#2ee6ff)">AI</span><span lang="en">agent</span><span lang="pl">agent</span></div></div>
+            <div class="task"><span lang="en">New website</span><span lang="pl">Nowa strona</span><div class="meta"><span class="who" style="background:#ff9cc8">J</span>28.11</div></div>
+          </div>
+          <div class="col">
+            <h6><i style="background:#3ddc97"></i><span lang="en">Done</span><span lang="pl">Gotowe</span><em>4</em></h6>
+            <div class="task" style="opacity:.6"><span lang="en">Weekly report</span><span lang="pl">Raport tygodniowy</span><div class="meta"><span class="who" style="background:linear-gradient(135deg,#8b74ff,#2ee6ff)">AI</span>✓</div></div>
+            <div class="task" style="opacity:.6"><span lang="en">Invoice FV/12</span><span lang="pl">Faktura FV/12</span><div class="meta"><span class="who" style="background:#ffb547">M</span>✓</div></div>
+          </div>
+        </div>
+        <div class="inv">
+          <div><small><span lang="en">Invoiced</span><span lang="pl">Zafakturowano</span></small><b>48 200 zł</b></div>
+          <div><small><span lang="en">Paid</span><span lang="pl">Zapłacono</span></small><b style="color:#6fe9b4">41 900 zł</b></div>
+          <div><small><span lang="en">Overdue</span><span lang="pl">Po terminie</span></small><b style="color:#ff8fa1">1 230 zł</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="phone">
+    <div class="wrap split rev">
+      <div class="phones rv" aria-label="Screenshots">
+        <div class="phone"><img src="img/media.jpg" width="720" height="1440" loading="lazy" alt="Images &amp; video" /></div>
+        <div class="phone"><img src="img/gallery.jpg" width="720" height="1440" loading="lazy" alt="Gallery" /></div>
+        <div class="phone"><img src="img/prompts.jpg" width="720" height="1440" loading="lazy" alt="Prompt library" /></div>
+      </div>
+      <div class="rv" style="--d:.08s">
+        <p class="kicker"><span lang="en">Your phone</span><span lang="pl">Telefon</span></p>
+        <h2><span lang="en">Your computer's AI, in your pocket.</span><span lang="pl">AI z komputera w Twojej kieszeni.</span></h2>
+        <p class="sub" style="margin-bottom:28px"><span lang="en">The Android app shows everything on your computer, live in both directions. Pair it once with a QR code.</span><span lang="pl">Aplikacja na Androida pokazuje wszystko z komputera, na żywo w obie strony. Parujesz raz kodem QR.</span></p>
+        <ul class="checks">
+          <li><svg><use href="#i-check"/></svg><span><span lang="en">Wi-Fi at home, your own relay anywhere else.</span><span lang="pl">W domu przez Wi-Fi, poza domem przez Twój relay.</span></span></li>
+          <li><svg><use href="#i-check"/></svg><span><span lang="en">Dictation and voice conversation.</span><span lang="pl">Dyktowanie i rozmowa głosowa.</span></span></li>
+          <li><svg><use href="#i-check"/></svg><span><span lang="en">Notifications when an agent finishes.</span><span lang="pl">Powiadomienia, gdy agent skończy.</span></span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="repair">
+    <div class="wrap">
+      <div class="head c rv">
+        <p class="kicker"><span lang="en">Self-repair</span><span lang="pl">Samonaprawa</span></p>
+        <h2><span lang="en">Found a bug? ALTTER fixes itself.</span><span lang="pl">Znalazłeś błąd? ALTTER naprawi się sam.</span></h2>
+        <p class="sub"><span lang="en">Report a problem from the app in one click. An AI on our build server reproduces it, writes the fix and tests it. Small fixes ship on their own; bigger ones wait for a human to approve.</span><span lang="pl">Zgłaszasz problem z aplikacji jednym kliknięciem. AI na naszym serwerze go odtwarza, pisze poprawkę i ją testuje. Drobne poprawki wchodzą same, a większe czekają na zatwierdzenie przez człowieka.</span></p>
+      </div>
+      <div class="loop">
+        <div class="lstep rv"><div class="n" style="--ci:#ff9cc8"><svg><use href="#i-bug"/></svg></div><h3><span lang="en">You report</span><span lang="pl">Zgłaszasz</span></h3><p><span lang="en">Settings → Report a problem. Logs attach themselves.</span><span lang="pl">Ustawienia → Zgłoś problem. Logi dołączają się same.</span></p></div>
+        <div class="lstep rv" style="--d:.08s"><div class="n" style="--ci:#b9a8ff"><svg><use href="#i-wand"/></svg></div><h3><span lang="en">AI fixes</span><span lang="pl">AI naprawia</span></h3><p><span lang="en">It finds the cause in the code and writes a fix.</span><span lang="pl">Szuka przyczyny w kodzie i pisze poprawkę.</span></p></div>
+        <div class="lstep rv" style="--d:.16s"><div class="n" style="--ci:#6fe9b4"><svg><use href="#i-shield"/></svg></div><h3><span lang="en">Checked</span><span lang="pl">Weryfikacja</span></h3><p><span lang="en">Build and tests must pass. Spam is filtered out.</span><span lang="pl">Build i testy muszą przejść. Spam odpada.</span></p></div>
+        <div class="lstep rv" style="--d:.24s"><div class="n" style="--ci:#7eeeff"><svg><use href="#i-refresh"/></svg></div><h3><span lang="en">You update</span><span lang="pl">Aktualizujesz</span></h3><p><span lang="en">“New version available” — one click.</span><span lang="pl">„Nowa wersja dostępna” — jedno kliknięcie.</span></p></div>
       </div>
     </div>
   </section>
 
   <section id="start">
     <div class="wrap">
-      <p class="kicker"><span lang="en">Get started</span><span lang="pl">Jak zacząć</span></p>
-      <h2><span lang="en">Running in three minutes</span><span lang="pl">Działa w trzy minuty</span></h2>
-      <p class="sub"><span lang="en">You need at least one AI subscription, or a free Google account for Gemini.</span><span lang="pl">Potrzebujesz co najmniej jednej subskrypcji AI albo darmowego konta Google dla Gemini.</span></p>
+      <div class="head rv">
+        <p class="kicker"><span lang="en">Get started</span><span lang="pl">Jak zacząć</span></p>
+        <h2><span lang="en">Running in three minutes.</span><span lang="pl">Działa w trzy minuty.</span></h2>
+        <p class="sub"><span lang="en">You need at least one AI subscription, or a free Google account for Gemini.</span><span lang="pl">Potrzebujesz co najmniej jednej subskrypcji AI albo darmowego konta Google dla Gemini.</span></p>
+      </div>
       <div class="steps">
-        <div class="step">
+        <div class="step rv">
           <h3><span lang="en">Install on your computer</span><span lang="pl">Zainstaluj na komputerze</span></h3>
-          <p><span lang="en">Run <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER-Setup.exe">ALTTER-Setup.exe</a> and pick any drive. It needs no admin rights. If SmartScreen asks, choose “More info → Run anyway”, because the installer is not signed yet.</span><span lang="pl">Uruchom <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER-Setup.exe">ALTTER-Setup.exe</a> i wybierz dowolny dysk. Nie potrzeba uprawnień administratora. Jeśli SmartScreen zapyta, wybierz „Więcej informacji → Uruchom mimo to”, bo instalator nie jest jeszcze podpisany.</span></p>
+          <p><span lang="en">Run <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER-Setup.exe">ALTTER-Setup.exe</a> and pick any drive. No admin rights needed. If SmartScreen asks, choose “More info → Run anyway”.</span><span lang="pl">Uruchom <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER-Setup.exe">ALTTER-Setup.exe</a> i wybierz dowolny dysk. Bez uprawnień administratora. Jeśli SmartScreen zapyta, wybierz „Więcej informacji → Uruchom mimo to”.</span></p>
         </div>
-        <div class="step">
+        <div class="step rv" style="--d:.08s">
           <h3><span lang="en">Connect your AI</span><span lang="pl">Podłącz swoje AI</span></h3>
-          <p><span lang="en">The first-run setup signs in Claude, ChatGPT or Gemini with your account and tests the connection for real. It can install the CLIs for you.</span><span lang="pl">Kreator przy pierwszym uruchomieniu loguje Claude, ChatGPT albo Gemini na Twoje konto i sprawdza połączenie naprawdę. Może sam zainstalować narzędzia CLI.</span></p>
+          <p><span lang="en">The first-run setup signs in Claude, ChatGPT or Gemini with your account and tests the connection for real. It can install the CLIs for you.</span><span lang="pl">Kreator przy pierwszym uruchomieniu loguje Claude, ChatGPT albo Gemini na Twoje konto i sprawdza połączenie naprawdę. Sam zainstaluje narzędzia CLI.</span></p>
         </div>
-        <div class="step">
+        <div class="step rv" style="--d:.16s">
           <h3><span lang="en">Add your phone</span><span lang="pl">Dodaj telefon</span></h3>
-          <p><span lang="en">Install <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER.apk">ALTTER.apk</a>. On the computer go to Settings → Devices → Connect a phone, then tap “Scan the QR code” in the app.</span><span lang="pl">Zainstaluj <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER.apk">ALTTER.apk</a>. Na komputerze otwórz Ustawienia → Urządzenia → Połącz telefon, a w aplikacji stuknij „Zeskanuj kod QR”.</span></p>
+          <p><span lang="en">Install <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER.apk">ALTTER.apk</a>. On the computer go to Settings → Devices → Connect a phone and scan the QR code.</span><span lang="pl">Zainstaluj <a href="https://github.com/QWTR/alter/releases/latest/download/ALTTER.apk">ALTTER.apk</a>. Na komputerze otwórz Ustawienia → Urządzenia → Połącz telefon i zeskanuj kod QR.</span></p>
         </div>
       </div>
-
-      <div class="table-wrap">
+      <div class="table-wrap rv">
         <table class="table">
           <thead><tr><th><span lang="en">Subscription</span><span lang="pl">Subskrypcja</span></th><th><span lang="en">Tool</span><span lang="pl">Narzędzie</span></th><th><span lang="en">Sign in</span><span lang="pl">Logowanie</span></th></tr></thead>
           <tbody>
             <tr><td>Claude Pro / Max</td><td><code>claude</code></td><td><code>/login</code></td></tr>
             <tr><td>ChatGPT Plus / Pro</td><td><code>codex</code></td><td><code>codex login</code></td></tr>
-            <tr><td><span lang="en">Google AI Pro / free Google account</span><span lang="pl">Google AI Pro / darmowe konto Google</span></td><td><code>gemini</code></td><td><span lang="en">Login with Google</span><span lang="pl">Login with Google</span></td></tr>
+            <tr><td><span lang="en">Google AI Pro / free Google account</span><span lang="pl">Google AI Pro / darmowe konto Google</span></td><td><code>gemini</code></td><td>Login with Google</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </section>
 
+  <section id="faq">
+    <div class="wrap">
+      <div class="head c rv"><p class="kicker">FAQ</p><h2><span lang="en">Questions</span><span lang="pl">Pytania</span></h2></div>
+      <div class="faq">
+        <details class="rv"><summary><span lang="en">Does it cost anything?</span><span lang="pl">Czy to coś kosztuje?</span></summary><p><span lang="en">No. ALTTER is free and open source. You use the AI subscription you already have, or Gemini with a free Google account.</span><span lang="pl">Nie. ALTTER jest darmowy i open source. Korzystasz z subskrypcji AI, którą już masz, albo z Gemini na darmowym koncie Google.</span></p></details>
+        <details class="rv"><summary><span lang="en">Where is my data?</span><span lang="pl">Gdzie są moje dane?</span></summary><p><span lang="en">On your computer. Chats, memory and files stay in a folder you pick. Your phone talks to your computer directly or through your own relay.</span><span lang="pl">Na Twoim komputerze. Czaty, pamięć i pliki zostają w wybranym przez Ciebie folderze. Telefon łączy się z komputerem bezpośrednio albo przez Twój własny relay.</span></p></details>
+        <details class="rv"><summary><span lang="en">Is it allowed to use my subscription this way?</span><span lang="pl">Czy wolno tak używać mojej subskrypcji?</span></summary><p><span lang="en">ALTTER only runs the official CLIs on your own computer, for you, like you would in a terminal. It never extracts tokens or shares your account.</span><span lang="pl">ALTTER tylko uruchamia oficjalne narzędzia CLI na Twoim komputerze, dla Ciebie, tak jak zrobiłbyś to w terminalu. Nie wyciąga tokenów i nie udostępnia Twojego konta.</span></p></details>
+        <details class="rv"><summary><span lang="en">What does a bug report send?</span><span lang="pl">Co wysyła zgłoszenie błędu?</span></summary><p><span lang="en">Only what you see before you press Send: your description, the app version, the screen you were on and recent error lines. No chats, files or memory.</span><span lang="pl">Tylko to, co widzisz przed kliknięciem Wyślij: Twój opis, wersję aplikacji, ekran, na którym byłeś, i ostatnie linie błędów. Żadnych czatów, plików ani pamięci.</span></p></details>
+        <details class="rv"><summary><span lang="en">macOS or iPhone?</span><span lang="pl">macOS albo iPhone?</span></summary><p><span lang="en">Not yet. Windows and Android today; the web app works in any browser on your network.</span><span lang="pl">Jeszcze nie. Dziś Windows i Android; aplikacja webowa działa w każdej przeglądarce w Twojej sieci.</span></p></details>
+      </div>
+    </div>
+  </section>
+
   <div class="wrap">
-    <div class="final">
+    <div class="final rv">
+      <img src="img/icon.png" alt="" />
       <h2><span lang="en">Free. Open source. Yours.</span><span lang="pl">Za darmo. Open source. Twoje.</span></h2>
-      <p class="sub" style="margin:0 auto 26px"><span lang="en">No account, no subscription of ours, nothing to pay. The code is on GitHub under AGPL-3.0.</span><span lang="pl">Bez konta, bez naszej subskrypcji, nic do zapłacenia. Kod jest na GitHubie na licencji AGPL-3.0.</span></p>
+      <p class="sub"><span lang="en">No account, no subscription of ours, nothing to pay. The code is on GitHub under AGPL-3.0.</span><span lang="pl">Bez konta, bez naszej subskrypcji, nic do zapłacenia. Kod jest na GitHubie na licencji AGPL-3.0.</span></p>
       <div class="cta" style="margin:0">
-        <a class="btn primary" href="https://github.com/QWTR/alter/releases/latest/download/ALTTER-Setup.exe"><svg><use href="#i-win"/></svg><span>Windows<small>.exe · 116 MB</small></span></a>
-        <a class="btn" href="https://github.com/QWTR/alter/releases/latest/download/ALTTER.apk"><svg style="color:#3ddc84"><use href="#i-android"/></svg><span>Android<small>.apk · 6 MB</small></span></a>
+        <a class="btn primary" href="https://github.com/QWTR/alter/releases/latest/download/ALTTER-Setup.exe"><svg><use href="#i-win"/></svg><span>Windows<small>.exe</small></span></a>
+        <a class="btn" href="https://github.com/QWTR/alter/releases/latest/download/ALTTER.apk"><svg style="color:#3ddc84"><use href="#i-android"/></svg><span>Android<small>.apk</small></span></a>
         <a class="btn" href="https://github.com/QWTR/alter"><svg><use href="#i-gh"/></svg><span>GitHub<small><span lang="en">source code</span><span lang="pl">kod źródłowy</span></small></span></a>
       </div>
     </div>
@@ -333,7 +654,7 @@
 
 <footer>
   <div class="wrap">
-    <p><span lang="en">ALTTER only automates the official CLIs on your own computer, for you. It never extracts tokens or shares your subscription. Claude, ChatGPT and Gemini are trademarks of their owners; ALTTER is not affiliated with them.</span><span lang="pl">ALTTER tylko automatyzuje oficjalne narzędzia CLI na Twoim komputerze, dla Ciebie. Nie wyciąga tokenów i nie udostępnia Twojej subskrypcji. Claude, ChatGPT i Gemini są znakami towarowymi ich właścicieli; ALTTER nie jest z nimi powiązany.</span></p>
+    <p><span lang="en">ALTTER only automates the official CLIs on your own computer, for you. Claude, ChatGPT and Gemini are trademarks of their owners; ALTTER is not affiliated with them.</span><span lang="pl">ALTTER tylko automatyzuje oficjalne narzędzia CLI na Twoim komputerze, dla Ciebie. Claude, ChatGPT i Gemini są znakami towarowymi ich właścicieli; ALTTER nie jest z nimi powiązany.</span></p>
     <p>© ALTTER contributors · <a href="https://github.com/QWTR/alter/blob/main/LICENSE">AGPL-3.0</a></p>
   </div>
 </footer>
@@ -345,6 +666,20 @@
       document.documentElement.setAttribute('data-lang', l);
       document.documentElement.lang = l;
       try { localStorage.setItem('altter.site.lang', l); } catch (e) {}
+    });
+  });
+  var top = document.getElementById('top');
+  var onScroll = function () { top.classList.toggle('scrolled', scrollY > 10); };
+  addEventListener('scroll', onScroll, { passive: true }); onScroll();
+  var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }) : null;
+  document.querySelectorAll('.rv, #stage').forEach(function (el) { io ? io.observe(el) : el.classList.add('in'); });
+  document.querySelectorAll('.tile').forEach(function (t) {
+    t.addEventListener('pointermove', function (e) {
+      var r = t.getBoundingClientRect();
+      t.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+      t.style.setProperty('--my', (e.clientY - r.top) + 'px');
     });
   });
 </script>

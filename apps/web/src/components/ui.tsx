@@ -156,8 +156,14 @@ export function Segmented<T extends string>({ value, options, onChange, size }: 
 
 export function Tabs<T extends string>({ value, tabs, onChange }: { value: T; tabs: { value: T; label: string; icon?: LucideIcon; count?: number }[]; onChange: (v: T) => void }) {
   const id = useId();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current?.querySelector<HTMLElement>('button.active');
+    const box = ref.current;
+    if (el && box && box.scrollWidth > box.clientWidth) box.scrollTo({ left: el.offsetLeft - box.clientWidth / 2 + el.offsetWidth / 2, behavior: 'smooth' });
+  }, [value]);
   return (
-    <div className="tabs">
+    <div className="tabs" ref={ref}>
       {tabs.map((tb) => (
         <button key={tb.value} className={tb.value === value ? 'active' : ''} onClick={() => onChange(tb.value)}>
           {tb.icon && <tb.icon />}

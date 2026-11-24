@@ -36,7 +36,17 @@ export interface RunOptions {
   fileDirs?: string[];
   /** Extra MCP servers (streamable HTTP) for this run, e.g. ALTTER's own "hands" (mouse/keyboard/screen). */
   mcp?: { name: string; url?: string; headers?: Record<string, string>; command?: string; args?: string[]; env?: Record<string, string> }[];
+  /** Messages the user sends while this answer is still running ("and also…", "how is it going?"). */
+  inbox?: Inbox;
 }
+
+/** Follow-up messages for a running answer. `listen` returns a function that stops listening. */
+export interface Inbox {
+  listen(cb: (text: string) => void): () => void;
+}
+
+/** A follow-up that reached the AI mid-answer, and where in the answer text it arrived. */
+export interface FollowUp { text: string; at: number }
 
 export interface ToolDraft {
   /** Stream block id (one per tool call). */
@@ -53,6 +63,8 @@ export interface RunResult {
   text: string;
   /** Tokens as reported by the CLI (estimated when it does not report them). */
   usage?: Usage;
+  /** Follow-ups the AI took in while answering (only providers that can: `steerable`). */
+  followUps?: FollowUp[];
 }
 
 /**
@@ -75,6 +87,8 @@ export interface Provider {
   models?: { id: string; label: string }[];
   efforts?: string[];
   detect(): Promise<{ installed: boolean; version?: string }>;
+  /** Takes follow-up messages while it is answering (RunOptions.inbox). */
+  steerable?: boolean;
   run(opts: RunOptions): Promise<RunResult>;
 }
 

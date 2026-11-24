@@ -29,6 +29,12 @@ import { TRAVEL_GUIDE, wantsTravel } from './travel.ts';
 import { isPlanApproval, PLAN_APPROVED_GUIDE, PLAN_GUIDE, wantsPlan } from './plans.ts';
 import { CREATIVE_NEEDS_FULL, creativeEngine, ensureStudio, renderProgress, studioDir, wantsCreative } from './studio.ts';
 import { describeAttachments, getUpload, uploadsDir, type Attachment } from './uploads.ts';
+import { inboxFor } from './followups.ts';
+import { FILES_GUIDE, RICH_GUIDE } from './rich.ts';
+import { calendarContext } from './calendar.ts';
+import { mediaMadeDuring } from './studio.ts';
+import { generatedDir } from './config.ts';
+import type { FollowUp } from './providers/types.ts';
 
 export interface Author { name: string; color: string }
 
@@ -58,6 +64,8 @@ export interface Message {
   attachments?: Attachment[];
   /** Someone else in an online session (null = the owner). */
   author?: Author | null;
+  /** Images/videos the AI made while writing this answer (absolute paths). */
+  mediaFiles?: string[];
 }
 
 const parse = <T>(s: unknown): T | undefined => {
@@ -77,7 +85,7 @@ export const getConversation = (id: string) => get<Conversation>('SELECT * FROM 
 export const getMessages = (conversationId: string, limit = 200): Message[] =>
   all<Record<string, any>>('SELECT * FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?', conversationId, limit)
     .reverse()
-    .map((m) => ({ ...m, attachments: parse<Attachment[]>(m.attachments) ?? [], author: parse<Author>(m.author) ?? null }) as Message);
+    .map(({ media, ...m }) => ({ ...m, attachments: parse<Attachment[]>(m.attachments) ?? [], author: parse<Author>(m.author) ?? null, mediaFiles: parse<string[]>(media) ?? [] }) as Message);
 
 /** A message as the AI sees it in the history: who wrote it (in a shared chat) and what was attached. */
 const forPrompt = (m: Message) =>
@@ -139,6 +147,20 @@ export interface ChatRequest {
   signal?: AbortSignal;
 }
 
+/** The message asks for something made as a file: a logo, graphic, page, document, video… */
+const RANK: Record<Access, number> = { chat: 0, read: 1, full: 2 };
+
+/** Asking for something this access level can't do: say so briefly and let the app offer the switch (a button that continues the job). */
+export const NEEDS_FULL_MARK = '[[altter:needs-full]]';
+const NEEDS_FULL_GUIDE = `## When this chat's access is not enough
+This chat is NOT in "Full control", so here you can't write or change files, run commands, install things, use the computer or render media. If the request needs any of that: do NOT explain workarounds, paste long code for the user to save by hand, or say you are unable. Answer in 1-2 short lines in the user's language: what you will do once you have Full control (a one-line plan), then end the answer with this exact line on its own:
+${NEEDS_FULL_MARK}
+The app turns that line into a "Switch to Full control and continue" button: one click and you get the request again with full tools. Use the line ONLY when tools are really needed; questions, explanations, advice and short snippets are answered normally.`;
+
+const MAKE_RE = /\b(zr[oó]b|zr[oó]bcie|stw[oó]rz|zaprojektuj|wygeneruj|narysuj|przygotuj|napisz|wyrenderuj|make|create|design|generate|draw|render|build|mach|erstelle|crea|haz|dise[nñ]a|fais|cr[ée]e|зроби|створи|намалюй)\w*\b[^.?!\n]{0,80}\b(logo|grafik|obraz|ikon|baner|banner|plakat|ulotk|wizyt[oó]wk|stron|witryn|landing|html|svg|png|jpe?g|webp|gif|pdf|plik|prezentacj|slajd|film|wideo|video|animacj|miniaturk|thumbnail|image|icon|poster|flyer|website|page|file|slides?|mockup|makiet|bild|seite|imagen|p[aá]gina|affiche|лого|сайт|картин)/i;
+const wantsMake = (message: string, history: { content: string }[]) =>
+  MAKE_RE.test(message) || wantsMedia(message) || wantsCreative(message, history) || wantsWebEngine(message, history);
+
 export async function chat(req: ChatRequest): Promise<{ conversationId: string; text: string; provider: string }> {
   const files = (req.attachments ?? []).slice(0, 20).map(getUpload).filter((a): a is Attachment & { file: string } => !!a);
   const message = req.message.trim() || (files.length ? '(see the attached files)' : '');
@@ -151,7 +173,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     const id = randomUUID();
     const ts = now();
     const title = message.replace(/\s+/g, ' ').slice(0, 60);
-    const access = req.access && ACCESS_LEVELS.includes(req.access) ? req.access : 'chat';
+    const access = req.access && ACCESS_LEVELS.includes(req.access) ? req.access : (loadConfig().defaultAccess ?? 'chat');
     run(
       'INSERT INTO conversations (id, title, provider, project_id, access, agent_id, created_at, updated_at, parent_id, crew) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       id,
@@ -168,6 +190,9 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     conv = getConversation(id)!;
   } else if (req.access && req.access !== conv.access) {
     conv = updateConversation(conv.id, { access: req.access })!;
+  } else if (!req.access && !req.author && !conv.agent_id && RANK[loadConfig().defaultAccess ?? 'chat'] > RANK[conv.access]) {
+    // the remembered access ("Full control" once = always) also lifts older chats
+    conv = updateConversation(conv.id, { access: loadConfig().defaultAccess })!;
   }
 
   const project = getProject(conv.project_id);
@@ -190,6 +215,12 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
   // creative work (video, motion, 3D, edits, graphics): the Studio kit, installed once
   const planning = !!req.plan || wantsPlan(message);
   const approved = !planning && isPlanApproval(message, history);
+  // "make me a logo / a page / a graphic" in a chat without tools: just do it (this one answer works in the
+  // chat's folder with full tools) instead of explaining that it can't write files. Only for the owner.
+  if (conv.access === 'chat' && !planning && !author && !req.parentId && wantsMake(message, history)) {
+    conv = { ...conv, access: 'full' };
+    req.onActivity?.('Making files for this answer');
+  }
   // "@Team do X" where Team runs itself: the lead takes over, the answer is its live board
   const squad = !planning && !req.hands && !author ? squadFor(message) : null;
   if (squad) {
@@ -214,7 +245,9 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
   // other agents: @mentions (or asking to involve them) give this answer the alter_team tools
   const mentioned = mentionsIn(message);
   const useTeam = !planning && (mentioned.agents.length > 0 || mentioned.groups.length > 0 || (wantsTeam(message) && listAgents().some((a) => !a.monitor && a.id !== agent?.id)));
+  const calendar = planning ? '' : await calendarContext(message).catch(() => '');
   const extra = planning ? PLAN_GUIDE : [
+    calendar,
     useHands ? HANDS_GUIDE + (req.hands?.brief ? '\n\n' + req.hands.brief : '') : conv.access !== 'full' && handsEnabled() && process.platform === 'win32' && (!!req.hands || wantsHands(message)) ? HANDS_NEEDS_FULL : '',
     approved ? PLAN_APPROVED_GUIDE : '',
     wantsTravel(message) && !creative ? TRAVEL_GUIDE : '',
@@ -227,6 +260,9 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     !planning && conv.access !== 'chat' && (wantsMedia(message) || agent?.tools?.includes('media')) ? MEDIA_GUIDE : '',
     expertSkills(message).text,
     planning ? '' : pluginsGuide(),
+    planning ? '' : RICH_GUIDE,
+    !planning && conv.access !== 'chat' ? FILES_GUIDE : '',
+    !planning && conv.access !== 'full' && !author && !req.parentId ? NEEDS_FULL_GUIDE : '',
   ].filter(Boolean).join('\n\n');
   const prompt = buildPrompt({ query, history, project, instructions: agent ? `You are "${agent.name}", one of the user's agents. ${agent.instructions}` : undefined, extra: extra || undefined });
   const picked = provider.id;
@@ -279,10 +315,12 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
   const mcpList = [...(mediaToken ? [{ name: 'alter_media', url: mediaMcpUrl(listeningPort(), mediaToken) }] : []), ...(handsSession ? [{ name: 'alter_hands', url: handsMcpUrl(listeningPort(), handsSession) }] : []), ...(teamSession ? [{ name: 'alter_team', url: teamMcpUrl(listeningPort(), teamSession) }] : []), ...(planning ? [] : pluginServers())];
   const mcp = mcpList.length ? mcpList : undefined;
   if (agent) setAgentStatus(agent.id, 'working', `chat: ${message.replace(/\s+/g, ' ')}`);
-  const runOn = (p: typeof provider) => p.run({ mcp, prompt, onDraft, files: files.map((f) => f.file), fileDirs: dirs.length ? dirs : undefined, model: p.id === picked ? model || undefined : undefined, effort: p.id === picked ? effort || undefined : undefined, onDelta: req.onDelta, onActivity, access: planning ? (conv!.access === 'chat' ? 'chat' : 'read') : conv!.access, tools: [...(agent?.tools ?? []), ...(planning ? [] : pluginTools())], cwd: project?.folder ?? (studioReady ? cwd : undefined), signal: handsSession ? handsAbort.signal : req.signal, blockTools: handsSession ? ['Task', 'Agent'] : undefined, timeoutMs: handsSession ? 120 * 60_000 : conv!.access === 'full' || studioReady ? 60 * 60_000 : 20 * 60_000 });
+  const startedAt = Date.now();
+  const runOn = (p: typeof provider) => p.run({ inbox: p.steerable ? inboxFor(conv!.id) : undefined, mcp, prompt, onDraft, files: files.map((f) => f.file), fileDirs: dirs.length ? dirs : undefined, model: p.id === picked ? model || undefined : undefined, effort: p.id === picked ? effort || undefined : undefined, onDelta: req.onDelta, onActivity, access: planning ? (conv!.access === 'chat' ? 'chat' : 'read') : conv!.access, tools: [...(agent?.tools ?? []), ...(planning ? [] : pluginTools())], cwd: project?.folder ?? (studioReady ? cwd : undefined), signal: handsSession ? handsAbort.signal : req.signal, blockTools: handsSession ? ['Task', 'Agent'] : undefined, timeoutMs: handsSession ? 120 * 60_000 : conv!.access === 'full' || studioReady ? 60 * 60_000 : 20 * 60_000 });
   let text: string;
+  let followUps: FollowUp[] | undefined;
   try {
-    ({ text } = await runOn(provider));
+    ({ text, followUps } = await runOn(provider));
   } catch (err) {
     if (poll) clearInterval(poll);
     if (!(err instanceof LimitError)) throw err;
@@ -291,7 +329,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     if (!autoSwitch || other.id === provider.id || other.id === 'demo') throw err;
     req.onMeta?.({ conversationId: conv.id, provider: other.id, projectId: conv.project_id, switchedFrom: provider.id });
     provider = other;
-    ({ text } = await runOn(provider));
+    ({ text, followUps } = await runOn(provider));
   } finally {
     if (poll) clearInterval(poll);
     if (handsSession) closeHands(handsSession);
@@ -301,7 +339,23 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
   }
   if (poll) req.onProgress?.(null);
 
-  run('INSERT INTO messages (conversation_id, role, content, provider, created_at) VALUES (?, ?, ?, ?, ?)', conv.id, 'assistant', text, provider.id, now());
+  // images / videos made while answering → shown in the chat with the answer
+  const made = conv.access === 'chat' ? [] : mediaMadeDuring([cwd, ...projectDirs(project), generatedDir(), ...(studioReady ? [studioDir()] : [])], startedAt, text);
+  // follow-ups sent mid-answer sit where they arrived: answer part, follow-up, rest of the answer
+  const parts: { role: 'user' | 'assistant'; content: string }[] = [];
+  let cut = 0;
+  for (const f of [...(followUps ?? [])].sort((a, b) => a.at - b.at)) {
+    const before = text.slice(cut, f.at).trim();
+    if (before) parts.push({ role: 'assistant', content: before });
+    parts.push({ role: 'user', content: f.text });
+    cut = Math.max(cut, f.at);
+  }
+  const rest = followUps?.length ? text.slice(cut).trim() : text;
+  parts.push({ role: 'assistant', content: rest || '…' });
+  parts.forEach((p, i) => {
+    const last = i === parts.length - 1;
+    run('INSERT INTO messages (conversation_id, role, content, provider, created_at, author, media) VALUES (?, ?, ?, ?, ?, ?, ?)', conv!.id, p.role, p.content, p.role === 'assistant' ? provider.id : null, now(), p.role === 'user' && author ? JSON.stringify(author) : null, last && made.length ? JSON.stringify(made) : null);
+  });
   // final refresh of the preview (or open one for a page the answer points to)
   const page = lastPreview ?? pagesIn(text).map((f) => previewFor(f, cwd)).find(Boolean);
   if (page) showPage(page);

@@ -1,13 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import { deleteMedia, handleMediaMcp, listMedia, mediaOptions, mediaView, setMediaKeys, startMedia } from './media.ts';
 import { deletePrompt, listPrompts, savePrompt, usePrompt } from './prompts.ts';
-import { localUsage } from './usageLocal.ts';
+import { localUsage, warmUsage } from './usageLocal.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { acceptProposal } from './proposals.ts';
 import { addLink, applySetup, removeLink } from './setup.ts';
 import { deleteGroup, handleTeamMcp, listGroups, saveGroup } from './team.ts';
 import { agentStatuses } from './status.ts';
 import { ensureVoice, transcribe, voiceStatus } from './voice.ts';
-import { deleteRender, ensureStudio, publicBrand, listRenders, mediaIn, serveMedia, setBrand, studioStatus } from './studio.ts';
+import { sendFollowUp } from './followups.ts';
+import { deleteRender, ensureStudio, publicBrand, listRenders, mediaForFiles, mediaIn, serveMedia, setBrand, studioStatus } from './studio.ts';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
@@ -16,7 +18,7 @@ import {
   TEMPLATES, checkMonitor, createAgent, createFromTemplate, deleteAgent, getAgent, isRunning, listAgents, listRuns, runAgent, stopAgent, updateAgent,
 } from './agents.ts';
 import { chat, deleteConversation, getConversation, getMessages, listConversations, updateConversation } from './chat.ts';
-import { all as dbAll } from './db.ts';
+import { all as dbAll, run } from './db.ts';
 import { enhancePrompt } from './enhance.ts';
 import { addPushSub, notifyPhones, pushSubs, removePushForDevice, removePushSub, vapid } from './push.ts';
 import { getBoard, hasBoard } from './crewBoard.ts';
@@ -31,6 +33,7 @@ import { CATALOG, installCustom, installFromCatalog, publicPlugins, removePlugin
 import { domainFor, ensureRelayKey, vpsSetupScript, publicRemoteSettings, publicUrl, RELAY_HEADER, setRemoteSettings, startTunnel, stopTunnel, tunnelStatus } from './remote.ts';
 import { authenticate, claimPairing, lanUrls, revokeDevice, setListening, startPairing } from './pairing.ts';
 import { createProject, deleteProject, getProject, listProjects, updateProject } from './projects.ts';
+import { addComment, addDepartment, addPerson, createTask, deleteDoc, deleteTask, departments, dropProjectMembers, getDoc, getTask, inviteMember, listComments, listDocs, listTasks, makeReport, memberByToken, membersOf, ownerActor, people, personActor, planTasks, publicMember, publicPerson, removeDepartment, removeMember, removePerson, rulesOf, saveDoc, setRules, startWorkspaceAutomations, tasksIcs, updateDepartment, updatePerson, updateTask, workspaceStats } from './workspace.ts';
 import { connectProvider, providerStatuses, testProvider } from './providers/index.ts';
 import { isLimited, LimitError, usageSummary } from './usage.ts';
 import { importProject, pickFolder, scanProject } from './projectImport.ts';
@@ -39,6 +42,10 @@ import { PREVIEW_KIT } from './previewKit.ts';
 import { listSkills } from './skills.ts';
 import { VERSION } from './version.ts';
 import { MAX_UPLOAD, saveUpload, serveUpload } from './uploads.ts';
+import { addCalendar, publicCalendars, removeCalendar, upcoming } from './calendar.ts';
+import { convertSale, deleteSale, draftSale, getSale, KINDS, listSales, salesStats, saveSale, sellerProfile, setSellerProfile } from './sales.ts';
+import { checkUpdate, installUpdate, startUpdateChecks, updateInfo } from './updates.ts';
+import { buildReport, myReports, sendReport } from './report.ts';
 import {
   authenticateGuest, colorFor, isGuest, joinRoom, roomMembers, runEvent, runStarted, setPresence, shareByToken, shareFor, startShare,
   stopRun, stopShare, type Guest,
@@ -77,9 +84,26 @@ const routes: ({ method: string; re: RegExp; handler: Handler } & RouteOpts)[] =
 const route = (method: string, path: string, handler: Handler, opts: boolean | RouteOpts = false) =>
   routes.push({ method, re: new RegExp(`^${path.replace(/:\w+/g, '([^/]+)')}$`), handler, ...(typeof opts === 'boolean' ? { open: opts } : opts) });
 
-/** A guest only ever reaches the one chat their link is for. */
+/** A guest only ever reaches the one chat their link is for; a workspace member any chat of their project (or a new one there). */
 const guardChat = (auth: Auth, conversationId: unknown) => {
-  if (isGuest(auth) && auth.share.conversationId !== conversationId) throw new HttpError(403, 'This link is for another chat');
+  if (!isGuest(auth)) return;
+  if (auth.member) {
+    if (conversationId == null || conversationId === '') return;
+    const c = typeof conversationId === 'string' ? getConversation(conversationId) : undefined;
+    if (!c || !c.project_id || !auth.member.projectIds.includes(c.project_id)) throw new HttpError(403, 'This chat is not part of your workspace');
+    return;
+  }
+  if (auth.share.conversationId !== conversationId) throw new HttpError(403, 'This link is for another chat');
+};
+/** The project a workspace call is about: a member's own, or (owner) the ?project= one. */
+const wsProject = (auth: Auth, url: URL) => {
+  const want = url.searchParams.get('project');
+  if (isGuest(auth)) {
+    if (!auth.member) throw new HttpError(403, 'Not a workspace member');
+    const id = want && auth.member.projectIds.includes(want) ? want : auth.member.projectIds[0];
+    return getProject(id ?? null) ?? notFound();
+  }
+  return getProject(want) ?? notFound();
 };
 
 const isLoopback = (req: IncomingMessage) => {
@@ -98,7 +122,7 @@ const ownerOnly = (auth: Auth, what: string) => {
 
 function settingsView() {
   const c = loadConfig();
-  return { defaultProvider: c.defaultProvider, learning: c.learning, language: c.language, userName: c.userName, onboarded: c.onboarded, onLimit: c.onLimit };
+  return { defaultProvider: c.defaultProvider, learning: c.learning, language: c.language, userName: c.userName, onboarded: c.onboarded, onLimit: c.onLimit, defaultAccess: c.defaultAccess };
 }
 
 // ---------- boot / status / settings ----------
@@ -128,6 +152,7 @@ route('PUT', '/api/settings', ({ body }) => {
   if (typeof body.userName === 'string') patch.userName = body.userName.slice(0, 60);
   if (typeof body.onboarded === 'boolean') patch.onboarded = body.onboarded;
   if (body.onLimit === 'ask' || body.onLimit === 'switch') patch.onLimit = body.onLimit;
+  if (body.defaultAccess === 'chat' || body.defaultAccess === 'read' || body.defaultAccess === 'full') patch.defaultAccess = body.defaultAccess;
   if ((LANGUAGES as readonly string[]).includes(body.language)) patch.language = body.language as Language;
   updateConfig(patch);
   const s = settingsView();
@@ -201,7 +226,7 @@ route('POST', '/api/pick-folder', async ({ auth }) => {
 });
 route('GET', '/api/projects/:id', ({ params }) => getProject(params[0]) ?? notFound());
 route('PUT', '/api/projects/:id', ({ params, body }) => updateProject(params[0], body) ?? notFound());
-route('DELETE', '/api/projects/:id', ({ params }) => ({ ok: deleteProject(params[0]) }));
+route('DELETE', '/api/projects/:id', ({ params }) => { dropProjectMembers(params[0]); return { ok: deleteProject(params[0]) }; });
 route('POST', '/api/projects/:id/open', ({ params, auth }) => {
   ownerOnly(auth, 'open folders');
   const p = getProject(params[0]) ?? notFound();
@@ -220,9 +245,28 @@ route('GET', '/api/conversations/:id', ({ params, auth }) => {
   const c = getConversation(params[0]);
   if (!c) throw new HttpError(404, 'Conversation not found');
   const cwd = getProject(c.project_id)?.folder ?? workspaceDir();
-  const messages = getMessages(c.id).map((m) => (m.role === 'assistant' ? { ...m, media: mediaIn(m.content, cwd).map(({ file, ...x }) => x) } : m));
+  const messages = getMessages(c.id).map((m) => {
+    if (m.role !== 'assistant') return m;
+    // files saved with the answer first, then anything the text points to (older answers)
+    const seen = new Set<string>();
+    const media = [...mediaForFiles(m.mediaFiles ?? []), ...mediaIn(m.content, cwd)].filter((x) => !seen.has(x.url.split('?')[0]) && !!seen.add(x.url.split('?')[0])).slice(0, 12);
+    const { mediaFiles, ...rest } = m;
+    // only pages that really exist get a Preview button (no "Nothing to preview" for a file that was never made)
+    const pages = [...new Set(m.content.match(/(?:[A-Za-z]:[\\/])?[^\s`'"<>|*?()[\]]+\.html?\b/g) ?? [])].filter((p) => !!previewFor(p, cwd)).slice(0, 6);
+    return { ...rest, media: media.map(({ file, ...x }) => x), pages };
+  });
   return { ...c, messages, share: isGuest(auth) ? undefined : shareFor(c.id) ?? null };
 }, { guest: true });
+/** Regenerate / edit: drop this message and everything after it (the client then sends again). */
+route('DELETE', '/api/conversations/:id/messages/from/:mid', ({ auth, params }) => {
+  ownerOnly(auth, 'edit chats');
+  if (!getConversation(params[0])) notFound();
+  const mid = Number(params[1]);
+  if (!Number.isFinite(mid)) throw new HttpError(400, 'Bad message id');
+  run('DELETE FROM messages WHERE conversation_id = ? AND id >= ?', params[0], mid);
+  emit('conversation.updated', { id: params[0] });
+  return { ok: true };
+});
 route('POST', '/api/conversations/:id/messages/:mid/proposals/:n', ({ params, body }) => acceptProposal(params[0], Number(params[1]), Number(params[2]), body ?? {}));
 route('POST', '/api/conversations/:id/messages/:mid/setup/:n', ({ auth, params, body }) => {
   ownerOnly(auth, 'set up projects');
@@ -254,7 +298,8 @@ route('POST', '/api/chat', async ({ res, body, auth }) => {
     if (!guest.share.guestsCanSend) throw new HttpError(403, 'The host only lets guests watch');
   }
   const cid = typeof body.cid === 'string' ? body.cid.slice(0, 40) : '';
-  const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 40) : 'Guest';
+  const member = guest?.member ?? null;
+  const name = member ? member.name : typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 40) : 'Guest';
   const sse0 = openSse(res);
   const abort = new AbortController();
   // everything the sender sees is mirrored to the others in that chat
@@ -290,15 +335,15 @@ route('POST', '/api/chat', async ({ res, body, auth }) => {
       hands: size > 1 ? { ...crew[0], brief: crewBrief(crew, 0) } : undefined,
       conversationId: body.conversationId,
       // a guest can't move the chat, pick another AI, an agent or a higher access level: the host's settings apply
-      projectId: guest ? null : body.projectId ?? null,
-      agentId: guest ? null : body.agentId ?? null,
+      projectId: member ? (typeof body.projectId === 'string' && member.projectIds.includes(body.projectId) ? body.projectId : (typeof body.conversationId === 'string' ? getConversation(body.conversationId)?.project_id : null) ?? member.projectIds[0] ?? null) : guest ? null : body.projectId ?? null,
+      agentId: guest && !member ? null : body.agentId ?? null,
       model: !guest && typeof body.model === 'string' ? body.model : undefined,
       effort: !guest && typeof body.effort === 'string' ? body.effort : undefined,
       message: String(body.message ?? ''),
       attachments: Array.isArray(body.attachments) ? body.attachments.filter((x: unknown) => typeof x === 'string') : undefined,
-      author: guest ? { name, color: colorFor(cid || name) } : null,
-      provider: guest ? undefined : body.provider,
-      access: guest ? undefined : body.access,
+      author: guest ? { name, color: member ? member.color : colorFor(cid || name) } : null,
+      provider: guest && !member ? undefined : body.provider,
+      access: guest && !member ? undefined : body.access,
       plan: !!body.plan,
       signal: abort.signal,
       onUserMessage: (m) => {
@@ -324,6 +369,22 @@ route('POST', '/api/chat', async ({ res, body, auth }) => {
   }
   res.end();
   return SSE_HANDLED;
+}, { guest: true });
+
+// a message sent while the answer is still running: the AI takes it in mid-answer (Claude), otherwise the app queues it
+route('POST', '/api/conversations/:id/followup', ({ auth, params, body }) => {
+  const guest = isGuest(auth) ? auth : null;
+  if (guest) {
+    guardChat(auth, params[0]);
+    if (!guest.share.guestsCanSend) throw new HttpError(403, 'The host only lets guests watch');
+  }
+  const text = String(body?.message ?? '').trim().slice(0, 8000);
+  if (!text) throw new HttpError(400, 'Empty message');
+  const name = guest?.member ? guest.member.name : typeof body?.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 40) : 'Guest';
+  const author = guest ? { name, color: guest.member ? guest.member.color : colorFor(String(body?.cid ?? '') || name) } : null;
+  const delivered = sendFollowUp(params[0], author ? `[${author.name}] ${text}` : text);
+  if (delivered) runEvent(params[0], 'followup', { text, author, cid: typeof body?.cid === 'string' ? body.cid : '' });
+  return { delivered };
 }, { guest: true });
 
 // ---------- studio (video, motion, 3D, graphics) ----------
@@ -377,6 +438,161 @@ route('DELETE', '/api/conversations/:id/share', ({ params, auth }) => {
   if (isGuest(auth)) throw new HttpError(403, 'Only the host can stop sharing');
   return { ok: stopShare(params[0]) };
 });
+// ---------- workspaces (a project with a standing team) ----------
+route('GET', '/api/projects/:id/members', ({ params, auth }) => {
+  ownerOnly(auth, 'manage the team');
+  if (!getProject(params[0])) notFound();
+  return membersOf(params[0]).map((m) => ({ ...publicMember(m), token: m.token }));
+});
+route('POST', '/api/projects/:id/members', ({ params, body, auth }) => {
+  ownerOnly(auth, 'invite people');
+  if (!getProject(params[0])) notFound();
+  const m = inviteMember(params[0], String(body?.name ?? ''));
+  emit('workspace.changed', { projectId: params[0] });
+  return { ...publicMember(m), token: m.token };
+});
+route('DELETE', '/api/projects/:id/members/:mid', ({ params, auth }) => {
+  ownerOnly(auth, 'manage the team');
+  const ok = removeMember(params[0], params[1]);
+  emit('workspace.changed', { projectId: params[0] });
+  return { ok };
+});
+const wsActor = (auth: Auth) => (isGuest(auth) && auth.member ? personActor(auth.member) : ownerActor());
+/** Who am I, which workspace, who else is in it (also the member's heartbeat). */
+route('GET', '/api/ws/me', ({ auth, url }) => {
+  const p = wsProject(auth, url);
+  const me = isGuest(auth) ? auth.member! : null;
+  const ownerSeen = auth === 'owner' || (!isGuest(auth) && !!auth);
+  return {
+    project: { id: p.id, name: p.name, color: p.color, icon: p.icon, description: p.description },
+    me: me ? publicMember(me) : { id: 'owner', name: loadConfig().userName || 'Host', color: '#7c5cff', joined: true, online: true, lastSeen: null },
+    owner: { name: loadConfig().userName || 'Host', online: ownerSeen || true },
+    isOwner: !me,
+    members: membersOf(p.id).map(publicMember),
+    departments: departments(),
+    workspaces: (me ? me.projectIds : listProjects().map((x) => x.id)).map((id) => getProject(id)).filter(Boolean).map((x) => ({ id: x!.id, name: x!.name, color: x!.color, icon: x!.icon })),
+    rules: me ? undefined : rulesOf(p.id),
+  };
+}, { guest: true });
+route('GET', '/api/ws/chats', ({ auth, url }) => {
+  const p = wsProject(auth, url);
+  return listConversations({ projectId: p.id }).filter((c: any) => !c.parent_id);
+}, { guest: true });
+route('POST', '/api/ws/chats', ({ auth, url, body }) => {
+  const p = wsProject(auth, url);
+  const id = randomUUID();
+  const ts = new Date().toISOString();
+  const title = String(body?.title ?? '').trim().slice(0, 60) || 'New chat';
+  const agent = typeof body?.agentId === 'string' ? listAgents(p.id).find((x) => x.id === body.agentId) : undefined;
+  run('INSERT INTO conversations (id, title, provider, project_id, access, agent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', id, agent ? agent.name : title, null, p.id, agent?.access ?? loadConfig().defaultAccess ?? 'chat', agent?.id ?? null, ts, ts);
+  emit('conversation.updated', { id });
+  return getConversation(id);
+}, { guest: true });
+route('GET', '/api/ws/agents', ({ auth, url }) => {
+  const p = wsProject(auth, url);
+  return listAgents(p.id).filter((a) => !a.monitor);
+}, { guest: true });
+route('POST', '/api/ws/agents', ({ auth, url, body }) => {
+  const p = wsProject(auth, url);
+  const name = String(body?.name ?? '').trim().slice(0, 60);
+  const instructions = String(body?.instructions ?? '').trim().slice(0, 8000);
+  if (!name || !instructions) throw new HttpError(400, 'Name and instructions are needed');
+  const a = createAgent({ name, instructions, description: String(body?.description ?? '').slice(0, 200), projectId: p.id, access: 'full', learns: true });
+  emit('workspace.changed', { projectId: p.id });
+  return a;
+}, { guest: true });
+
+// tasks
+route('GET', '/api/ws/tasks', ({ auth, url }) => listTasks(wsProject(auth, url).id), { guest: true });
+route('POST', '/api/ws/tasks', ({ auth, url, body }) => createTask(wsProject(auth, url).id, body ?? {}, wsActor(auth)), { guest: true });
+const wsTask = (auth: Auth, url: URL, id: string) => {
+  const p = wsProject(auth, url);
+  const t = getTask(id);
+  if (!t || t.project_id !== p.id) throw new HttpError(404, 'Task not found');
+  return t;
+};
+route('PUT', '/api/ws/tasks/:id', ({ auth, url, params, body }) => (wsTask(auth, url, params[0]), updateTask(params[0], body ?? {}, wsActor(auth))), { guest: true });
+route('DELETE', '/api/ws/tasks/:id', ({ auth, url, params }) => (wsTask(auth, url, params[0]), { ok: deleteTask(params[0]) }), { guest: true });
+route('GET', '/api/ws/tasks/:id/comments', ({ auth, url, params }) => (wsTask(auth, url, params[0]), listComments(params[0])), { guest: true });
+route('POST', '/api/ws/tasks/:id/comments', ({ auth, url, params, body }) => (wsTask(auth, url, params[0]), addComment(params[0], wsActor(auth), String(body?.body ?? '')) ?? notFound()), { guest: true });
+route('POST', '/api/ws/plan', async ({ auth, url, body }) => {
+  const goal = String(body?.goal ?? '').trim();
+  if (goal.length < 4) throw new HttpError(400, 'Describe the goal');
+  try { return await planTasks(wsProject(auth, url).id, goal, wsActor(auth)); } catch (e) { throw new HttpError(502, (e as Error).message); }
+}, { guest: true });
+// documents & reports
+route('GET', '/api/ws/docs', ({ auth, url }) => listDocs(wsProject(auth, url).id), { guest: true });
+const wsDoc = (auth: Auth, url: URL, id: string) => {
+  const d = getDoc(id);
+  if (!d || d.project_id !== wsProject(auth, url).id) throw new HttpError(404, 'Document not found');
+  return d;
+};
+route('GET', '/api/ws/docs/:id', ({ auth, url, params }) => wsDoc(auth, url, params[0]), { guest: true });
+route('POST', '/api/ws/docs', ({ auth, url, body }) => saveDoc(wsProject(auth, url).id, { title: body?.title, body: body?.body, kind: body?.kind }, wsActor(auth)), { guest: true });
+route('PUT', '/api/ws/docs/:id', ({ auth, url, params, body }) => (wsDoc(auth, url, params[0]), saveDoc(wsProject(auth, url).id, { id: params[0], title: body?.title, body: body?.body }, wsActor(auth))), { guest: true });
+route('DELETE', '/api/ws/docs/:id', ({ auth, url, params }) => (wsDoc(auth, url, params[0]), { ok: deleteDoc(params[0]) }), { guest: true });
+route('POST', '/api/ws/report', async ({ auth, url, body }) => {
+  try { return await makeReport(wsProject(auth, url).id, Math.min(90, Math.max(1, Number(body?.days) || 7)), wsActor(auth)); } catch (e) { throw new HttpError(502, (e as Error).message); }
+}, { guest: true });
+// calendar: deadlines (+ the owner's own calendars, only for the owner)
+route('GET', '/api/ws/calendar', async ({ auth, url }) => {
+  const p = wsProject(auth, url);
+  const tasks = listTasks(p.id).filter((t) => t.due);
+  const events = isGuest(auth) ? [] : (await upcoming(Date.now() - 7 * 86400_000, Date.now() + 60 * 86400_000).catch(() => ({ events: [] as any[] }))).events;
+  return { tasks, events };
+}, { guest: true });
+/** Subscribable feed (Google / Outlook / Apple): the key is in the URL because calendar apps can't send headers. */
+route('GET', '/api/ws/feed.ics', ({ url, res }) => {
+  const k = url.searchParams.get('key') ?? '';
+  const person = k.startsWith('ws:') ? memberByToken(k.slice(3)) : undefined;
+  const owner = !person && authenticate(k) === 'owner';
+  if (!person && !owner) throw new HttpError(401, 'Unknown key');
+  const want = url.searchParams.get('project');
+  const ids = person ? person.projectIds : listProjects().map((x) => x.id);
+  res.writeHead(200, { 'content-type': 'text/calendar; charset=utf-8', 'cache-control': 'no-store' });
+  res.end(tasksIcs(want && ids.includes(want) ? [want] : ids));
+  return SSE_HANDLED;
+}, true);
+// automations
+route('PUT', '/api/ws/rules', ({ auth, url, body }) => {
+  ownerOnly(auth, 'change automations');
+  return setRules(wsProject(auth, url).id, body ?? {});
+});
+// the company: departments and people (owner)
+route('GET', '/api/company', ({ auth }) => {
+  ownerOnly(auth, 'manage the company');
+  return {
+    name: loadConfig().userName,
+    departments: departments(),
+    people: people().map((p) => ({ ...publicPerson(p), token: p.token })),
+    workspaces: listProjects().map((p) => ({ id: p.id, name: p.name, color: p.color, icon: p.icon, ...workspaceStats(p.id) })),
+  };
+});
+route('POST', '/api/company/departments', ({ auth, body }) => (ownerOnly(auth, 'manage the company'), addDepartment(String(body?.name ?? ''))));
+route('PUT', '/api/company/departments/:id', ({ auth, params, body }) => (ownerOnly(auth, 'manage the company'), updateDepartment(params[0], body ?? {}) ?? notFound()));
+route('DELETE', '/api/company/departments/:id', ({ auth, params }) => (ownerOnly(auth, 'manage the company'), { ok: removeDepartment(params[0]) }));
+route('POST', '/api/company/people', ({ auth, body }) => { ownerOnly(auth, 'manage the company'); const p = addPerson(body ?? {}); return { ...publicPerson(p), token: p.token }; });
+route('PUT', '/api/company/people/:id', ({ auth, params, body }) => { ownerOnly(auth, 'manage the company'); const p = updatePerson(params[0], body ?? {}) ?? notFound(); return { ...publicPerson(p), token: p.token }; });
+route('DELETE', '/api/company/people/:id', ({ auth, params }) => (ownerOnly(auth, 'manage the company'), { ok: removePerson(params[0]) }));
+
+// invoices, quotes, orders
+route('GET', '/api/ws/sales', ({ auth, url }) => { const p = wsProject(auth, url); return { docs: listSales(p.id), seller: sellerProfile(), stats: salesStats(p.id) }; }, { guest: true });
+const wsSale = (auth: Auth, url: URL, id: string) => {
+  const d = getSale(id);
+  if (!d || d.project_id !== wsProject(auth, url).id) throw new HttpError(404, 'Document not found');
+  return d;
+};
+route('POST', '/api/ws/sales', ({ auth, url, body }) => { const b = { ...(body ?? {}) }; delete b.id; return saveSale(wsProject(auth, url).id, b, wsActor(auth)); }, { guest: true });
+route('PUT', '/api/ws/sales/:id', ({ auth, url, params, body }) => (wsSale(auth, url, params[0]), saveSale(wsProject(auth, url).id, { ...(body ?? {}), id: params[0] }, wsActor(auth))), { guest: true });
+route('DELETE', '/api/ws/sales/:id', ({ auth, url, params }) => (wsSale(auth, url, params[0]), { ok: deleteSale(params[0]) }), { guest: true });
+route('POST', '/api/ws/sales/:id/convert', ({ auth, url, params, body }) => (wsSale(auth, url, params[0]), convertSale(params[0], body?.kind === 'order' ? 'order' : 'invoice', wsActor(auth)) ?? notFound()), { guest: true });
+route('POST', '/api/ws/sales/draft', async ({ auth, url, body }) => {
+  const text = String(body?.text ?? '').trim();
+  if (text.length < 4) throw new HttpError(400, 'Describe the document');
+  try { return await draftSale(wsProject(auth, url).id, text, KINDS.includes(body?.kind) ? body.kind : 'invoice', wsActor(auth)); } catch (e) { throw new HttpError(502, (e as Error).message); }
+}, { guest: true });
+route('PUT', '/api/company/profile', ({ auth, body }) => (ownerOnly(auth, 'manage the company'), setSellerProfile(body ?? {})));
+
 /** What a share link opens (guests call this before they have a name). */
 route('GET', '/api/share/:token', ({ params }) => {
   const s = shareByToken(params[0]);
@@ -391,8 +607,8 @@ route('GET', '/api/room/:id', ({ res, params, url, auth }) => {
   if (!getConversation(params[0])) notFound();
   const cid = (url.searchParams.get('cid') ?? '').slice(0, 40) || Math.random().toString(36).slice(2);
   const guest = isGuest(auth);
-  const fallback = guest ? 'Guest' : loadConfig().userName || (auth === 'owner' ? 'Host' : (auth as any)?.name ?? 'Device');
-  const name = (url.searchParams.get('name') ?? '').trim().slice(0, 40) || fallback;
+  const fallback = guest ? ((auth as any).member?.name ?? 'Guest') : loadConfig().userName || (auth === 'owner' ? 'Host' : (auth as any)?.name ?? 'Device');
+  const name = (auth as any)?.member?.name ?? ((url.searchParams.get('name') ?? '').trim().slice(0, 40) || fallback);
   const sse = openSse(res);
   const ping = setInterval(() => res.write(': ping\n\n'), 20_000);
   const leave = joinRoom(params[0], { cid, name, color: colorFor(cid), guest, send: sse, close: () => res.end() });
@@ -523,6 +739,55 @@ route('POST', '/api/server/package', ({ auth, body }) => {
   const r = serverSetupScript(host);
   return { domain: r.domain, url: r.domain ? 'https://' + r.domain : '', script: r.script };
 });
+// ---------- updates (newest release on GitHub) ----------
+route('GET', '/api/update', async ({ url }) => (url.searchParams.has('check') || !updateInfo().checkedAt ? checkUpdate() : updateInfo()));
+// "Report a problem": preview what is sent, send it to the repair server, list my reports and their state
+route('POST', '/api/report/preview', async ({ auth, body }) => {
+  ownerOnly(auth, 'report problems');
+  return buildReport((body ?? {}) as any);
+});
+route('POST', '/api/report', async ({ auth, body }) => {
+  ownerOnly(auth, 'report problems');
+  try {
+    return await sendReport((body ?? {}) as any);
+  } catch (e) {
+    throw new HttpError(400, (e as Error).message);
+  }
+});
+route('GET', '/api/reports', async ({ auth }) => {
+  ownerOnly(auth, 'see reports');
+  return { reports: await myReports() };
+});
+route('POST', '/api/update/install', async ({ auth }) => {
+  ownerOnly(auth, 'install updates');
+  try {
+    await installUpdate();
+  } catch (e) {
+    throw new HttpError(400, (e as Error).message);
+  }
+  return { ok: true };
+});
+// ---------- calendars (ICS links: Google, Outlook, iCloud…) ----------
+route('GET', '/api/calendars', () => ({ calendars: publicCalendars() }));
+route('POST', '/api/calendars', async ({ auth, body }) => {
+  ownerOnly(auth, 'add calendars');
+  try {
+    return await addCalendar(String(body.name ?? ''), String(body.url ?? ''));
+  } catch (e) {
+    throw new HttpError(400, (e as Error).message);
+  }
+});
+route('DELETE', '/api/calendars/:id', ({ auth, params }) => {
+  ownerOnly(auth, 'remove calendars');
+  removeCalendar(params[0]);
+  return { ok: true };
+});
+route('GET', '/api/calendars/events', async ({ url }) => {
+  const days = Math.min(31, Math.max(1, Number(url.searchParams.get('days') ?? 7)));
+  const d = new Date();
+  const from = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return upcoming(from, from + days * 86400_000);
+});
 // ---------- plugins (MCP servers) ----------
 route('GET', '/api/plugins', () => ({ installed: publicPlugins(), catalog: CATALOG }));
 route('POST', '/api/plugins', async ({ auth, body }) => {
@@ -550,6 +815,14 @@ route('POST', '/api/plugins/:id/login', ({ auth, params }) => {
   if (process.platform !== 'win32') throw new HttpError(400, 'Run "claude" in a terminal and type /mcp');
   const p = publicPlugins().find((x) => x.id === params[0]);
   if (!p) notFound();
+  const c = CATALOG.find((x) => x.id === p!.catalogId);
+  if (c?.login && c.command) {
+    // local server with its own device-code sign-in (Microsoft 365): a window shows the link + code
+    const env = { ...process.env, ...(c.env ?? {}) };
+    const cmd = [c.command, ...(c.args ?? []), ...c.login].join(' ');
+    spawn('cmd.exe', ['/c', 'start', '"ALTTER - sign in"', 'cmd', '/k', `echo. & echo   Open the link below, enter the code and sign in to ${c.title}. Close this window when it says you are signed in. & echo. & ${cmd}`], { detached: true, stdio: 'ignore', windowsHide: false, env }).unref();
+    return { ok: true, device: true };
+  }
   spawn('cmd.exe', ['/c', 'start', '"ALTTER - sign in"', 'cmd', '/k', `echo. & echo   Type /mcp, choose "${p!.name}" and pick Authenticate. A browser opens to sign in. & echo. & claude`], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
   return { ok: true };
 });
@@ -797,6 +1070,7 @@ export function startServer(port = loadConfig().port, host = loadConfig().host) 
     server.listen(port, host, () => {
       setListening(port, host);
       listeningPort = port;
+      startUpdateChecks(); warmUsage(); startWorkspaceAutomations();
       resolveP(server);
     });
   });

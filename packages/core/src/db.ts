@@ -90,6 +90,8 @@ export function getDb(): DatabaseSync {
   // v0.12: crews — a helper's chat sits under the lead's chat
   addColumn('conversations', 'parent_id', 'TEXT');
   addColumn('conversations', 'crew', 'TEXT');
+  // v0.14: images/videos the AI made during an answer (absolute paths, JSON)
+  addColumn('messages', 'media', 'TEXT');
   return db;
 }
 

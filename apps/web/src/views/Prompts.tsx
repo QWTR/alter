@@ -70,7 +70,7 @@ export function PromptsView() {
                 <div className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
                   <span className={`prompt-kind k-${p.kind}`}>{p.kind === 'image' ? '🖼' : p.kind === 'video' ? '🎬' : '✍'}</span>
                   <div className="grow" style={{ minWidth: 0 }}>
-                    <b className="truncate" style={{ display: 'block' }}>{p.title}</b>
+                    <b className="prompt-title" title={p.title}>{p.title}</b>
                     <span className="faint small">{t(`prompts.cat.${p.category}` as Key)}{p.uses ? ` · ${t('prompts.used', { n: p.uses })}` : ''}</span>
                   </div>
                   <button className={`btn ghost icon sm${p.favorite ? ' star-on' : ''}`} onClick={() => toggleFav(p)} title={t('prompts.fav')}><Star /></button>

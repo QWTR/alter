@@ -11,7 +11,7 @@ export interface ProviderStatus {
   models: { id: string; label: string }[]; efforts: string[];
   health?: { ok: boolean; checkedAt: string; error?: string; latencyMs?: number };
 }
-export interface Settings { defaultProvider: string; learning: boolean; language: string; userName: string; onboarded: boolean; onLimit: 'ask' | 'switch' }
+export interface Settings { defaultProvider: string; learning: boolean; language: string; userName: string; onboarded: boolean; onLimit: 'ask' | 'switch'; defaultAccess?: 'chat' | 'read' | 'full' }
 export interface Limit { provider: string; message: string; until: string | null; at: string }
 export interface UsageTotals { runs: number; input: number; output: number; cached: number; cost: number; today: { runs: number; input: number; output: number } }
 export interface UsageSummary { days: number; byProvider: Record<string, UsageTotals>; daily: { day: string; provider: string; runs: number; input: number; output: number }[]; limits: Limit[] }
@@ -32,7 +32,7 @@ export interface Share { token: string; conversationId: string; createdAt: strin
 export interface Conversation { id: string; title: string; provider: string | null; project_id: string | null; agent_id?: string | null; parent_id?: string | null; crew?: string | null; access: Access; created_at: string; updated_at: string; share?: Share | null }
 export interface Attachment { id: string; name: string; type: string; size: number; url: string }
 export interface Author { name: string; color: string }
-export interface Message { id: number; role: 'user' | 'assistant'; content: string; provider: string | null; created_at: string; attachments?: Attachment[]; author?: Author | null; media?: MediaItem[] }
+export interface Message { id: number; role: 'user' | 'assistant'; content: string; provider: string | null; created_at: string; attachments?: Attachment[]; author?: Author | null; media?: MediaItem[]; /** pages that exist on disk (from the server) */ pages?: string[] }
 /** A rendered video / image / sound the answer points to. */
 export interface MediaItem { url: string; name: string; kind: 'video' | 'image' | 'audio'; size: number; mtime: number; folder?: string }
 export interface RenderProgress { stage: string; pct: number; label?: string }
@@ -65,11 +65,18 @@ const store = {
 export let token: string | null = null;
 
 /** A guest who opened a share link: limited to that one chat. */
-export interface GuestInfo { token: string; conversationId: string; title: string; host: string; name: string; guestsCanSend: boolean }
+export interface GuestInfo { token: string; conversationId: string; title: string; host: string; name: string; guestsCanSend: boolean; /** a workspace member (whole project, picks access) */ member?: boolean }
 export let guest: GuestInfo | null = null;
 export function enterAsGuest(g: GuestInfo) {
   guest = g;
-  token = `share:${g.token}`;
+  token = g.member ? `ws:${g.token}` : `share:${g.token}`;
+}
+/** A workspace member, before a chat is picked: just the key. */
+export function enterAsMember(key: string) {
+  token = `ws:${key}`;
+}
+export function leaveGuest() {
+  guest = null;
 }
 
 /** This tab in an online session (stays the same across reloads of the tab). */
@@ -309,7 +316,7 @@ export function connectEvents(handler: (type: string, data: any) => void): () =>
     es = new EventSource(`/api/events?token=${encodeURIComponent(token ?? '')}`);
     // ALTTER on the computer was updated (or restarted with a new version): load the new app
     es.addEventListener('hello', () => {
-      fetch('/api/health', { cache: 'no-store' }).then((r) => r.json()).then((h) => { if (h?.version && h.version !== __APP_VERSION__) location.reload(); }).catch(() => {});
+      fetch('/api/health', { cache: 'no-store' }).then((r) => r.json()).then((h) => { if (h?.version && h.version !== __APP_VERSION__) { /* reload once per version — never a loop if the two ever disagree */ let tried = ''; try { tried = sessionStorage.getItem('altter.reloadedFor') ?? ''; sessionStorage.setItem('altter.reloadedFor', h.version); } catch {} if (tried !== h.version) location.reload(); } }).catch(() => {});
     });
     for (const type of types) es.addEventListener(type, (e) => handler(type, JSON.parse((e as MessageEvent).data)));
     es.onerror = () => {

@@ -1,24 +1,30 @@
 // Settings → Plugins: a marketplace of MCP servers (Higgsfield, Figma, Blender, a real browser…) + your own.
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  AudioLines, BookOpen, Box, Bug, Check, Clapperboard, Database, Flame, GitBranch, Globe, KeyRound, ListTree, LogIn, NotebookPen, PenTool,
-  Plus, Puzzle, Search, Sparkles, Trash2, type LucideIcon,
+  AudioLines, BookOpen, Box, Briefcase, Bug, Calendar, Check, Clapperboard, CreditCard, Database, FileText, Flame, FolderOpen, GitBranch, Globe, HardDrive,
+  Headphones, Kanban, KeyRound, LayoutGrid, ListChecks, ListTree, LogIn, Mail, Megaphone, MessagesSquare, Mic, NotebookPen, Palette, PenTool,
+  Plus, Presentation, Puzzle, Search, Server, Shapes, Sparkles, Store, Table, Trash2, Users, Video, Workflow, Zap, Receipt, Truck, ShoppingCart, MessageCircle, Send, UserCheck, FileCheck, Calculator, type LucideIcon,
 } from 'lucide-react';
+import { CalendarsCard } from './Calendars';
 import { useState } from 'react';
 import { api, invalidate, useData } from '../api';
 import { useT, type Key } from '../i18n';
-import { Field, Modal, ModalHead, Segmented, Switch, spring, stagger, toast } from './ui';
+import { Field, Modal, ModalHead, Switch, spring, stagger, toast } from './ui';
 
 
 interface CatalogEntry {
   id: string; title: string; category: string; icon: string; color: string; description: string; homepage: string;
-  transport: 'http' | 'stdio'; oauth?: boolean; needs?: string; popular?: boolean;
+  transport: 'http' | 'stdio'; oauth?: boolean; login?: string[]; needs?: string; popular?: boolean;
   keys?: { name: string; label: string; help?: string }[];
 }
 interface Installed { id: string; name: string; title: string; catalogId?: string; transport: 'http' | 'stdio'; url?: string; command?: string; args?: string[]; oauth?: boolean; enabled: boolean }
 
-const ICONS: Record<string, LucideIcon> = { AudioLines, BookOpen, Box, Bug, Clapperboard, Database, Flame, GitBranch, Globe, ListTree, NotebookPen, PenTool };
-const CATS = ['all', 'create', 'design', 'web', 'dev', 'work', 'data'] as const;
+const ICONS: Record<string, LucideIcon> = {
+  AudioLines, BookOpen, Box, Briefcase, Bug, Calendar, Clapperboard, CreditCard, Database, FileText, Flame, FolderOpen, GitBranch, Globe, HardDrive, Headphones,
+  Kanban, LayoutGrid, ListChecks, ListTree, Mail, Megaphone, MessagesSquare, Mic, NotebookPen, Palette, PenTool, Presentation, Server, Shapes, Store, Table, Users, Video, Workflow, Zap,
+  Receipt, Truck, ShoppingCart, MessageCircle, Send, UserCheck, FileCheck, Calculator,
+};
+const CATS = ['all', 'office', 'tasks', 'meet', 'sales', 'finance', 'commerce', 'hr', 'auto', 'create', 'design', 'web', 'dev', 'data'] as const;
 type Cat = (typeof CATS)[number];
 
 function PluginIcon({ icon, color, size = 42 }: { icon?: string; color?: string; size?: number }) {
@@ -53,7 +59,7 @@ export function PluginsTab() {
       toast(t('plugins.installed', { name: c.title }), 'ok');
       setKeysFor(null);
       refresh();
-      if (c.oauth && r.plugins[0]) login(r.plugins[0]);
+      if ((c.oauth || c.login) && r.plugins[0]) login(r.plugins[0]);
     } catch (e) {
       toast((e as Error).message, 'error');
     } finally {
@@ -62,8 +68,8 @@ export function PluginsTab() {
   };
   const login = async (p: Installed) => {
     try {
-      await api(`/api/plugins/${p.id}/login`, { method: 'POST' });
-      toast(t('plugins.loginHint', { name: p.name }), 'info');
+      const r = await api<{ device?: boolean }>(`/api/plugins/${p.id}/login`, { method: 'POST' });
+      toast(r.device ? t('plugins.deviceHint', { name: p.title }) : t('plugins.loginHint', { name: p.name }), 'info');
     } catch (e) {
       toast((e as Error).message, 'error');
     }
@@ -91,6 +97,8 @@ export function PluginsTab() {
         </div>
       </div>
 
+      <CalendarsCard />
+
       {data.installed.length > 0 && (
         <section>
           <div className="section-title">{t('plugins.yours')}</div>
@@ -104,7 +112,7 @@ export function PluginsTab() {
                     <b>{p.title}</b>
                     <div className="small faint truncate">{p.transport === 'http' ? p.url : [p.command, ...(p.args ?? [])].join(' ')}</div>
                   </div>
-                  {p.oauth && <button className="btn sm" onClick={() => login(p)} title={t('plugins.loginTitle')}><LogIn size={14} />{t('plugins.login')}</button>}
+                  {(p.oauth || c?.login) && <button className="btn sm" onClick={() => login(p)} title={t('plugins.loginTitle')}><LogIn size={14} />{t('plugins.login')}</button>}
                   <Switch on={p.enabled} onChange={(v) => toggle(p, v)} label={p.title} />
                   <button className="btn ghost icon sm danger" onClick={() => remove(p)} title={t('common.delete')}><Trash2 /></button>
                 </motion.div>
@@ -117,7 +125,7 @@ export function PluginsTab() {
       <section>
         <div className="row plug-filters">
           <div className="plug-search"><Search size={15} /><input className="input" placeholder={t('plugins.search')} value={q} onChange={(e) => setQ(e.target.value)} /></div>
-          <Segmented<Cat> value={cat} onChange={setCat} options={CATS.map((c) => ({ value: c, label: t(`plugins.cat.${c}` as Key) }))} />
+          <div className="plug-cats">{CATS.map((c) => { const n = c === 'all' ? data.catalog.length : data.catalog.filter((x) => x.category === c).length; return n ? <button key={c} type="button" className={c === cat ? 'on' : ''} onClick={() => setCat(c)}>{t(`plugins.cat.${c}` as Key)}<span>{n}</span></button> : null; })}</div>
         </div>
         <div className="plug-grid" key={cat}>
           {shown.map((c, i) => {
@@ -131,7 +139,7 @@ export function PluginsTab() {
                       <b>{c.title}</b>
                       {c.popular && <span className="badge accent"><Sparkles size={11} />{t('plugins.popular')}</span>}
                     </div>
-                    <div className="small faint">{c.oauth ? t('plugins.viaLogin') : c.keys?.length ? t('plugins.viaKey') : c.transport === 'stdio' ? t('plugins.local') : t('plugins.online')}</div>
+                    <div className="small faint">{c.oauth || c.login ? t('plugins.viaLogin') : c.keys?.length ? t('plugins.viaKey') : c.transport === 'stdio' ? t('plugins.local') : t('plugins.online')}</div>
                   </div>
                 </div>
                 <p className="small muted plug-desc">{desc(c)}</p>

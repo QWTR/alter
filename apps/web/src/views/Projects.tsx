@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { Bot, Brain, FolderKanban, FolderOpen, Link2, MessageSquare, Plus, RefreshCw, ScanSearch, Settings2, Trash2 } from 'lucide-react';
+import { Bot, Brain, FolderKanban, FolderOpen, Link2, MessageSquare, Plus, RefreshCw, ScanSearch, Settings2, Trash2, Users, UserPlus } from 'lucide-react';
+import { InviteModal } from './Workspace';
 import { useSyncExternalStore } from 'react';
 import { Markdown } from '../components/Markdown';
 import { useState } from 'react';
@@ -268,6 +269,9 @@ function ProjectPage({ id }: { id: string }) {
   const [tab, setTab] = useState<Tab>('chats');
   const [gallery, setGallery] = useState(false);
   const [openAgent, setOpenAgent] = useState<string | null>(null);
+  const [invite, setInvite] = useState(false);
+  const { data: team } = useData<{ id: string; online: boolean }[]>(`/api/projects/${id}/members`);
+  const { data: status } = useData<Status>('/api/status');
   const p = projects?.find((x) => x.id === id);
   const mine = (agents ?? []).filter((a) => a.projectId === id);
 
@@ -293,10 +297,13 @@ function ProjectPage({ id }: { id: string }) {
         </div>
         <div className="row" style={{ flexWrap: 'wrap' }}>
           <button className="btn" onClick={openFolder}><FolderOpen />{t('projects.openFolder')}</button>
+          <button className="btn" onClick={() => navigate(`/workspace/${id}`)}><Users />{t('ws.open')}{team?.length ? <span className="faint small">{team.length + 1}</span> : null}</button>
+          <button className="btn ghost icon" title={t('ws.invite')} onClick={() => setInvite(true)}><UserPlus /></button>
           <button className="btn primary" onClick={() => navigate(`/chat/new?project=${id}`)}><Plus />{t('chat.new')}</button>
         </div>
       </motion.div>
 
+      <InviteModal open={invite} onClose={() => setInvite(false)} projectId={id} projectName={p.name} lanUrls={status?.lanUrls ?? []} />
       <ProjectOverview p={p} />
 
       <Tabs<Tab>

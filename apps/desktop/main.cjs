@@ -127,15 +127,19 @@ function createWindow() {
   const state = () => win && !win.isDestroyed() && win.webContents.send('win:state', { maximized: win.isMaximized(), fullscreen: win.isFullScreen(), focused: win.isFocused() });
   for (const ev of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen', 'focus', 'blur']) win.on(ev, state);
   // the window only ever shows ALTTER itself; links open in the browser
+  // (a shared-chat link opens in its own ALTTER window instead)
+  const isShare = (url) => /^https?:\/\/[^#]+\/#\/[sw]\/[\w-]{10,}/.test(url);
   win.webContents.on('will-navigate', (e, url) => {
     if (!url.startsWith(URL)) {
       e.preventDefault();
-      shell.openExternal(url);
+      if (isShare(url)) ipcMain.emit('win:openSession', null, url);
+      else shell.openExternal(url);
     }
   });
   win.once('ready-to-show', () => !startHidden && win.show()); // no white flash
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isShare(url)) ipcMain.emit('win:openSession', null, url);
+    else shell.openExternal(url);
     return { action: 'deny' };
   });
   win.on('close', (e) => {
@@ -156,6 +160,30 @@ ipcMain.on('win:maximize', (e) => {
 });
 ipcMain.on('win:close', (e) => BrowserWindow.fromWebContents(e.sender)?.close());
 ipcMain.handle('win:isMaximized', (e) => !!BrowserWindow.fromWebContents(e.sender)?.isMaximized());
+
+// ---------- joining someone else's shared chat: its own window (not the browser) ----------
+const sessionWins = new Map();
+ipcMain.on('win:openSession', (_e, raw) => {
+  let u;
+  try { u = new globalThis.URL(raw); } catch { return; }
+  if (!/^https?:$/.test(u.protocol) || !/^#\/[sw]\/[\w-]{10,}/.test(u.hash)) return;
+  const ws = u.hash.startsWith('#/w/'); // a whole workspace: a bigger window
+  const key = u.origin + '/' + u.hash.split('/').slice(0, 3).join('/');
+  const open = sessionWins.get(key);
+  if (open && !open.isDestroyed()) { open.show(); open.focus(); return; }
+  const w = new BrowserWindow({
+    width: ws ? 1320 : 960, height: ws ? 860 : 780, minWidth: 380, minHeight: 500, title: 'ALTTER', backgroundColor: '#0b0a12', autoHideMenuBar: true,
+    icon: path.join(__dirname, 'build', 'icon.png'),
+    webPreferences: { contextIsolation: true, sandbox: true }, // no preload: the other person's page gets no desktop bridge
+  });
+  sessionWins.set(key, w);
+  w.on('closed', () => sessionWins.delete(key));
+  const as = u.searchParams.get('as'); // the joiner's own name, so they go straight in
+  w.loadURL(u.origin + '/' + (as ? '?as=' + encodeURIComponent(as.slice(0, 40)) : '') + u.hash);
+  // the window stays on that chat; any other link opens in the browser
+  w.webContents.on('will-navigate', (ev, url) => { if (!url.startsWith(u.origin + '/')) { ev.preventDefault(); shell.openExternal(url); } });
+  w.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+});
 
 // ---------- agents on the screen: their cursors, drawn over every monitor ----------
 let overlays = [];
@@ -256,7 +284,21 @@ if (process.env.ALTER_USER_DATA) app.setPath('userData', process.env.ALTER_USER_
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', showWindow);
+  // altter://join?u=<invite link> — "Open in the app" on an invite page, or a link someone sent
+  const fromArgs = (argv) => {
+    const raw = (argv || []).find((a) => /^altter:\/\//i.test(String(a)));
+    if (!raw) return false;
+    try {
+      const link = new globalThis.URL(raw).searchParams.get('u');
+      if (link) { app.whenReady().then(() => { showWindow(); ipcMain.emit('win:openSession', null, link); }); return true; }
+    } catch {}
+    return false;
+  };
+  if (process.defaultApp) app.setAsDefaultProtocolClient('altter', process.execPath, [path.resolve(process.argv[1])]);
+  else app.setAsDefaultProtocolClient('altter');
+  app.on('second-instance', (_e, argv) => { if (!fromArgs(argv)) showWindow(); });
+  app.on('open-url', (e, url) => { e.preventDefault(); fromArgs([url]); });
+  if (process.argv.some((a) => /^altter:\/\//i.test(a))) setTimeout(() => fromArgs(process.argv), 2500);
   app.setAppUserModelId('dev.alter.app');
 
   app.whenReady().then(async () => {

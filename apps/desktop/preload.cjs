@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('alterDesktop', {
   toggleMaximize: () => ipcRenderer.send('win:maximize'),
   close: () => ipcRenderer.send('win:close'),
   isMaximized: () => ipcRenderer.invoke('win:isMaximized'),
+  /** Someone else's shared chat ("<host>/#/s/<token>") in its own app window. */
+  openSession: (url) => ipcRenderer.send('win:openSession', String(url)),
   onState: (cb) => {
     const h = (_e, s) => cb(s);
     ipcRenderer.on('win:state', h);

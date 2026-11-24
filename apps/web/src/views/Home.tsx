@@ -34,7 +34,7 @@ export function HomeView() {
 
   return (
     <div className="page">
-      <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease }} style={{ fontSize: 34, letterSpacing: '-0.03em', margin: '10px 0 18px', fontWeight: 700 }}>
+      <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease }} style={{ fontSize: 34, letterSpacing: '-0.03em', margin: '4px 0 22px', fontWeight: 700 }}>
         <span className="gradient-text">{greet}{name ? `, ${name}` : ''}</span>
       </motion.h1>
 
@@ -44,18 +44,18 @@ export function HomeView() {
       </motion.form>
 
       {conn.providers && !conn.ok && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: 14, display: 'grid', gap: 10 }}>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 18, display: 'grid', gap: 10 }}>
           {conn.providers.filter((p) => p.id !== 'demo' && (p.installed || p.id === 'claude')).slice(0, 2).map((p, i) => <ProviderCard key={p.id} p={p} index={i} />)}
         </motion.div>
       )}
 
-      <div className="cards" style={{ marginTop: 22, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+      <div className="cards home-stats" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         {[
           { icon: Brain, n: status?.counts.memories, label: t('home.knows'), to: '/memory' },
           { icon: Bot, n: (agents ?? []).filter((a) => a.enabled && !a.monitor).length, label: t('home.agentsActive'), to: '/agents' },
           { icon: MessageSquare, n: status?.counts.conversations, label: t('home.chats'), to: '/chat' },
         ].map((s, i) => (
-          <motion.button key={s.to} className="card hover" style={{ textAlign: 'left', display: 'flex', gap: 14, alignItems: 'center' }} onClick={() => navigate(s.to)} {...stagger(i, 0.05)}>
+          <motion.button key={s.to} className="card hover home-stat" style={{ textAlign: 'left', display: 'flex', gap: 14, alignItems: 'center' }} onClick={() => navigate(s.to)} {...stagger(i, 0.05)}>
             <div style={{ width: 40, height: 40, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--accent-soft)', color: 'var(--accent-strong)' }}>
               <s.icon size={20} />
             </div>

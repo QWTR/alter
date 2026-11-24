@@ -6,6 +6,8 @@ import { learnFrom } from './learning.ts';
 import { MONITOR_TYPES, runCheck, type MonitorSpec, type MonitorState } from './monitor.ts';
 import { getProject } from './projects.ts';
 import { buildPrompt } from './prompt.ts';
+import { RICH_GUIDE } from './rich.ts';
+import { calendarContext } from './calendar.ts';
 import { ACCESS_LEVELS, resolveProvider, type Access } from './providers/index.ts';
 import { isValidSchedule, nextRun } from './schedule.ts';
 import { skillsText } from './skills.ts';
@@ -362,12 +364,13 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
         : agent.access === 'read'
           ? 'You may read files and search the web, but do not change anything.'
           : '';
+    const calendar = await calendarContext(`${task ?? ''} ${agent.instructions}`).catch(() => '');
     const prompt = buildPrompt({
       query: task ?? agent.instructions,
       asTask: true,
       project,
       instructions: `You are "${agent.name}", an agent inside ALTTER. ${agent.description}${task ? `\nYour role: ${agent.instructions}` : ''}\n${accessNote}${skills ? `\n\n${skills}` : ''}`,
-      extra: [context, pluginsGuide(), previous ? `## Your previous runs (build on them, don't repeat them)\n${previous}` : ''].filter(Boolean).join('\n\n'),
+      extra: [context, calendar, pluginsGuide(), RICH_GUIDE, previous ? `## Your previous runs (build on them, don't repeat them)\n${previous}` : ''].filter(Boolean).join('\n\n'),
       activityHours: 36,
     });
 

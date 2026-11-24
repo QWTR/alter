@@ -20,7 +20,7 @@
     ]
   },
   "android": {
-    "appendUserAgent": "ALTTER-App/0.13.0",
+    "appendUserAgent": "ALTTER-App/0.15.0",
     "backgroundColor": "#0b0a12",
     "allowMixedContent": false,
     "captureInput": true

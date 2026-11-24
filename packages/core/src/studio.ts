@@ -207,7 +207,7 @@ Fonts: display/body take any Google Fonts family by name (e.g. "Montserrat", "Lo
 
 /** The chat while access is not full: creative work needs to run the renderer. */
 export const CREATIVE_NEEDS_FULL = `## ALTTER Studio
-Videos, motion graphics, 3D, edits and graphics are rendered on this computer, which needs "Full control" for this chat. Tell the user in one line to switch the chat to Full control (bottom of the chat) and send the request again; you may describe the plan (scenes, format, length) meanwhile.`;
+Videos, motion graphics, 3D, edits and graphics are rendered on this computer, which needs "Full control" for this chat. Tell the user in one line to switch the chat to Full control (bottom of the chat) and send the request again; you may describe the plan (scenes, format, length) meanwhile. End the answer with this exact line on its own: [[altter:needs-full]] (the app shows a button that switches and continues).`;
 
 // ---------- live render progress ----------
 
@@ -276,6 +276,53 @@ export function mediaIn(text: string, cwd: string): MediaItem[] {
   }
   return [...found.values()];
 }
+
+const SKIP_DIRS = new Set(['node_modules', '.git', '.next', '.nuxt', '.venv', 'venv', '__pycache__', '.cache', '.turbo', '.gradle', 'ext', '.svelte-kit', 'coverage']);
+const OUTPUT_DIR = /(^|[\\/])(output|outputs|out|renders?|exports?|generated|final|dist[\\/]media)([\\/]|$)/i;
+
+/**
+ * Images, videos and audio the AI made or changed during an answer (files modified since `since`), so they show
+ * in the chat even when the answer only names a folder. Frame dumps (many new files in one folder) are skipped
+ * unless the answer names them; files the answer names and files in output-like folders come first.
+ */
+export function mediaMadeDuring(dirs: string[], since: number, text: string, limit = 8): string[] {
+  const named = new Set((text.match(/[\w.-]{3,}/g) ?? []).map((s) => s.toLowerCase()));
+  const found: { file: string; mtime: number; dir: string }[] = [];
+  let visited = 0;
+  const walk = (dir: string, depth: number) => {
+    if (depth > 6 || visited > 6000) return;
+    let entries: import('node:fs').Dirent[];
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (++visited > 6000) return;
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (!SKIP_DIRS.has(e.name.toLowerCase()) && !e.name.startsWith('.')) walk(p, depth + 1);
+      } else if (MEDIA_EXT[extname(e.name).toLowerCase()]) {
+        try {
+          const st = statSync(p);
+          if (st.mtimeMs >= since - 2000 && st.size > 0) found.push({ file: p, mtime: st.mtimeMs, dir });
+        } catch {}
+      }
+    }
+  };
+  for (const d of [...new Set(dirs.map((x) => normalize(x)))]) if (existsSync(d)) walk(d, 0);
+  const perDir = new Map<string, number>();
+  for (const f of found) perDir.set(f.dir, (perDir.get(f.dir) ?? 0) + 1);
+  const isNamed = (f: string) => {
+    const b = basename(f).toLowerCase();
+    return named.has(b) || named.has(b.slice(0, b.length - extname(b).length));
+  };
+  const score = (f: { file: string; dir: string }) => (isNamed(f.file) ? 4 : 0) + (OUTPUT_DIR.test(f.dir) ? 2 : 0);
+  return found
+    .filter((f) => isNamed(f.file) || (perDir.get(f.dir) ?? 0) <= 12)
+    .sort((a, b) => score(b) - score(a) || b.mtime - a.mtime)
+    .slice(0, limit)
+    .map((f) => f.file);
+}
+
+/** Media for files stored with a message (only ones that still exist). */
+export const mediaForFiles = (files: string[]) => files.map((f) => mediaItem(f)).filter((m): m is MediaItem => !!m);
 
 /** Everything rendered so far: ./renders in the workspace and in every project folder. */
 export function listRenders(folders: string[], limit = 60): (MediaItem & { folder: string })[] {

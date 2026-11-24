@@ -1,6 +1,6 @@
 import { isNativeApp, toStartPage } from '../native';
 import { AnimatePresence, motion } from 'motion/react';
-import { Cpu, Database, Puzzle, ExternalLink, Globe, Info, Laptop, Moon, MousePointer2, RotateCcw, Server, ShieldCheck, Smartphone, Square, Sun, Unplug, type LucideIcon } from 'lucide-react';
+import { Check, Cpu, Database, Puzzle, ExternalLink, Globe, Info, Laptop, Moon, MousePointer2, RotateCcw, Server, ShieldCheck, Smartphone, Square, Sun, Unplug, type LucideIcon } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { api, forgetToken, invalidate, setCached, useData, type Device, type Status, type UsageSummary } from '../api';
@@ -9,6 +9,7 @@ import { ProviderCard, useProviders } from '../components/providers';
 import { InternetCard, ServerCard } from '../components/Internet';
 import { NotificationsCard } from '../components/Notifications';
 import { PluginsTab } from '../components/Plugins';
+import { MyReports } from '../components/Report';
 import { Field, Logo, PageHead, Segmented, Switch, Tabs, spring, stagger, toast } from '../components/ui';
 import { ago, formatTime, LANGS, setLang, useT } from '../i18n';
 import { navigate, useRoute } from '../router';
@@ -54,6 +55,56 @@ export function SettingsView() {
 async function saveSettings(patch: Record<string, unknown>) {
   setCached<Status>('/api/status', (s) => (s ? { ...s, settings: { ...s.settings, ...patch } } : s!));
   await api('/api/settings', { method: 'PUT', body: patch });
+}
+
+// [id, dark preview (bg, panel, accent), light preview (bg, panel, accent)]
+const PALETTES: [string, [string, string, string], [string, string, string]][] = [
+  ['violet', ['#0b0a12', '#1a1927', '#8b74ff'], ['#f5f4fa', '#ffffff', '#6d55f0']],
+  ['ocean', ['#080c14', '#151d2c', '#4c9dff'], ['#f3f6fb', '#ffffff', '#1f6fe0']],
+  ['emerald', ['#070d0b', '#142019', '#2fd08f'], ['#f3f8f5', '#ffffff', '#0f9a63']],
+  ['sunset', ['#0f0a08', '#231915', '#ff8a4c'], ['#faf5f1', '#ffffff', '#e0601f']],
+  ['rose', ['#0f080c', '#23161e', '#ff5c9a'], ['#fbf3f6', '#ffffff', '#d93a7a']],
+  ['graphite', ['#0b0b0c', '#1b1b1e', '#c9ccd6'], ['#f5f5f6', '#ffffff', '#2b2d33']],
+  ['midnight', ['#000000', '#121219', '#8b74ff'], ['#fafafa', '#ffffff', '#6d55f0']],
+];
+
+function ThemePicker() {
+  const t = useT() as unknown as (k: string) => string;
+  const [palette, setPalette] = useState(() => {
+    try {
+      return localStorage.getItem('alter.palette') || 'violet';
+    } catch {
+      return 'violet';
+    }
+  });
+  const light = document.documentElement.dataset.theme === 'light';
+  const pick = (v: string) => {
+    setPalette(v);
+    try {
+      localStorage.setItem('alter.palette', v);
+    } catch {}
+    (window as any).__applyTheme?.();
+  };
+  return (
+    <div className="theme-grid" role="radiogroup">
+      {PALETTES.map(([id, dark, lite]) => {
+        const [bg, panel, accent] = light ? lite : dark;
+        return (
+          <button key={id} role="radio" aria-checked={palette === id} className={`theme-card${palette === id ? ' on' : ''}`} onClick={() => pick(id)}>
+            <span className="theme-prev" style={{ background: bg }}>
+              <i style={{ background: panel }} />
+              <b style={{ background: light ? '#000' : '#fff' }} />
+              <em style={{ background: accent }} />
+            </span>
+            <span className="theme-name">
+              {t(`settings.palette.${id}`)}
+              {palette === id && <Check />}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function General({ status }: { status: Status }) {
@@ -109,6 +160,9 @@ function General({ status }: { status: Status }) {
               { value: 'light', label: t('settings.theme.light'), icon: Sun },
             ]}
           />
+        </Field>
+        <Field label={t('settings.palette')} hint={t('settings.paletteHint')}>
+          <ThemePicker />
         </Field>
       </motion.div>
       {status.you.kind === 'computer' && <HandsCard />}
@@ -361,6 +415,7 @@ function DataTab({ status }: { status: Status }) {
 function About({ status }: { status: Status }) {
   const t = useT();
   return (
+    <div style={{ display: 'grid', gap: 16 }}>
     <motion.div className="card" style={{ textAlign: 'center', padding: 36 }} initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
       <div style={{ display: 'inline-block', filter: 'drop-shadow(0 16px 40px rgba(124,92,255,.45))' }}>
         <Logo size={72} animated />
@@ -373,5 +428,7 @@ function About({ status }: { status: Status }) {
         GitHub
       </a>
     </motion.div>
+    {status.you.kind === 'computer' && <MyReports />}
+    </div>
   );
 }

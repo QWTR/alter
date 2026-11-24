@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, invalidate, setCached, useData } from '../api';
 import { PromptPicker } from '../components/PromptPicker';
 import { Empty, Modal, ModalHead, PageHead, Segmented, toast, stagger } from '../components/ui';
-import { ago, useT } from '../i18n';
+import { ago, useT, type Key } from '../i18n';
 import { useRoute } from '../router';
 
 export interface MediaItemRow {
@@ -17,6 +17,16 @@ interface ProviderInfo { id: string; label: string; free: boolean; needsKey: boo
 interface Options { providers: ProviderInfo[]; aspects: string[] }
 
 const ASPECT_RATIO: Record<string, string> = { '1:1': '1 / 1', '16:9': '16 / 9', '9:16': '9 / 16', '4:3': '4 / 3', '3:4': '3 / 4' };
+
+/** Raw provider errors are English API noise — say what happened and what to do. */
+const mediaErr = (e?: string | null): Key => {
+  const x = (e ?? '').toLowerCase();
+  if (/api key|unauthori|401|403|invalid key|forbidden|no key/.test(x)) return 'media.err.key';
+  if (/credit|quota|billing|balance|402|insufficient|payment/.test(x)) return 'media.err.credit';
+  if (/safety|moderat|policy|nsfw|blocked|content/.test(x)) return 'media.err.safety';
+  if (/timeout|timed out|429|rate|busy|overload|503|502|unavailable/.test(x)) return 'media.err.busy';
+  return 'media.err.other';
+};
 
 export function MediaView() {
   const t = useT();
@@ -167,7 +177,7 @@ export function MediaView() {
                   ) : m.status === 'running' ? (
                     <div className="media-wait"><span className="spinner" /><Elapsed since={m.created_at} /></div>
                   ) : (
-                    <div className="media-err"><b>{t('media.failed')}</b><span>{m.error}</span></div>
+                    <div className="media-err"><b>{t('media.failed')}</b><span title={m.error ?? ''}>{t(mediaErr(m.error))}</span><button className="btn sm" onClick={() => again(m)}><RotateCw size={14} />{t('common.retry')}</button></div>
                   )}
                 </div>
                 <figcaption>

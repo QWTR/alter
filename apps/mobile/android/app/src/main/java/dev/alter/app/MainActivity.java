@@ -1,6 +1,7 @@
 package dev.alter.app;
 
 import android.app.DownloadManager;
+import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -52,6 +53,8 @@ public class MainActivity extends BridgeActivity {
         web.setBackgroundColor(BG);
         web.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> download(url, userAgent, contentDisposition, mimeType));
 
+        openInvite(getIntent(), 700);
+
         // Back: go back inside ALTTER; never back onto the start page (it would just reconnect) — leave the app instead.
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -69,6 +72,22 @@ public class MainActivity extends BridgeActivity {
                 moveTaskToBack(true);
             }
         });
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        openInvite(intent, 0);
+    }
+
+    /** altter://join?u=https://host/#/w/<key>/<name> — open that workspace (or shared chat) right here. */
+    private void openInvite(Intent intent, long delay) {
+        if (intent == null || intent.getData() == null || !"altter".equalsIgnoreCase(intent.getData().getScheme())) return;
+        String link = intent.getData().getQueryParameter("u");
+        if (link == null || !link.matches("(?is)^https?://[^#\\s]+/?#/[sw]/[\\w-]{10,}.*")) return;
+        WebView w = getBridge().getWebView();
+        w.postDelayed(() -> w.loadUrl(link), delay);
     }
 
     private static boolean isStartPage(String url) {

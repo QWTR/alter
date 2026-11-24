@@ -1,4 +1,5 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
+import { RichBlock, splitRich } from './RichBlocks';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
@@ -70,6 +71,21 @@ export function renderMarkdown(src: string): string {
   return out.join('');
 }
 
+/** Copy buttons on code blocks (event delegation: the Markdown itself is plain HTML). */
+function onCodeCopy(e: React.MouseEvent) {
+  const b = (e.target as HTMLElement).closest('.code-copy');
+  const code = b?.parentElement?.querySelector('code');
+  if (!b || !code) return;
+  navigator.clipboard?.writeText(code.textContent ?? '').then(() => { b.classList.add('done'); setTimeout(() => b.classList.remove('done'), 1400); }, () => {});
+}
+
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
-  return <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />;
+  // ```altter blocks (charts, week plans, tiles…) render as real UI between the Markdown parts
+  const segs = useMemo(() => splitRich(text), [text]);
+  if (segs.length === 1 && segs[0].kind === 'md') return <div className="md" onClick={onCodeCopy} dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />;
+  return (
+    <div className="md" onClick={onCodeCopy}>
+      {segs.map((s, i) => (s.kind === 'md' ? <div key={i} className="md-part" dangerouslySetInnerHTML={{ __html: renderMarkdown(s.text) }} /> : <RichBlock key={i} seg={s} />))}
+    </div>
+  );
 });

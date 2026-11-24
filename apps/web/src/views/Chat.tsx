@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowUp, AudioLines, Mic, Crosshair, ListChecks, Undo2, WandSparkles, Eye, FileText, Film, FolderKanban, Menu, MessageCircle, MonitorPlay, Music, Paperclip, Plus, Search, Settings2, Square, Terminal, Trash2, Upload, Wrench, X } from 'lucide-react';
+import { ArrowUp, AudioLines, Mic, Crosshair, ListChecks, Undo2, WandSparkles, Eye, FileText, Film, FolderKanban, Menu, MessageCircle, MonitorPlay, Music, Paperclip, Plus, Search, Settings2, Square, Terminal, Trash2, Upload, Wrench, X, Clock, CornerDownRight, Copy, Check, RotateCcw, Pencil, ShieldCheck, Zap } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ProviderPicker, getPref } from '../components/ProviderPicker';
@@ -47,6 +47,8 @@ interface Live {
   author?: Author | null;
   /** A render / Studio install running right now. */
   progress?: RenderProgress | null;
+  /** Messages sent while this answer was running (the AI took them in), at the text length when sent. */
+  followUps?: { text: string; at: number; author?: Author | null }[];
 }
 
 /** A file being attached in the composer (uploads right away, in the background). */
@@ -142,15 +144,18 @@ export function ChatView() {
   const stepLabel = useStepLabel();
   // the same chat lives under /chat/<id> and, for agents, under /agents/<agentId>/<id>
   const inAgents = route.section === 'agents';
+  // inside a workspace (#/workspace/<project>/<chat>): the chat belongs to that project
+  const inWs = route.section === 'workspace' && !guest;
+  const wsBase = inWs ? `/workspace/${route.parts[1]}` : '';
   // a guest from a share link sees exactly one chat, nothing else of the host's ALTTER
-  const routeId = guest ? guest.conversationId : inAgents ? route.parts[2] ?? null : route.parts[1] && route.parts[1] !== 'new' ? route.parts[1] : null;
+  const routeId = guest ? guest.conversationId : inWs ? (route.parts[2] && route.parts[2] !== 'new' ? route.parts[2] : null) : inAgents ? route.parts[2] ?? null : route.parts[1] && route.parts[1] !== 'new' ? route.parts[1] : null;
   // phones: the "Chats" tab (/chat) opens on the list of chats; /chat/new and /chat/<id> on the chat itself
   const [listOpen, setListOpen] = useState(() => !wide() && route.section === 'chat' && !route.parts[1]);
   useEffect(() => {
     if (route.section === 'chat' && !route.parts[1] && !wide()) setListOpen(true);
     else setListOpen(false);
   }, [route.section, route.parts[1]]); // eslint-disable-line react-hooks/exhaustive-deps
-  const projectFromQuery = guest ? null : route.query.get('project');
+  const projectFromQuery = guest ? null : inWs ? route.parts[1] : route.query.get('project');
   const host = !guest;
   const { data: convs } = useData<Conversation[]>(host ? '/api/conversations' : null);
   const { data: projects } = useData<Project[]>(host ? '/api/projects' : null);
@@ -165,8 +170,8 @@ export function ChatView() {
   const agentId = (inAgents ? route.parts[1] : routeId ? conv?.agent_id : route.query.get('agent')) ?? null;
   const agent = agents?.find((a) => a.id === agentId);
   const [drawer, setDrawer] = useState(false);
-  const base = inAgents && agentId ? `/agents/${agentId}` : '/chat';
-  const newHref = inAgents && agentId ? base : projectFromQuery ? `/chat/new?project=${projectFromQuery}` : '/chat/new';
+  const base = inWs ? wsBase : inAgents && agentId ? `/agents/${agentId}` : '/chat';
+  const newHref = inWs ? `${wsBase}/new` : inAgents && agentId ? base : projectFromQuery ? `/chat/new?project=${projectFromQuery}` : '/chat/new';
 
   const [narrow, setNarrow] = useState(() => !wide());
   useEffect(() => {
@@ -180,7 +185,8 @@ export function ChatView() {
   const setAccess = useCallback((a: Access) => {
     setAccessState(a);
     try { localStorage.setItem('altter.access', a); } catch {}
-  }, []);
+    if (!guest) void api('/api/settings', { method: 'PUT', body: { defaultAccess: a } }).then(() => invalidate('/api/status')).catch(() => {});
+  }, [guest]);
   const [planMode, setPlanMode] = useState(false);
   const [enhancing, setEnhancing] = useState(false);
   const [beforeEnhance, setBeforeEnhance] = useState<string | null>(null);
@@ -202,6 +208,8 @@ export function ChatView() {
   const [provider, setProvider] = useState('default');
   const [limitHit, setLimitHit] = useState<LimitHit | null>(null);
   const [input, setInput] = useState('');
+  /** Editing an earlier message: sending replaces it and everything after it. */
+  const [editFrom, setEditFrom] = useState<number | null>(null);
   // one live answer per conversation ('new' until the server names it) — several can run at once
   const [lives, setLives] = useState<Record<string, Live>>({});
   const aborts = useRef<Record<string, AbortController>>({});
@@ -231,6 +239,7 @@ export function ChatView() {
   const [dragging, setDragging] = useState(false);
   const key = routeId ?? 'new';
   const live = lives[key];
+  const [queued, setQueued] = useState<Record<string, string[]>>({});
 
   // ---------- attachments: paste (Ctrl+V), drop, or the paperclip ----------
   const addFiles = useCallback((list: File[] | FileList) => {
@@ -280,16 +289,18 @@ export function ChatView() {
   }, [addFiles]);
 
   useEffect(() => {
+    const remembered = status?.settings.defaultAccess;
     if (conv) {
-      setAccessState(conv.access);
+      // "Full control" once = always: older chats are lifted to the remembered level (agents keep their own)
+      setAccessState(!conv.agent_id && remembered && RANK[remembered] > RANK[conv.access] ? remembered : conv.access);
       setProvider(conv.provider ?? 'default');
     } else if (!routeId) {
       let last: Access | null = null;
       try { last = localStorage.getItem('altter.access') as Access | null; } catch {}
-      setAccessState(agent?.access ?? (last && ['chat', 'read', 'full'].includes(last) ? last : 'chat'));
+      setAccessState(agent?.access ?? remembered ?? (last && ['chat', 'read', 'full'].includes(last) ? last : 'chat'));
       setProvider('default');
     }
-  }, [conv?.id, routeId, agent?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [conv?.id, routeId, agent?.id, status?.settings.defaultAccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // a fresh chat starts without the previous chat's preview
   useEffect(() => {
@@ -488,7 +499,9 @@ export function ChatView() {
     else if (ev === 'preview') showPreview(data);
     else if (ev === 'draft') showDraft(data);
     else if (ev === 'progress') patchLive(k, (l) => ({ ...l, progress: data }));
-    else if (ev === 'done' || ev === 'error') {
+    else if (ev === 'followup') {
+      if (data.cid !== clientId) patchLive(k, (l) => ({ ...l, followUps: [...(l.followUps ?? []), { text: data.text, at: l.text.length, author: data.author }] }));
+    } else if (ev === 'done' || ev === 'error') {
       patchLive(k, (l) => ({ ...l, done: true, text: ev === 'done' ? data.text : l.text || `⚠️ ${data.message}` }));
       invalidate(`/api/conversations/${k}`, '/api/conversations');
       if (ev === 'done') setTimeout(() => setLives((all) => (all[k]?.remote && all[k].done ? (({ [k]: _, ...rest }) => rest)(all) : all)), 2500);
@@ -513,7 +526,13 @@ export function ChatView() {
     if (extra?.plan === false) setPlanMode(false);
     text = text.trim();
     const ready = extra?.attachments ?? (via ? [] : files.filter((f) => f.att).map((f) => f.att!));
+    if (!via && live && !live.done && text && !ready.length) return followUp(text);
     if ((!text && !ready.length) || (live && !live.done) || (!via && uploading)) return;
+    if (!via && editFrom != null && routeId) {
+      const from = editFrom;
+      setEditFrom(null);
+      await api(`/api/conversations/${routeId}/messages/from/${from}`, { method: 'DELETE' }).catch(() => {});
+    }
     if (guest && !guest.guestsCanSend) return;
     if (!via) {
       text = withPicks(text, picks);
@@ -535,7 +554,7 @@ export function ChatView() {
     try {
       const res = await streamChat(
         guest
-          ? { conversationId: routeId, message: text, attachments: ready.map((a) => a.id), cid: clientId, name: myName }
+          ? { conversationId: routeId, message: text, attachments: ready.map((a) => a.id), cid: clientId, name: myName, ...(guest.member ? { access, plan: plan || undefined } : {}) }
           : { conversationId: routeId, projectId, agentId, message: text, attachments: ready.map((a) => a.id), cid: clientId, name: myName, provider: useProvider === 'default' ? undefined : useProvider, access, plan: plan || undefined, model: pref.model || undefined, effort: pref.effort || undefined },
         {
           meta: (m) => {
@@ -593,6 +612,40 @@ export function ChatView() {
     }
   }
 
+  /** A message while the answer is running: Claude takes it in right away, other AIs get it as the next message. */
+  async function followUp(raw: string) {
+    const text = withPicks(raw.trim(), picks);
+    if (!text) return;
+    setPicks([]);
+    setPicking(false);
+    setInput('');
+    room.send({ typing: '', picks: [] });
+    if (taRef.current) taRef.current.style.height = 'auto';
+    const k = key;
+    const queue = () => setQueued((q) => ({ ...q, [k]: [...(q[k] ?? []), text] }));
+    if (!routeId) return queue();
+    try {
+      const r = await api<{ delivered: boolean }>(`/api/conversations/${routeId}/followup`, { method: 'POST', body: { message: text, cid: clientId, name: myName } });
+      if (r.delivered) patchLive(k, (l) => ({ ...l, followUps: [...(l.followUps ?? []), { text, at: l.text.length, author: guest && me ? { name: me.name, color: me.color } : null }] }));
+      else queue();
+    } catch {
+      queue();
+    }
+  }
+
+  // the answer is done: send what was queued, as one message
+  const waiting = queued[key];
+  const answering = !!live && !live.done;
+  useEffect(() => {
+    if (answering || !waiting?.length) return;
+    const text = waiting.join('\n\n');
+    setQueued((q) => {
+      const { [key]: _, ...rest } = q;
+      return rest;
+    });
+    send(text);
+  }, [answering, waiting, key]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const openPreview = async (path: string) => {
     try {
       setPreview(await api<Preview>('/api/preview', { method: 'POST', body: { path, conversationId: routeId } }));
@@ -629,7 +682,7 @@ export function ChatView() {
   const lastStep = live?.steps[live.steps.length - 1];
   const writingFile = busy && draft && !draft.done ? draft.file.split(/[\\/]/).pop() : undefined;
   const elapsed = live ? Math.max(0, Math.round((Date.now() - live.startedAt) / 1000)) : 0;
-  const toolSteps = (live?.steps ?? []).filter((s) => s !== 'Thinking');
+  const toolSteps = (live?.steps ?? []).filter((s) => s !== 'Thinking' && !s.startsWith('Follow-up:'));
 
   return (
     <div className={`chat${listOpen ? ' list-open' : ''}${preview ? ' with-preview' : ''}${guest ? ' guest' : ''}`}>
@@ -695,8 +748,8 @@ export function ChatView() {
           <Members members={room.members} />
           {host && routeId && conv && <ShareButton conv={conv} members={room.members} />}
           {host && routeId && <button className="btn ghost icon sm" title={t('chat.new')} onClick={() => navigate(newHref)}><Plus /></button>}
-          {preview === null && messages.some((m) => m.role === "assistant" && !!m.content.match(PAGE_RE)) && (
-            <button className="btn ghost sm" onClick={() => { const m = [...messages].reverse().find((x) => x.role === 'assistant' && (x.content.match(PAGE_RE) ?? []).length); const p = m?.content.match(PAGE_RE)?.[0]; if (p) openPreview(p); }}><MonitorPlay />{t('preview.open')}</button>
+          {preview === null && messages.some((m) => m.role === 'assistant' && !!(m.pages ?? m.content.match(PAGE_RE) ?? []).length) && (
+            <button className="btn ghost sm" onClick={() => { const m = [...messages].reverse().find((x) => x.role === 'assistant' && (x.pages ?? x.content.match(PAGE_RE) ?? []).length); const p = (m?.pages ?? m?.content.match(PAGE_RE))?.[0]; if (p) openPreview(p); }}><MonitorPlay />{t('preview.open')}</button>
           )}
           {agent && <button className="btn ghost icon sm" title={t('agents.edit')} onClick={() => setDrawer(true)}><Settings2 /></button>}
           {host && routeId && <button className="btn ghost icon sm" title={t('chat.delete')} onClick={remove}><Trash2 /></button>}
@@ -720,7 +773,17 @@ export function ChatView() {
                 </div>
               </motion.div>
             )}
-            {messages.map((m) => <Bubble key={m.id} m={m} userInitial={userInitial} agent={agent} onPreview={openPreview} conversationId={conv?.id} />)}
+            {messages.map((m, i) => {
+              const mine = host && m.role === 'user' && !m.author;
+              const lastAnswer = m.role === 'assistant' && i === messages.length - 1 && !busy;
+              const asked = lastAnswer ? [...messages.slice(0, i)].reverse().find((x) => x.role === 'user' && !x.author) : undefined;
+              return (
+                <Bubble key={m.id} m={m} userInitial={userInitial} agent={agent} onPreview={openPreview} conversationId={conv?.id}
+                  onNeedsFull={host && asked && !busy && access !== 'full' ? async () => { setAccess('full'); await api(`/api/conversations/${routeId}/messages/from/${asked.id}`, { method: 'DELETE' }).catch(() => {}); void send(asked.content, undefined, { access: 'full', attachments: [] }); } : undefined}
+                  onRetry={host && asked && !busy ? async () => { await api(`/api/conversations/${routeId}/messages/from/${asked.id}`, { method: 'DELETE' }).catch(() => {}); void send(asked.content); } : undefined}
+                  onEdit={mine && !busy ? () => { setEditFrom(m.id); setInput(m.content); setTimeout(() => taRef.current?.focus(), 30); } : undefined} />
+              );
+            })}
             {routeId && <CrewBoard crew={conv?.parent_id || routeId} />}
             {showLive && live && (
               <>
@@ -752,7 +815,9 @@ export function ChatView() {
                       </div>
                     )}
                     <AnimatePresence>{live.progress && !live.done && <ProgressBar key="p" p={live.progress} />}</AnimatePresence>
-                    {live.text ? <AnswerWithProposals text={live.text} /> : live.done ? null : <span className="typing-dots"><i /><i /><i /></span>}
+                    {live.text || live.followUps?.length ? (
+                      <LiveAnswer text={live.text} followUps={live.followUps ?? []} />
+                    ) : live.done ? null : <span className="typing-dots"><i /><i /><i /></span>}
                   </div>
                 </motion.div>
               </>
@@ -762,6 +827,25 @@ export function ChatView() {
         </div>
 
         <div className="composer">
+          <AnimatePresence>
+            {editFrom != null && (
+              <motion.div className="queued-list" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}>
+                <span className="queued-item"><Pencil size={13} /><span className="truncate">{t('chat.editing')}</span><button type="button" className="btn ghost icon sm" title={t('common.cancel')} onClick={() => { setEditFrom(null); setInput(''); }}><X size={13} /></button></span>
+              </motion.div>
+            )}
+            {!!waiting?.length && (
+              <motion.div className="queued-list" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}>
+                {waiting.map((q, i) => (
+                  <span key={i} className="queued-item">
+                    <Clock size={13} />
+                    <span className="truncate">{q}</span>
+                    <button type="button" className="btn ghost icon sm" title={t('common.remove')} onClick={() => setQueued((all) => ({ ...all, [key]: (all[key] ?? []).filter((_, j) => j !== i) }))}><X size={13} /></button>
+                  </span>
+                ))}
+                <span className="small faint">{t('chat.queuedHint')}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <form className="composer-box" data-anchor="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
             <MentionMenu m={mentions} />
             <VoiceStrip state={voice.state} level={voice.level} interim={voice.interim} conversation={talk} onStop={voice.stop} onCancel={() => { setTalk(false); voice.cancel(); }} />
@@ -811,7 +895,7 @@ export function ChatView() {
               ref={taRef}
               rows={1}
               value={input}
-              placeholder={!canSend ? t('session.watchOnly') : planMode ? t('plan.placeholder') : picks.length ? t('chat.placeholderPicks') : files.length ? t('chat.placeholderFiles') : agent ? t('chat.placeholderAgent', { name: agentName(agent, t) }) : project ? t('chat.placeholderProject', { project: project.name }) : t('chat.placeholder')}
+              placeholder={!canSend ? t('session.watchOnly') : busy ? t('chat.followupPlaceholder') : planMode ? t('plan.placeholder') : picks.length ? t('chat.placeholderPicks') : files.length ? t('chat.placeholderFiles') : agent ? t('chat.placeholderAgent', { name: agentName(agent, t) }) : project ? t('chat.placeholderProject', { project: project.name }) : t('chat.placeholder')}
               onSelect={mentions.track}
               onChange={(e) => {
                 setInput(e.target.value);
@@ -820,6 +904,9 @@ export function ChatView() {
               }}
               onKeyDown={(e) => {
                 if (mentions.onKey(e)) return;
+                if (e.key === 'Escape' && busy) { e.preventDefault(); stop(); return; }
+                if (e.key === 'Escape' && editFrom != null) { setEditFrom(null); setInput(''); return; }
+                if (e.key === 'ArrowUp' && !input && lastUser && !lastUser.author) { e.preventDefault(); setInput(lastUser.content); return; }
                 if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(max-width: 820px)').matches) {
                   e.preventDefault();
                   send(input);
@@ -850,7 +937,7 @@ export function ChatView() {
                 />
               )}
               {host && <ProviderPicker value={provider} onChange={setProvider} />}
-              {host && <AccessPicker value={access} onChange={setAccess} />}
+              {(host || guest?.member) && <AccessPicker value={access} onChange={setAccess} />}
               {host && (
                 <ProjectPicker
                   projects={projects}
@@ -870,12 +957,19 @@ export function ChatView() {
                   <ListChecks size={13} /><span>{t('plan.toggle')}</span><X size={12} />
                 </motion.button>
               )}
-              {guest && <span className="small faint">{t('session.guestIn', { host: guest.host })}</span>}
+              {guest && !guest.member && <span className="small faint">{t('session.guestIn', { host: guest.host })}</span>}
               <span className="grow" />
               {busy ? (
-                <motion.button type="button" className="send" onClick={stop} initial={{ scale: 0.8 }} animate={{ scale: 1 }} style={{ background: 'var(--surface-3)', color: 'var(--text)' }}>
-                  <Square size={14} fill="currentColor" />
-                </motion.button>
+                <>
+                  {input.trim() && canSend && (
+                    <motion.button className="send" title={t('chat.followupSend')} initial={{ scale: 0.8 }} animate={{ scale: 1 }} whileTap={{ scale: 0.9 }}>
+                      <ArrowUp />
+                    </motion.button>
+                  )}
+                  <motion.button type="button" className="send" title={t('chat.stop')} onClick={stop} initial={{ scale: 0.8 }} animate={{ scale: 1 }} style={{ background: 'var(--surface-3)', color: 'var(--text)' }}>
+                    <Square size={14} fill="currentColor" />
+                  </motion.button>
+                </>
               ) : (
                 <motion.button className="send" disabled={!canSend || uploading || (!input.trim() && !files.some((f) => f.att))} whileTap={{ scale: 0.9 }}>
                   <ArrowUp />
@@ -981,12 +1075,30 @@ function Attachments({ list }: { list: Attachment[] }) {
   );
 }
 
-function Bubble({ m, userInitial, animate, agent, onPreview, conversationId }: { m: Message; userInitial: string; animate?: boolean; agent?: Agent; onPreview?: (path: string) => void; conversationId?: string | null }) {
+const RANK: Record<Access, number> = { chat: 0, read: 1, full: 2 };
+const NEEDS_FULL = '[[altter:needs-full]]';
+
+/** The AI needs tools this chat doesn't have: one click switches to Full control and asks again. */
+function NeedsFull({ onGo }: { onGo?: () => void }) {
   const t = useT();
-  const pages = m.role === 'assistant' ? [...new Set(m.content.match(PAGE_RE) ?? [])] : [];
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="needs-full">
+      <ShieldCheck size={18} />
+      <span className="grow"><b>{t('chat.needsFull')}</b><span className="muted small">{t('chat.needsFullHint')}</span></span>
+      {onGo && <button className="btn primary sm" disabled={busy} onClick={() => { setBusy(true); onGo(); }}>{busy ? <span className="spinner" /> : <Zap size={14} />}{t('chat.needsFullGo')}</button>}
+    </div>
+  );
+}
+
+function Bubble({ m, userInitial, animate, agent, onPreview, conversationId, onRetry, onEdit, onNeedsFull }: { m: Message; userInitial: string; animate?: boolean; agent?: Agent; onPreview?: (path: string) => void; conversationId?: string | null; onRetry?: () => void; onEdit?: () => void; onNeedsFull?: () => void }) {
+  const t = useT();
+  const pages = m.role === 'assistant' ? m.pages ?? [...new Set(m.content.match(PAGE_RE) ?? [])] : [];
   const files = m.attachments ?? [];
   // a placeholder text for file-only messages is not worth showing
   const onlyFiles = files.length > 0 && m.content === '(see the attached files)';
+  const needsFull = m.role === 'assistant' && m.content.includes(NEEDS_FULL);
+  const shown = needsFull ? m.content.split(NEEDS_FULL).join('').trim() : m.content;
   return (
     <motion.div className={`msg ${m.role}`} data-anchor={`m${m.id}`} initial={animate ? { opacity: 0, y: 8 } : false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease }}>
       {m.role === 'user' ? (
@@ -998,7 +1110,8 @@ function Bubble({ m, userInitial, animate, agent, onPreview, conversationId }: {
         {m.role === 'assistant' && <div className="meta">{agent?.name ?? 'ALTTER'}{m.provider ? ` · ${m.provider}` : ''}</div>}
         {m.role === 'user' && m.author && <div className="ghost-meta" style={{ color: m.author.color }}>{m.author.name}</div>}
         {files.length > 0 && <Attachments list={files} />}
-        {m.role === 'user' ? !onlyFiles && <UserText content={m.content} /> : <AnswerWithProposals text={m.content} m={m} conversationId={conversationId} />}
+        {m.role === 'user' ? !onlyFiles && <UserText content={m.content} /> : <AnswerWithProposals text={shown} m={m} conversationId={conversationId} />}
+        {needsFull && <NeedsFull onGo={onNeedsFull} />}
         {m.media && m.media.length > 0 && <MediaResults list={m.media} />}
         {onPreview && pages.length > 0 && (
           <div className="row" style={{ gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
@@ -1007,7 +1120,55 @@ function Bubble({ m, userInitial, animate, agent, onPreview, conversationId }: {
             ))}
           </div>
         )}
+        {m.id > 0 && !onlyFiles && <MsgActions text={m.content} onRetry={onRetry} onEdit={onEdit} />}
       </div>
     </motion.div>
+  );
+}
+
+/** Copy / answer again / edit — under each message, like in ChatGPT and Claude. */
+function MsgActions({ text, onRetry, onEdit }: { text: string; onRetry?: () => void; onEdit?: () => void }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    // copy the readable text, without the JSON of the visual blocks
+    const plain = text.replace(/```(?:altter|alter|altter-ui|ui)\s*\n[\s\S]*?```/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+    navigator.clipboard?.writeText(plain).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1400); }, () => {});
+  };
+  return (
+    <div className="msg-actions">
+      <button type="button" className="btn ghost icon sm" onClick={copy} title={t('common.copy')} aria-label={t('common.copy')}>{copied ? <Check /> : <Copy />}</button>
+      {onRetry && <button type="button" className="btn ghost icon sm" onClick={onRetry} title={t('chat.retry')} aria-label={t('chat.retry')}><RotateCcw /></button>}
+      {onEdit && <button type="button" className="btn ghost icon sm" onClick={onEdit} title={t('chat.edit')} aria-label={t('chat.edit')}><Pencil /></button>}
+    </div>
+  );
+}
+
+/** The streaming answer with the messages sent mid-answer shown where they arrived. */
+function LiveAnswer({ text, followUps }: { text: string; followUps: { text: string; at: number; author?: Author | null }[] }) {
+  const t = useT();
+  const parts: ({ kind: 'text'; text: string } | { kind: 'follow'; text: string; author?: Author | null })[] = [];
+  let cut = 0;
+  for (const f of [...followUps].sort((a, b) => a.at - b.at)) {
+    const before = text.slice(cut, f.at);
+    if (before.trim()) parts.push({ kind: 'text', text: before });
+    parts.push({ kind: 'follow', text: f.text, author: f.author });
+    cut = Math.max(cut, f.at);
+  }
+  if (text.slice(cut).trim()) parts.push({ kind: 'text', text: text.slice(cut) });
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.kind === 'text' ? (
+          <AnswerWithProposals key={i} text={p.text.split(NEEDS_FULL).join('')} />
+        ) : (
+          <motion.div key={i} className="followup-chip" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2 }}>
+            <CornerDownRight size={14} />
+            <span className="followup-label">{p.author ? p.author.name : t('chat.followup')}</span>
+            <span className="followup-text">{p.text}</span>
+          </motion.div>
+        ),
+      )}
+    </>
   );
 }

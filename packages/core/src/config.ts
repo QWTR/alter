@@ -37,6 +37,8 @@ export interface AlterConfig {
   onboarded: boolean;
   /** When a subscription hits its usage limit: ask in chat, or switch to another connected AI by itself. */
   onLimit: 'ask' | 'switch';
+  /** Access a chat gets — once you pick "Full control" it stays that way for every chat (until you pick lower). */
+  defaultAccess: 'chat' | 'read' | 'full';
   /** Result of the last real round-trip to each provider ("is my subscription actually connected?"). */
   providerHealth: Record<string, ProviderHealth>;
   devices: Device[];
@@ -88,6 +90,7 @@ export function loadConfig(): AlterConfig {
     userName: '',
     onboarded: false,
     onLimit: 'ask',
+    defaultAccess: 'chat',
     providerHealth: {},
     devices: [],
   };

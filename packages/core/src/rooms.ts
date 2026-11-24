@@ -4,6 +4,7 @@
 //  - a share link lets a guest (no pairing) into exactly one chat
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { loadConfig, saveConfig } from './config.ts';
+import { memberByToken, touchMember } from './workspace.ts';
 
 export interface Share {
   token: string;
@@ -16,6 +17,8 @@ export interface Share {
 export interface Guest {
   guest: true;
   share: Share;
+  /** A workspace member: the whole project (not one chat), keeps their key. */
+  member?: import('./workspace.ts').Person;
 }
 
 const COLORS = ['#ff6b6b', '#4dabf7', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#20c997', '#f06595', '#5c7cfa', '#94d82d'];
@@ -64,6 +67,12 @@ export function shareByToken(token: string): Share | undefined {
 
 /** Bearer `share:<token>` → a guest limited to that one chat. */
 export function authenticateGuest(bearer: string | undefined): Guest | null {
+  if (bearer?.startsWith('ws:')) {
+    const member = memberByToken(bearer.slice(3));
+    if (!member) return null;
+    touchMember(member);
+    return { guest: true, member, share: { token: '', conversationId: '', createdAt: member.createdAt, guestsCanSend: true } };
+  }
   if (!bearer?.startsWith('share:')) return null;
   const share = shareByToken(bearer.slice(6));
   return share ? { guest: true, share } : null;

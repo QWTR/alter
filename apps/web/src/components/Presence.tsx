@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Check, Copy, Globe, Link2, Radio, Users, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import QRCode from 'qrcode';
 import { api, clientId, connectRoom, invalidate, sendPresence, useData, type Conversation, type Presence, type RemoteRun, type RoomMember, type Status } from '../api';
 import { useT } from '../i18n';
 import { spring, Switch, toast } from './ui';
@@ -257,6 +258,13 @@ export function ShareButton({ conv, members }: { conv: Conversation; members: Ro
   const bases = [...new Set([...(location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? [] : [location.origin]), ...(status?.lanUrls ?? [])])];
   const links = share ? [...(tunnel?.url ? [{ url: tunnel.url + hash, net: true }] : []), ...bases.map((b) => ({ url: b + hash, net: false }))] : [];
   const live = members.length > 1;
+  // a QR of the best link: the other person scans it in their ALTTER app (Chats → Join)
+  const qrUrl = links[0]?.url ?? '';
+  const [qr, setQr] = useState('');
+  useEffect(() => {
+    if (!open || !qrUrl) return setQr('');
+    QRCode.toDataURL(qrUrl, { margin: 1, width: 180, color: { dark: '#0b0a12', light: '#ffffff' } }).then(setQr, () => setQr(''));
+  }, [open, qrUrl]);
 
   return (
     <div className="share-wrap" ref={ref}>
@@ -286,6 +294,12 @@ export function ShareButton({ conv, members }: { conv: Conversation; members: Ro
                   ))}
                   {!links.length && <div className="muted small">{t('session.noLan')}</div>}
                 </div>
+                {qr && (
+                  <div className="share-qr">
+                    <img src={qr} alt="QR" width={132} height={132} />
+                    <span className="small muted">{t('join.qrHint')}</span>
+                  </div>
+                )}
                 {!tunnel?.url && (
                   <button className="btn sm" style={{ marginTop: 8 }} disabled={busy} onClick={goOnline}><Globe />{t('session.internet')}</button>
                 )}

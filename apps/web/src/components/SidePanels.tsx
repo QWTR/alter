@@ -11,6 +11,7 @@ import { useRunningChats } from '../liveChats';
 import { agentName } from './agentKit';
 import { Robot } from './Robot';
 import { PALETTES, spring } from './ui';
+import { JoinButton } from './Join';
 
 function Head({ title, onBack }: { title: string; onBack: () => void }) {
   const t = useT();
@@ -120,7 +121,10 @@ export function ChatsPanel({ onBack }: { onBack: () => void }) {
   return (
     <>
       <Head title={t('nav.chats')} onBack={onBack} />
-      <button className="btn primary" style={{ width: '100%', marginBottom: 10 }} onClick={() => navigate('/chat/new')}><Plus />{t('chat.new')}</button>
+      <div className="row" style={{ gap: 6, marginBottom: 10 }}>
+        <button className="btn primary grow" onClick={() => navigate('/chat/new')}><Plus />{t('chat.new')}</button>
+        <JoinButton />
+      </div>
       <div style={{ position: 'relative', marginBottom: 8 }}>
         <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', translate: '0 -50%', color: 'var(--faint)' }} />
         <input className="input" style={{ paddingLeft: 34, height: 34 }} placeholder={t('common.search')} value={q} onChange={(e) => setQ(e.target.value)} />

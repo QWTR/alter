@@ -29,7 +29,10 @@ export interface AlterEvent {
     | 'agent.status'
     | 'voice.progress'
     | 'media.updated'
-    | 'prompts.changed';
+    | 'prompts.changed'
+    | 'update.available'
+    | 'workspace.changed'
+    | 'update.progress';
   data: unknown;
 }
 

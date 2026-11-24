@@ -195,6 +195,8 @@
   $('retry').onclick = () => { state('wait', T.connecting); check(); };
   $('addr').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save').click(); });
   $('save').onclick = async () => {
+    const invite = /^(https?:\/\/[^#\s]+)\/?(#\/[sw]\/[\w-]{10,}(?:\/\S*)?)/i.exec($('addr').value.trim());
+    if (invite) { clearInterval(timer); location.assign(invite[1].replace(/\/+$/, '') + '/' + invite[2]); return; } // an invite, not a server
     const v = norm($('addr').value);
     if (!v) return;
     $('save').disabled = true;
@@ -257,6 +259,8 @@
           if (url && /^https?:$/.test(url.protocol)) {
             if (navigator.vibrate) navigator.vibrate(40);
             stopScan();
+            // someone's invite to a shared chat (".../#/s/<token>"): join it, keep this phone's own server
+            if (/^#\/[sw]\/[\w-]{10,}/.test(url.hash)) { clearInterval(timer); editing = true; location.assign(url.origin + '/' + url.hash); return; }
             server = url.origin;
             store.set(server);
             editing = false;

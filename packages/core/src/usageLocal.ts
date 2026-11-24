@@ -46,11 +46,19 @@ function* walk(dir: string, ext: string, depth = 0): Generator<string> {
   }
 }
 
+/** The core runs inside the desktop app's main process: long sync work freezes the window, so give way often. */
+let sliceStart = Date.now();
+async function breathe() {
+  if (Date.now() - sliceStart < 12) return;
+  await new Promise((r) => setImmediate(r));
+  sliceStart = Date.now();
+}
+
 /** Reads the bytes added since last time and feeds whole lines to `onLine`. */
-function readNew(file: string, st: FileState, onLine: (line: string) => void) {
+async function readNew(file: string, st: FileState, onLine: (line: string) => void) {
   const fd = openSync(file, 'r');
   try {
-    const buf = Buffer.alloc(1 << 20);
+    const buf = Buffer.alloc(1 << 18);
     let pos = st.offset;
     for (;;) {
       const n = readSync(fd, buf, 0, buf.length, pos);
@@ -60,6 +68,7 @@ function readNew(file: string, st: FileState, onLine: (line: string) => void) {
       const lines = text.split('\n');
       st.rest = lines.pop() ?? '';
       for (const l of lines) if (l) onLine(l);
+      await breathe();
     }
     st.offset = pos;
   } finally {
@@ -71,13 +80,13 @@ function fresh(file: string, project: string): FileState {
   return { size: 0, mtime: 0, offset: 0, rest: '', days: new Map(), project, seen: new Set(), model: 'unknown' };
 }
 
-function claudeFile(file: string, since: number) {
+async function claudeFile(file: string, since: number) {
   const s = statSync(file);
   let st = cache.get(file);
   if (st && st.offset === s.size && s.mtimeMs === st.mtime) return st;
   if (!st || s.size < st.offset) { st = fresh(file, basename(join(file, '..'))); cache.set(file, st); }
   if (s.mtimeMs < since && !st.offset) return st; // too old for this range: read it only when a longer range asks // too old to matter now; read when asked for a longer range
-  readNew(file, st, (l) => {
+  await readNew(file, st, (l) => {
     if (!l.includes('"usage"')) {
       if (st!.project.startsWith('C--') || st!.project.startsWith('D--')) { const m = l.match(/"cwd":"((?:[^"\\]|\\.)*)"/); if (m) st!.project = JSON.parse(`"${m[1]}"`); }
       return;
@@ -100,13 +109,13 @@ function claudeFile(file: string, since: number) {
   return st;
 }
 
-function codexFile(file: string, since: number) {
+async function codexFile(file: string, since: number) {
   const s = statSync(file);
   let st = cache.get(file);
   if (st && st.offset === s.size && s.mtimeMs === st.mtime) return st;
   if (!st || s.size < st.offset) { st = fresh(file, ''); cache.set(file, st); }
   if (s.mtimeMs < since && !st.offset) return st;
-  readNew(file, st, (l) => {
+  await readNew(file, st, (l) => {
     if (!l.includes('token_count') && !l.includes('"model"') && !l.includes('"cwd"')) return;
     let j: any;
     try { j = JSON.parse(l); } catch { return; }
@@ -128,7 +137,7 @@ function codexFile(file: string, since: number) {
   return st;
 }
 
-function geminiFile(file: string) {
+async function geminiFile(file: string) {
   const s = statSync(file);
   let st = cache.get(file);
   if (st && s.size === st.size && s.mtimeMs === st.mtime) return st;
@@ -136,6 +145,7 @@ function geminiFile(file: string) {
   cache.set(file, st);
   try {
     const raw = require_json(file);
+    await breathe();
     const msgs: any[] = Array.isArray(raw) ? raw : raw.messages ?? [];
     for (const m of msgs) {
       const t = m.tokens;
@@ -180,8 +190,27 @@ const shortProject = (p: string) => (p ? p.split(/[\\/]/).filter(Boolean).slice(
 
 let running: Promise<unknown> | null = null;
 
-/** Totals for the last `days` days: per day (stacked by app), per model, per project. */
+type LocalUsage = Awaited<ReturnType<typeof scanUsage>>;
+const results = new Map<number, { at: number; data: LocalUsage }>();
+
+/** Instant answer: the last scan (if under 10 min old it is refreshed in the background), else a scan now. */
 export async function localUsage(days = 30, _phone = false) {
+  days = Math.min(365, Math.max(1, Math.round(days) || 30));
+  const hit = results.get(days);
+  if (hit) {
+    if (Date.now() - hit.at > 45_000) void scanUsage(days).catch(() => {});
+    if (Date.now() - hit.at < 10 * 60_000) return { ...hit.data, alter: usageSummary(days) };
+  }
+  return scanUsage(days);
+}
+
+/** Warm the cache a little after start, so opening Usage the first time is instant too. */
+export function warmUsage() {
+  setTimeout(() => { void (async () => { for (const d of [30, 7, 90]) await scanUsage(d).catch(() => {}); })(); }, 40_000).unref?.();
+}
+
+/** Totals for the last `days` days: per day (stacked by app), per model, per project. */
+async function scanUsage(days: number) {
   days = Math.min(365, Math.max(1, Math.round(days) || 30));
   // one scan at a time (a big first scan can take a few seconds)
   while (running) await running.catch(() => {});
@@ -192,7 +221,7 @@ export async function localUsage(days = 30, _phone = false) {
     const sinceDay = localDay(since)!;
     const home = homedir();
     const files: { file: string; src: Source }[] = [];
-    for (const f of walk(join(home, '.claude', 'projects'), '.jsonl')) files.push({ file: f, src: 'claude' });
+    for (const f of walk(join(home, '.claude', 'projects'), '.jsonl')) { files.push({ file: f, src: 'claude' }); if (files.length % 200 === 0) await breathe(); }
     for (const f of walk(join(home, '.codex', 'sessions'), '.jsonl')) files.push({ file: f, src: 'codex' });
     for (const f of walk(join(home, '.gemini', 'tmp'), '.json')) if (/[\\/]chats[\\/]/.test(f)) files.push({ file: f, src: 'gemini' });
 
@@ -202,9 +231,9 @@ export async function localUsage(days = 30, _phone = false) {
     const tot = { ...empty(), value: 0 };
     let i = 0;
     for (const { file, src } of files) {
-      if (++i % 50 === 0) await new Promise((r) => setImmediate(r)); // keep the server responsive
+      if (++i % 20 === 0) await breathe();
       let st: FileState;
-      try { st = src === 'claude' ? claudeFile(file, since) : src === 'codex' ? codexFile(file, since) : geminiFile(file); } catch { continue; }
+      try { st = src === 'claude' ? await claudeFile(file, since) : src === 'codex' ? await codexFile(file, since) : await geminiFile(file); } catch { continue; }
       for (const [day, byModel] of st.days) {
         if (day < sinceDay) continue;
         for (const [model, b] of byModel) {
@@ -231,7 +260,7 @@ export async function localUsage(days = 30, _phone = false) {
       const day = localDay(t)!;
       series.push({ day, ...(daily.get(day) ?? { claude: 0, codex: 0, gemini: 0 }) });
     }
-    return {
+    const data = {
       days,
       total: tot,
       daily: series,
@@ -240,6 +269,8 @@ export async function localUsage(days = 30, _phone = false) {
       sources: { claude: existsSync(join(home, '.claude', 'projects')), codex: existsSync(join(home, '.codex', 'sessions')), gemini: existsSync(join(home, '.gemini')) },
       alter: usageSummary(days),
     };
+    results.set(days, { at: Date.now(), data });
+    return data;
   } finally {
     running = null;
     done();

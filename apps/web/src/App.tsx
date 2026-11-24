@@ -24,6 +24,11 @@ import { setStudioProgress, StudioView } from './views/Studio';
 import { MediaView } from './views/MediaGen';
 import { PromptsView } from './views/Prompts';
 import { UsageView } from './views/Usage';
+import { UpdateBanner } from './components/UpdateBanner';
+import { ReportHost } from './components/Report';
+import { savedWorkspaceKey, takeInviteFromUrl, WorkspaceGate, WorkspaceView, WorkspacesView } from './views/Workspace';
+import { joinedWorkspaces, openSession } from './components/Join';
+import { Users } from 'lucide-react';
 
 const VIEWS: Record<string, ComponentType> = {
   home: HomeView,
@@ -37,6 +42,7 @@ const VIEWS: Record<string, ComponentType> = {
   settings: SettingsView,
   media: MediaView,
   prompts: PromptsView,
+  workspace: WorkspacesView,
   usage: UsageView,
 };
 
@@ -44,6 +50,7 @@ const NAV = [
   { id: 'home', icon: House, key: 'nav.home' },
   { id: 'chat', icon: MessageSquare, key: 'nav.chats' },
   { id: 'projects', icon: FolderKanban, key: 'nav.projects' },
+  { id: 'workspace', icon: Users, key: 'nav.workspace' },
   { id: 'studio', icon: Clapperboard, key: 'nav.studio' },
   { id: 'agents', icon: Bot, key: 'nav.agents' },
   { id: 'media', icon: ImagePlus, key: 'nav.media' },
@@ -59,8 +66,14 @@ const MOBILE_MAIN = ['home', 'chat', 'studio', 'agents'] as const;
 /** A share link (#/s/<token>) opens the guest view: one chat, no pairing. */
 const guestToken = location.hash.match(/^#\/s\/([\w-]{10,})/)?.[1] ?? null;
 
+/** A workspace invite (#/w/<key>) — the key is remembered, so next time ALTTER opens straight into it. */
+const inviteKey = takeInviteFromUrl();
+// an invite or share link opened in a tab that already runs ALTTER (only the # changes): start over in that mode
+addEventListener('hashchange', () => { if (/^#\/[sw]\/[\w-]{10,}/.test(location.hash)) location.reload(); });
+
 export function App() {
   if (guestToken) return <GuestGate token={guestToken} />;
+  if (inviteKey) return <WorkspaceGate wsKey={inviteKey} />;
   return <HostApp />;
 }
 
@@ -80,6 +93,8 @@ function HostApp() {
   }, []);
 
   if (state === 'loading') return <Splash />;
+  // not this computer's owner, but a team member of one of its workspaces: straight in
+  if (state === 'pair' && savedWorkspaceKey()) return <WorkspaceGate wsKey={savedWorkspaceKey()!} />;
   if (state === 'pair') return <PairView onPaired={() => location.reload()} />;
   return <Shell />;
 }
@@ -233,8 +248,17 @@ function Shell() {
     };
   }, [more]);
   const View = VIEWS[route.section] ?? HomeView;
+  const joined = joinedWorkspaces();
   const failing = (agents ?? []).filter((a) => a.monitorState?.status === 'fail').length;
   const running = (agents ?? []).filter((a) => a.running).length;
+
+  if (route.section === 'workspace' && route.parts[1]) return (
+    <>
+      <TitleBar />
+      <WorkspaceView />
+      <Toasts />
+    </>
+  );
 
   return (
     <>
@@ -269,6 +293,13 @@ function Shell() {
                 <span className="truncate">{p.name}</span>
               </button>
             ))}
+            {joined.length > 0 && <div className="nav-section">{t('ws.joined')}</div>}
+            {joined.map((j) => (
+              <button key={j.url} className="nav-item" onClick={() => openSession(j.url, status?.settings.userName)} title={j.url}>
+                <Users size={15} className="faint" />
+                <span className="truncate">{j.name}</span>
+              </button>
+            ))}
           </nav>
           </div>
           )}
@@ -279,6 +310,8 @@ function Shell() {
         </aside>
 
         <main className="main">
+            <UpdateBanner />
+            <ReportHost />
             <div
               key={route.section + (route.section === 'projects' || route.section === 'agents' ? route.parts[1] ?? '' : '')}
               className="view view-enter"

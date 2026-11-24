@@ -1,6 +1,6 @@
 {
   "name": "@alter/mobile",
-  "version": "0.13.0",
+  "version": "0.15.0",
   "private": true,
   "description": "ALTTER for Android: a native shell that connects the phone to ALTTER on your computer (directly on Wi-Fi or through your relay).",
   "license": "AGPL-3.0-only",

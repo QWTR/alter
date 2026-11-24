@@ -91,7 +91,7 @@ export function UsageView() {
             </div>
             <div className="card usage-table-card">
               <b>{t('usage.byProject')}</b>
-              <div className="usage-bars">
+              <div className="usage-proj">
                 {data.projects.map((p) => (
                   <div key={p.project} className="usage-bar-row" title={`${p.project} · ${fmt(p.tokens)} · ${usd(p.value)}`}>
                     <span className="truncate">{p.project}</span>
