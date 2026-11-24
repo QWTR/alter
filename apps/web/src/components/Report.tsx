@@ -1,6 +1,6 @@
 // "Report a problem": the user writes what went wrong, sees exactly what is sent (scrubbed of tokens, paths and
 // emails), and the ALTTER repair server triages it, fixes it with AI and ships an update. Also lists my reports.
-import { Bug, CheckCircle2, ChevronDown, Clock, HelpCircle, ImagePlus, Lightbulb, MessageCircle, Palette, Send, X, XCircle } from 'lucide-react';
+import { Bug, CheckCircle2, ChevronDown, Clock, HelpCircle, Image as ImageIcon, ImagePlus, Lightbulb, MessageCircle, Palette, Paperclip, Send, X, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api, invalidate, useData, type Status } from '../api';
 import { ago, useT } from '../i18n';
@@ -85,6 +85,9 @@ function ReportModal({ open, onClose }: { open: boolean; onClose: () => void }) 
     setBusy(true);
     try {
       await api('/api/report', { method: 'POST', body: body() });
+      // the list must show it at once, and the AI usually asks within a minute: check often for a few minutes
+      fastUntil = Date.now() + 5 * 60_000;
+      invalidate('/api/reports');
       toast(t('rep.sent'), 'ok');
       setText('');
       setImages([]);
@@ -168,20 +171,36 @@ const STATUS: Record<string, { icon: typeof Bug; tone: string }> = {
   needs_info: { icon: HelpCircle, tone: 'warn' },
 };
 
-interface Msg { from: 'ai' | 'team' | 'user'; text: string; at: string }
+interface Msg { from: 'ai' | 'team' | 'user'; text: string; at: string; images?: number }
 type Rep = Sent & { messages?: Msg[] };
 /** The last message is a question nobody answered yet. */
 const waiting = (r: Rep) => r.status === 'needs_info' && r.messages?.length && r.messages[r.messages.length - 1].from !== 'user';
+/** While the fix is being made or shipped there is nothing to add; otherwise the reporter can always write more. */
+const canWrite = (r: Rep) => !['fixing', 'review', 'merged', 'released'].includes(r.status ?? '');
 
 function Thread({ r, onSent }: { r: Rep; onSent: () => void }) {
   const t = useT() as unknown as (k: string, v?: Record<string, unknown>) => string;
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [images, setImages] = useState<string[]>([]);
+  const [drag, setDrag] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const addFiles = async (files: Iterable<File>) => {
+    const list = [...files].filter((f) => f.type.startsWith('image/'));
+    if (!list.length) return;
+    const out = (await Promise.all(list.map(shrink))).filter((x): x is string => !!x);
+    setImages((cur) => {
+      if (cur.length + out.length > MAX_IMAGES) toast(t('rep.imgMax', { n: MAX_IMAGES }), 'info');
+      return [...cur, ...out].slice(0, MAX_IMAGES);
+    });
+  };
   const send = async () => {
     setBusy(true);
     try {
-      await api('/api/reports/reply', { method: 'POST', body: { id: r.id, text } });
+      await api('/api/reports/reply', { method: 'POST', body: { id: r.id, text, images } });
       setText('');
+      setImages([]);
+      fastUntil = Date.now() + 5 * 60_000;
       toast(t('rep.replied'), 'ok');
       onSent();
     } catch (e) {
@@ -195,14 +214,46 @@ function Thread({ r, onSent }: { r: Rep; onSent: () => void }) {
       {(r.messages ?? []).map((m, i) => (
         <div key={i} className={`rep-msg ${m.from}`}>
           <div className="rep-msg-who">{t(`rep.from.${m.from}`)} · {ago(m.at)}</div>
-          <div className="rep-msg-text">{m.text}</div>
+          {m.text && <div className="rep-msg-text">{m.text}</div>}
+          {!!m.images && <div className="rep-msg-imgs"><ImageIcon /> {t('rep.imgCount', { n: m.images })}</div>}
         </div>
       ))}
-      {(waiting(r) || r.status === 'needs_info') && (
-        <div className="rep-answer">
-          <textarea className="input" rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('rep.answerPh')} />
-          <div className="row" style={{ justifyContent: 'flex-end' }}>
-            <button className="btn primary sm" disabled={busy || text.trim().length < 2} onClick={send}>
+      {canWrite(r) && (
+        <div
+          className={`rep-answer${drag ? ' drag' : ''}`}
+          onDragOver={(e) => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); setDrag(true); } }}
+          onDragLeave={() => setDrag(false)}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); void addFiles(e.dataTransfer.files); }}
+        >
+          <textarea
+            className="input"
+            rows={3}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={waiting(r) ? t('rep.answerPh') : t('rep.morePh')}
+            onPaste={(e) => {
+              const files = [...e.clipboardData.items].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter((f): f is File => !!f);
+              if (files.length) { e.preventDefault(); void addFiles(files); }
+            }}
+          />
+          {images.length > 0 && (
+            <div className="rep-imgs">
+              {images.map((src, i) => (
+                <div key={i} className="rep-img">
+                  <img src={src} alt="" />
+                  <button type="button" className="rep-img-x" onClick={() => setImages((l) => l.filter((_, j) => j !== i))} aria-label={t('common.delete')}><X /></button>
+                </div>
+              ))}
+            </div>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ''; }} />
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn ghost sm" onClick={() => fileRef.current?.click()} disabled={images.length >= MAX_IMAGES} title={t('rep.imgHint')}>
+              <Paperclip />
+              {t('rep.attach')}
+            </button>
+            <span className="faint small grow rep-paste-hint">{t('rep.pasteHint')}</span>
+            <button className="btn primary sm" disabled={busy || (text.trim().length < 2 && !images.length)} onClick={send}>
               {busy ? <span className="spinner" /> : <Send />}
               {t('rep.answer')}
             </button>
@@ -213,11 +264,27 @@ function Thread({ r, onSent }: { r: Rep; onSent: () => void }) {
   );
 }
 
+/** After a report is sent, its status is checked every 20 s for a while (triage and questions come quickly). */
+let fastUntil = 0;
+let lastCheck = Date.now();
+function useReportsPoll(slowMs: number) {
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (Date.now() < fastUntil || Date.now() - lastCheck >= slowMs) {
+        lastCheck = Date.now();
+        invalidate('/api/reports');
+      }
+    }, 20_000);
+    return () => clearInterval(id);
+  }, [slowMs]);
+}
+
 /** "My reports" — what happened to what I sent (fixed in 0.15.2, a question from the AI, waiting for review, …). */
 export function MyReports() {
   const t = useT() as unknown as (k: string, v?: Record<string, unknown>) => string;
-  const { data } = useData<{ reports: Rep[] }>('/api/reports', 60_000);
+  const { data } = useData<{ reports: Rep[] }>('/api/reports', 30_000);
   const reload = () => invalidate('/api/reports');
+  useReportsPoll(60_000);
   const list = data?.reports ?? [];
   const [open, setOpen] = useState<string | null>(null);
   const asking = list.find(waiting)?.id;
@@ -244,7 +311,7 @@ export function MyReports() {
               <div key={r.id} className={`rep-item${waiting(r) ? ' ask' : ''}`}>
                 <Icon className={`rep-ico ${s.tone}`} />
                 <div className="grow" style={{ minWidth: 0 }}>
-                  <button type="button" className="rep-head" onClick={() => setOpen(isOpen ? null : r.id)} disabled={!n}>
+                  <button type="button" className="rep-head" onClick={() => setOpen(isOpen ? null : r.id)} disabled={!n && !canWrite(r)}>
                     <div className="rep-title">{r.title}</div>
                     <div className="faint small">
                       {t(`rep.st.${r.status ?? 'new'}`)}
@@ -253,9 +320,9 @@ export function MyReports() {
                     </div>
                   </button>
                   {r.note && !isOpen && <div className="muted small">{r.note}</div>}
-                  {isOpen && n > 0 && <Thread r={r} onSent={reload} />}
+                  {isOpen && <Thread r={r} onSent={reload} />}
                 </div>
-                {n > 0 && <ChevronDown className="rep-chev" style={{ transform: isOpen ? 'rotate(180deg)' : undefined }} />}
+                {(n > 0 || canWrite(r)) && <ChevronDown className="rep-chev" style={{ transform: isOpen ? 'rotate(180deg)' : undefined }} />}
               </div>
             );
           })}
@@ -274,10 +341,7 @@ function QuestionCard() {
   const t = useT() as unknown as (k: string, v?: Record<string, unknown>) => string;
   const { data } = useData<{ reports: Rep[] }>('/api/reports', 5 * 60_000);
   const reload = () => invalidate('/api/reports');
-  useEffect(() => {
-    const id = setInterval(reload, 5 * 60_000);
-    return () => clearInterval(id);
-  }, []);
+  useReportsPoll(5 * 60_000);
   const [hidden, setHidden] = useState<string>(() => { try { return localStorage.getItem('alter.repAsk') ?? ''; } catch { return ''; } });
   // on Settings → About the reports list is on screen and answers right there
   const [onAbout, setOnAbout] = useState(() => /settings.*tab=about/.test(location.hash));

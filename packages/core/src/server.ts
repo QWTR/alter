@@ -764,7 +764,7 @@ route('GET', '/api/reports', async ({ auth }) => {
 route('POST', '/api/reports/reply', async ({ auth, body }) => {
   ownerOnly(auth, 'answer reports');
   try {
-    return await replyReport(String(body?.id ?? ''), String(body?.text ?? ''));
+    return await replyReport(String(body?.id ?? ''), String(body?.text ?? ''), body?.images);
   } catch (e) {
     throw new HttpError(400, (e as Error).message);
   }

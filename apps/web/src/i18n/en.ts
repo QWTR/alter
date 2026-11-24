@@ -1470,6 +1470,11 @@ const en = {
   'rep.askTitle': 'A question about your report',
   'settings.usageStats': 'Anonymous usage statistics',
   'settings.usageStatsHint': 'Tells the ALTTER server only that this install is on: a random id, the version, the system, the language and the number of paired phones. No names, chats or files.',
+  // img
+  'rep.attach': 'Image',
+  'rep.pasteHint': 'or paste with Ctrl+V',
+  'rep.morePh': 'Add something: more details, a screenshot (Ctrl+V)…',
+  'rep.imgCount': '{n} image(s) attached',
 };
 
 export default en;

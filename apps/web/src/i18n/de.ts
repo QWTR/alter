@@ -1455,6 +1455,11 @@ const de: Dict = {
   'rep.askTitle': 'Eine Frage zu deiner Meldung',
   'settings.usageStats': 'Anonyme Nutzungsstatistik',
   'settings.usageStatsHint': 'Meldet dem ALTTER-Server nur, dass diese Installation läuft: eine zufällige ID, Version, System, Sprache und Anzahl gekoppelter Telefone. Keine Namen, Chats oder Dateien.',
+  // img
+  'rep.attach': 'Bild',
+  'rep.pasteHint': 'oder mit Strg+V einfügen',
+  'rep.morePh': 'Etwas ergänzen: mehr Details, ein Screenshot (Strg+V)…',
+  'rep.imgCount': '{n} Bild(er) angehängt',
 };
 
 export default de;

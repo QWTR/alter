@@ -10,7 +10,7 @@ export const REPAIR_URL = 'https://altter.v-room.app/_repair';
 export const REPORT_KINDS = ['bug', 'ui', 'idea', 'other'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
-export interface ReportMessage { from: 'ai' | 'team' | 'user'; text: string; at: string }
+export interface ReportMessage { from: 'ai' | 'team' | 'user'; text: string; at: string; images?: number }
 export interface SentReport { id: string; kind: ReportKind; title: string; at: string; status?: string; fixedIn?: string | null; note?: string; messages?: ReportMessage[] }
 
 // the last error lines of this core — collected from console.error / console.warn
@@ -116,16 +116,17 @@ export async function myReports(): Promise<SentReport[]> {
 }
 
 /** Answers a question from the repair server (or the team) about one of my reports. */
-export async function replyReport(id: string, text: string): Promise<SentReport> {
+export async function replyReport(id: string, text: string, images?: unknown): Promise<SentReport> {
   const item = sentList().find((x) => x.id === id);
   if (!item) throw new Error('No such report');
   const t = String(text ?? '').trim();
-  if (t.length < 2) throw new Error('Write an answer');
+  const imgs = cleanImages(images);
+  if (t.length < 2 && !imgs.length) throw new Error('Write an answer');
   const r = await fetch(`${repairUrl()}/reply`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'user-agent': `ALTTER/${VERSION}` },
-    body: JSON.stringify({ id, text: scrub(t).slice(0, 2000), installId: installId() }),
-    signal: AbortSignal.timeout(20_000),
+    body: JSON.stringify({ id, text: scrub(t).slice(0, 2000), images: imgs, installId: installId() }),
+    signal: AbortSignal.timeout(imgs.length ? 90_000 : 20_000),
   }).catch(() => {
     throw new Error('The repair server cannot be reached — check the internet connection and try again');
   });

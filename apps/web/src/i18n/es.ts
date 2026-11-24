@@ -1455,6 +1455,11 @@ const es: Dict = {
   'rep.askTitle': 'Una pregunta sobre tu reporte',
   'settings.usageStats': 'Estadísticas de uso anónimas',
   'settings.usageStatsHint': 'Solo indica al servidor de ALTTER que esta instalación está activa: un id aleatorio, la versión, el sistema, el idioma y el número de teléfonos emparejados. Sin nombres, chats ni archivos.',
+  // img
+  'rep.attach': 'Imagen',
+  'rep.pasteHint': 'o pega con Ctrl+V',
+  'rep.morePh': 'Añade algo: más detalles, una captura (Ctrl+V)…',
+  'rep.imgCount': '{n} imagen(es) adjunta(s)',
 };
 
 export default es;
