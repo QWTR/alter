@@ -2,12 +2,12 @@
 import { AnimatePresence, motion } from 'motion/react';
 import {
   AudioLines, BookOpen, Box, Briefcase, Bug, Calendar, Check, Clapperboard, CreditCard, Database, FileText, Flame, FolderOpen, GitBranch, Globe, HardDrive,
-  Headphones, Kanban, KeyRound, LayoutGrid, ListChecks, ListTree, LogIn, Mail, Megaphone, MessagesSquare, Mic, NotebookPen, Palette, PenTool,
+  Headphones, Kanban, KeyRound, LayoutGrid, Lightbulb, ListChecks, ListTree, LogIn, Mail, Megaphone, MessagesSquare, Mic, NotebookPen, Palette, PenTool,
   Plus, Presentation, Puzzle, Search, Server, Shapes, Sparkles, Store, Table, Trash2, Users, Video, Workflow, Zap, Receipt, Truck, ShoppingCart, MessageCircle, Send, UserCheck, FileCheck, Calculator, type LucideIcon,
 } from 'lucide-react';
 import { CalendarsCard } from './Calendars';
-import { useState } from 'react';
-import { api, invalidate, useData } from '../api';
+import { useEffect, useState } from 'react';
+import { api, invalidate, setCached, useData } from '../api';
 import { useT, type Key } from '../i18n';
 import { Field, Modal, ModalHead, Switch, spring, stagger, toast } from './ui';
 
@@ -36,6 +36,27 @@ function PluginIcon({ icon, color, size = 42 }: { icon?: string; color?: string;
   );
 }
 
+interface PlugStatus { state: 'ok' | 'login' | 'offline' | 'missing' | 'off' | 'unknown'; detail?: string }
+let lastRecheck = 0;
+/** Asks the core to check every plugin again (sign-ins and local apps change outside ALTTER). */
+function recheck() {
+  if (Date.now() - lastRecheck < 8000) return;
+  lastRecheck = Date.now();
+  api<{ status: Record<string, PlugStatus> }>('/api/plugins/status?fresh=1').then((r) => setCached('/api/plugins/status', () => r)).catch(() => {});
+}
+
+function StatusChip({ s }: { s?: PlugStatus }) {
+  const t = useT();
+  const state = s?.state;
+  const tone = state === 'ok' ? 'ok' : state === 'login' ? 'warn' : state === 'offline' || state === 'missing' ? 'bad' : 'muted';
+  return (
+    <button type="button" className={`plug-st ${tone}`} onClick={recheck} title={t('plugins.check')}>
+      <i />
+      {state ? t(`plugins.st.${state}` as Key) : t('plugins.st.checking')}
+    </button>
+  );
+}
+
 export function PluginsTab() {
   const t = useT();
   const { data } = useData<{ installed: Installed[]; catalog: CatalogEntry[] }>('/api/plugins', 6000);
@@ -44,6 +65,14 @@ export function PluginsTab() {
   const [keysFor, setKeysFor] = useState<CatalogEntry | null>(null);
   const [custom, setCustom] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [howOpen, setHowOpen] = useState<string | null>(null);
+  const { data: status } = useData<{ status: Record<string, PlugStatus> }>(data?.installed.length ? '/api/plugins/status' : null, 60_000);
+  // after a sign-in window the state changes: check again when the user comes back to the app
+  useEffect(() => {
+    const on = () => { if (document.visibilityState === 'visible') recheck(); };
+    window.addEventListener('focus', on);
+    return () => window.removeEventListener('focus', on);
+  }, []);
 
   if (!data) return <div className="card"><div className="skeleton" style={{ height: 160 }} /></div>;
   const desc = (c: CatalogEntry) => { const k = `plugins.d.${c.id}` as Key; const v = t(k); return v === k ? c.description : v; };
@@ -51,6 +80,11 @@ export function PluginsTab() {
   const shown = data.catalog.filter((c) => (cat === 'all' || c.category === cat) && (!q.trim() || (c.title + ' ' + c.description).toLowerCase().includes(q.trim().toLowerCase())));
 
   const refresh = () => invalidate('/api/plugins');
+  const example = (p: Installed) => { const k = `plugins.ex.${p.catalogId}` as Key; const v = t(k); return v === k ? t('plugins.exGeneric', { name: p.title }) : v; };
+  const tryIt = (p: Installed) => {
+    try { sessionStorage.setItem('alter.chatDraft', example(p)); } catch {}
+    location.hash = '#/chat/new';
+  };
   const install = async (c: CatalogEntry, keys?: Record<string, string>) => {
     if (c.keys?.length && !keys) return setKeysFor(c);
     setBusy(c.id);
@@ -106,15 +140,31 @@ export function PluginsTab() {
             {data.installed.map((p, i) => {
               const c = data.catalog.find((x) => x.id === p.catalogId);
               return (
-                <motion.div key={p.id} className={`plug-row${p.enabled ? '' : ' off'}`} layout {...stagger(i)}>
-                  <PluginIcon icon={c?.icon} color={c?.color} size={36} />
-                  <div className="grow" style={{ minWidth: 0 }}>
-                    <b>{p.title}</b>
-                    <div className="small faint truncate">{p.transport === 'http' ? p.url : [p.command, ...(p.args ?? [])].join(' ')}</div>
+                <motion.div key={p.id} className={`plug-item${p.enabled ? '' : ' off'}`} layout {...stagger(i)}>
+                  <div className="plug-row">
+                    <PluginIcon icon={c?.icon} color={c?.color} size={36} />
+                    <div className="grow" style={{ minWidth: 0 }}>
+                      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                        <b>{p.title}</b>
+                        <StatusChip s={status?.status[p.id]} />
+                      </div>
+                      <div className="small faint truncate">{status?.status[p.id]?.detail && status.status[p.id].state !== 'ok' ? status.status[p.id].detail : p.transport === 'http' ? p.url : [p.command, ...(p.args ?? [])].join(' ')}</div>
+                    </div>
+                    {(p.oauth || c?.login) && <button className={`btn sm${status?.status[p.id]?.state === 'login' ? ' primary' : ''}`} onClick={() => login(p)} title={t('plugins.loginTitle')}><LogIn size={14} />{t('plugins.login')}</button>}
+                    <button className={`btn sm ghost${howOpen === p.id ? ' on' : ''}`} onClick={() => setHowOpen(howOpen === p.id ? null : p.id)}><Lightbulb size={14} />{t('plugins.howTo')}</button>
+                    <Switch on={p.enabled} onChange={(v) => toggle(p, v)} label={p.title} />
+                    <button className="btn ghost icon sm danger" onClick={() => remove(p)} title={t('common.delete')}><Trash2 /></button>
                   </div>
-                  {(p.oauth || c?.login) && <button className="btn sm" onClick={() => login(p)} title={t('plugins.loginTitle')}><LogIn size={14} />{t('plugins.login')}</button>}
-                  <Switch on={p.enabled} onChange={(v) => toggle(p, v)} label={p.title} />
-                  <button className="btn ghost icon sm danger" onClick={() => remove(p)} title={t('common.delete')}><Trash2 /></button>
+                  {howOpen === p.id && (
+                    <div className="plug-how">
+                      <p className="small muted" style={{ margin: 0 }}>{t('plugins.howLead', { name: p.title })}</p>
+                      <blockquote>{example(p)}</blockquote>
+                      <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+                        <button className="btn primary sm" onClick={() => tryIt(p)}><MessageCircle size={14} />{t('plugins.tryIt')}</button>
+                        {status?.status[p.id]?.state === 'login' && <span className="small faint">{t('plugins.loginFirst')}</span>}
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               );
             })}

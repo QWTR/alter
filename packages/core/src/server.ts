@@ -29,7 +29,8 @@ import { addMemory, deleteMemory, listMemories, updateMemory } from './memory.ts
 import { runCheck } from './monitor.ts';
 import { serverPackageReady, serverSetupScript } from './serverPkg.ts';
 import { applyTeam, stopSquad } from './squad.ts';
-import { CATALOG, installCustom, installFromCatalog, publicPlugins, removePlugin, setPluginEnabled } from './plugins.ts';
+import { CATALOG, forgetPluginStatus, installCustom, installFromCatalog, pluginStatus, publicPlugins, removePlugin, setPluginEnabled } from './plugins.ts';
+import { detectCli } from './providers/process.ts';
 import { domainFor, ensureRelayKey, vpsSetupScript, publicRemoteSettings, publicUrl, RELAY_HEADER, setRemoteSettings, startTunnel, stopTunnel, tunnelStatus } from './remote.ts';
 import { authenticate, claimPairing, lanUrls, revokeDevice, setListening, startPairing } from './pairing.ts';
 import { createProject, deleteProject, getProject, listProjects, updateProject } from './projects.ts';
@@ -801,6 +802,7 @@ route('GET', '/api/calendars/events', async ({ url }) => {
 });
 // ---------- plugins (MCP servers) ----------
 route('GET', '/api/plugins', () => ({ installed: publicPlugins(), catalog: CATALOG }));
+route('GET', '/api/plugins/status', async ({ url }) => ({ status: await pluginStatus(url.searchParams.get('fresh') === '1') }));
 route('POST', '/api/plugins', async ({ auth, body }) => {
   ownerOnly(auth, 'install plugins');
   try {
@@ -821,7 +823,7 @@ route('DELETE', '/api/plugins/:id', async ({ auth, params }) => {
   return { ok: true };
 });
 /** Sign-in plugins (Higgsfield, Notion…): opens Claude Code in a window where /mcp signs in. */
-route('POST', '/api/plugins/:id/login', ({ auth, params }) => {
+route('POST', '/api/plugins/:id/login', async ({ auth, params }) => {
   ownerOnly(auth, 'sign in to plugins');
   if (process.platform !== 'win32') throw new HttpError(400, 'Run "claude" in a terminal and type /mcp');
   const p = publicPlugins().find((x) => x.id === params[0]);
@@ -833,6 +835,12 @@ route('POST', '/api/plugins/:id/login', ({ auth, params }) => {
     const cmd = [c.command, ...(c.args ?? []), ...c.login].join(' ');
     spawn('cmd.exe', ['/c', 'start', '"ALTTER - sign in"', 'cmd', '/k', `echo. & echo   Open the link below, enter the code and sign in to ${c.title}. Close this window when it says you are signed in. & echo. & ${cmd}`], { detached: true, stdio: 'ignore', windowsHide: false, env }).unref();
     return { ok: true, device: true };
+  }
+  forgetPluginStatus();
+  // Codex only: it has a direct sign-in command
+  if (!(await detectCli('claude')).installed && (await detectCli('codex')).installed) {
+    spawn('cmd.exe', ['/c', 'start', '"ALTTER - sign in"', 'cmd', '/k', `codex mcp login ${p!.name}`], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+    return { ok: true };
   }
   spawn('cmd.exe', ['/c', 'start', '"ALTTER - sign in"', 'cmd', '/k', `echo. & echo   Type /mcp, choose "${p!.name}" and pick Authenticate. A browser opens to sign in. & echo. & claude`], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
   return { ok: true };

@@ -405,6 +405,24 @@ export function ChatView() {
     requestAnimationFrame(() => taRef.current?.focus());
   }, [mentionQ, routeId]);
 
+  // "Try it in a chat" (Settings → Integrations): a new chat opens with an example already typed
+  useEffect(() => {
+    if (routeId) return;
+    let d: string | null = null;
+    try { d = sessionStorage.getItem('alter.chatDraft'); sessionStorage.removeItem('alter.chatDraft'); } catch {}
+    if (!d) return;
+    setInput(d);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (!ta) return;
+      ta.focus();
+      // select the <…> placeholder (e.g. "<paste the link…>") so typing or pasting replaces it
+      const a = d!.indexOf('<'), b = d!.indexOf('>', a);
+      if (a >= 0 && b > a) ta.setSelectionRange(a, b + 1);
+      else ta.setSelectionRange(d!.length, d!.length);
+    });
+  }, [routeId]);
+
   // plan cards (and other in-chat buttons) send through the open chat
   const sendRef = useRef(send);
   sendRef.current = send;

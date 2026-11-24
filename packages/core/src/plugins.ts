@@ -121,7 +121,8 @@ export const CATALOG: CatalogEntry[] = [
   { id: 'vercel', title: 'Vercel', category: 'dev', icon: 'Server', color: '#ededed', description: 'Deployments, logs and projects on Vercel.', homepage: 'https://vercel.com/docs/mcp', transport: 'http', url: 'https://mcp.vercel.com', oauth: true },
   { id: 'neon', title: 'Neon Postgres', category: 'data', icon: 'Database', color: '#00e599', description: 'Neon Postgres projects, branches and SQL.', homepage: 'https://neon.tech/docs/ai/neon-mcp-server', transport: 'http', url: 'https://mcp.neon.tech/mcp', oauth: true },
   { id: 'higgsfield', title: 'Higgsfield', category: 'create', icon: 'Clapperboard', color: '#c6ff3d', description: 'Cinematic AI video and images (Higgsfield models, Kling, Veo, Seedance…) right from the chat. Uses your Higgsfield credits.', homepage: 'https://higgsfield.ai/mcp', transport: 'http', url: 'https://mcp.higgsfield.ai/mcp', oauth: true, popular: true },
-  { id: 'figma', title: 'Figma', category: 'design', icon: 'PenTool', color: '#a259ff', description: 'Reads your selected Figma frames (layout, styles, variables) so the AI builds them pixel-perfect. Turn on "Dev Mode MCP server" in the Figma desktop app.', homepage: 'https://help.figma.com/hc/en-us/articles/32132100833559', transport: 'http', url: 'http://127.0.0.1:3845/mcp', needs: 'Figma desktop app → Preferences → Enable Dev Mode MCP server', popular: true },
+  { id: 'figma', title: 'Figma', category: 'design', icon: 'PenTool', color: '#a259ff', description: 'Your Figma files: paste a link to a frame and the AI reads the design (layout, styles, variables, a screenshot) to build it pixel-perfect, or draws in FigJam. Sign in with your Figma account; no desktop app needed.', homepage: 'https://help.figma.com/hc/en-us/articles/35281350665623', transport: 'http', url: 'https://mcp.figma.com/mcp', oauth: true, popular: true, guide: 'It works on Figma links: if the user did not give one, ask for the link to the frame (figma.com/design/…?node-id=…). Then use get_design_context and get_screenshot on it.' },
+  { id: 'figma-desktop', title: 'Figma (desktop app)', category: 'design', icon: 'PenTool', color: '#a259ff', description: 'Reads the frame selected in the Figma desktop app. Figma must be open with the MCP server turned on.', homepage: 'https://help.figma.com/hc/en-us/articles/32132100833559', transport: 'http', url: 'http://127.0.0.1:3845/mcp', needs: 'Figma desktop app open → Preferences → Enable Dev Mode MCP server', guide: 'It reads what is selected in the Figma desktop app right now.' },
   { id: 'blender', title: 'Blender', category: 'create', icon: 'Box', color: '#ff7a1a', description: 'Builds and edits 3D scenes in Blender: objects, materials, Poly Haven assets, renders.', homepage: 'https://github.com/ahujasid/blender-mcp', transport: 'stdio', command: 'uvx', args: ['blender-mcp'], needs: 'Blender + the blender-mcp add-on (addon.py) turned on, and uv installed', popular: true },
   { id: 'playwright', title: 'Playwright browser', category: 'web', icon: 'Globe', color: '#2ead33', description: 'A real browser the AI can drive: open pages, click, fill forms, test your sites, take screenshots.', homepage: 'https://github.com/microsoft/playwright-mcp', transport: 'stdio', command: 'npx', args: ['-y', '@playwright/mcp@latest'], popular: true },
   { id: 'chrome-devtools', title: 'Chrome DevTools', category: 'web', icon: 'Bug', color: '#4285f4', description: 'Debug pages like a front-end engineer: console, network, performance traces, Lighthouse-style checks.', homepage: 'https://github.com/ChromeDevTools/chrome-devtools-mcp', transport: 'stdio', command: 'npx', args: ['-y', 'chrome-devtools-mcp@latest'] },
@@ -161,12 +162,28 @@ export const CATALOG: CatalogEntry[] = [
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'plugin';
 
+let migrated = false;
 export function listPlugins(): Plugin[] {
-  return ((loadConfig() as any).plugins ?? []) as Plugin[];
+  const list = ((loadConfig() as any).plugins ?? []) as Plugin[];
+  if (!migrated) {
+    migrated = true;
+    // 0.15: "Figma" was the desktop app's local server, which only works while Figma is open with Dev Mode MCP on.
+    // It is now Figma's online server (sign in once); the local one stays available as "Figma (desktop app)".
+    for (const p of list) {
+      if (p.catalogId === 'figma' && p.url?.includes('127.0.0.1:3845')) {
+        p.url = 'https://mcp.figma.com/mcp';
+        p.oauth = true;
+        saveConfig();
+        void registerOauth(p);
+      }
+    }
+  }
+  return list;
 }
 function save(list: Plugin[]) {
   (loadConfig() as any).plugins = list;
   saveConfig();
+  statusCache = null;
   emit('plugins.changed', {});
 }
 /** What the UI sees: secrets masked. */
@@ -303,6 +320,63 @@ function warmUp(p: Plugin) {
   if (/^npx$/i.test(p.command)) runProcess('npm', ['exec', '--yes', '--package', pkg, '--', 'node', '-e', '0'], { timeoutMs: 300_000 }).then(done, done);
   else runProcess('uv', ['tool', 'install', pkg], { timeoutMs: 300_000 }).then(done, done);
 }
+
+export type PluginState = 'ok' | 'login' | 'offline' | 'missing' | 'off' | 'unknown';
+export interface PluginStatus { state: PluginState; detail?: string }
+let statusCache: { at: number; data: Record<string, PluginStatus> } | null = null;
+
+/** Parses "name: url (HTTP) - ✔ Connected" lines from `claude mcp list`. */
+async function claudeMcpStates(): Promise<Record<string, string> | null> {
+  if (!(await detectCli('claude')).installed) return null;
+  const r = await runProcess('claude', ['mcp', 'list'], { timeoutMs: 60_000 }).catch(() => null);
+  if (!r) return null;
+  const out: Record<string, string> = {};
+  for (const line of r.stdout.split(/\r?\n/)) {
+    const m = line.match(/^([\w.-]+):\s.*\s-\s+(.+)$/);
+    if (m) out[m[1]] = m[2].trim();
+  }
+  return out;
+}
+
+/** Can a local HTTP server be reached at all? (any answer counts; a refused connection does not) */
+async function reachable(url: string): Promise<boolean> {
+  try {
+    await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }), signal: AbortSignal.timeout(4000) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Is each installed plugin actually usable right now? Cached for a minute (`claude mcp list` checks every server). */
+export async function pluginStatus(fresh = false): Promise<Record<string, PluginStatus>> {
+  if (!fresh && statusCache && Date.now() - statusCache.at < 60_000) return statusCache.data;
+  const list = listPlugins();
+  const out: Record<string, PluginStatus> = {};
+  const needsClaude = list.some((p) => p.enabled && p.oauth);
+  const states = needsClaude ? await claudeMcpStates() : null;
+  await Promise.all(list.map(async (p) => {
+    const c = CATALOG.find((x) => x.id === p.catalogId);
+    if (!p.enabled) { out[p.id] = { state: 'off' }; return; }
+    if (p.oauth) {
+      if (!states) { out[p.id] = { state: 'unknown' }; return; }
+      const st = states[p.name];
+      if (!st) { await registerOauth(p); out[p.id] = { state: 'login' }; return; }
+      out[p.id] = /connected/i.test(st) ? { state: 'ok' } : /auth/i.test(st) ? { state: 'login' } : { state: 'offline', detail: st.replace(/^[^\w]+/, '') };
+      return;
+    }
+    if (p.transport === 'http' && p.url) {
+      out[p.id] = (await reachable(p.url)) ? { state: 'ok' } : { state: 'offline', detail: c?.needs };
+      return;
+    }
+    const cmd = p.command ?? '';
+    const found = cmd ? await runProcess(process.platform === 'win32' ? 'where' : 'which', [cmd], { timeoutMs: 10_000 }).then((r) => r.code === 0, () => false) : false;
+    out[p.id] = found ? { state: 'ok', detail: c?.needs } : { state: 'missing', detail: c?.needs ?? cmd };
+  }));
+  statusCache = { at: Date.now(), data: out };
+  return out;
+}
+export const forgetPluginStatus = () => { statusCache = null; };
 
 /** The servers handed to each AI run (sign-in ones are already registered with the AI apps). */
 export function pluginServers(): McpServer[] {
