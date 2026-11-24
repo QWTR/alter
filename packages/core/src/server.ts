@@ -45,7 +45,7 @@ import { MAX_UPLOAD, saveUpload, serveUpload } from './uploads.ts';
 import { addCalendar, publicCalendars, removeCalendar, upcoming } from './calendar.ts';
 import { convertSale, deleteSale, draftSale, getSale, KINDS, listSales, salesStats, saveSale, sellerProfile, setSellerProfile } from './sales.ts';
 import { checkUpdate, installUpdate, startUpdateChecks, updateInfo } from './updates.ts';
-import { buildReport, myReports, sendReport } from './report.ts';
+import { buildReport, myReports, replyReport, sendReport, startUsagePings } from './report.ts';
 import {
   authenticateGuest, colorFor, isGuest, joinRoom, roomMembers, runEvent, runStarted, setPresence, shareByToken, shareFor, startShare,
   stopRun, stopShare, type Guest,
@@ -122,7 +122,7 @@ const ownerOnly = (auth: Auth, what: string) => {
 
 function settingsView() {
   const c = loadConfig();
-  return { defaultProvider: c.defaultProvider, learning: c.learning, language: c.language, userName: c.userName, onboarded: c.onboarded, onLimit: c.onLimit, defaultAccess: c.defaultAccess };
+  return { defaultProvider: c.defaultProvider, learning: c.learning, usageStats: (c as any).usageStats !== false, language: c.language, userName: c.userName, onboarded: c.onboarded, onLimit: c.onLimit, defaultAccess: c.defaultAccess };
 }
 
 // ---------- boot / status / settings ----------
@@ -149,6 +149,7 @@ route('PUT', '/api/settings', ({ body }) => {
   const patch: Record<string, unknown> = {};
   if (typeof body.defaultProvider === 'string') patch.defaultProvider = body.defaultProvider;
   if (typeof body.learning === 'boolean') patch.learning = body.learning;
+  if (typeof body.usageStats === 'boolean') patch.usageStats = body.usageStats;
   if (typeof body.userName === 'string') patch.userName = body.userName.slice(0, 60);
   if (typeof body.onboarded === 'boolean') patch.onboarded = body.onboarded;
   if (body.onLimit === 'ask' || body.onLimit === 'switch') patch.onLimit = body.onLimit;
@@ -760,6 +761,14 @@ route('GET', '/api/reports', async ({ auth }) => {
   ownerOnly(auth, 'see reports');
   return { reports: await myReports() };
 });
+route('POST', '/api/reports/reply', async ({ auth, body }) => {
+  ownerOnly(auth, 'answer reports');
+  try {
+    return await replyReport(String(body?.id ?? ''), String(body?.text ?? ''));
+  } catch (e) {
+    throw new HttpError(400, (e as Error).message);
+  }
+});
 route('POST', '/api/update/install', async ({ auth }) => {
   ownerOnly(auth, 'install updates');
   try {
@@ -1073,7 +1082,7 @@ export function startServer(port = loadConfig().port, host = loadConfig().host) 
     server.listen(port, host, () => {
       setListening(port, host);
       listeningPort = port;
-      startUpdateChecks(); warmUsage(); startWorkspaceAutomations();
+      startUpdateChecks(); startUsagePings(); warmUsage(); startWorkspaceAutomations();
       resolveP(server);
     });
   });

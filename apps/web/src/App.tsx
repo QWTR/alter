@@ -25,7 +25,7 @@ import { MediaView } from './views/MediaGen';
 import { PromptsView } from './views/Prompts';
 import { UsageView } from './views/Usage';
 import { UpdateBanner } from './components/UpdateBanner';
-import { ReportHost } from './components/Report';
+import { ReportHost, ReportQuestions } from './components/Report';
 import { savedWorkspaceKey, takeInviteFromUrl, WorkspaceGate, WorkspaceView, WorkspacesView } from './views/Workspace';
 import { joinedWorkspaces, openSession } from './components/Join';
 import { Users } from 'lucide-react';
@@ -312,6 +312,7 @@ function Shell() {
         <main className="main">
             <UpdateBanner />
             <ReportHost />
+            <ReportQuestions />
             <div
               key={route.section + (route.section === 'projects' || route.section === 'agents' ? route.parts[1] ?? '' : '')}
               className="view view-enter"

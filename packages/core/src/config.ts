@@ -30,6 +30,8 @@ export interface AlterConfig {
   defaultProvider: string;
   /** Learn durable facts about the user from conversations and agent runs. */
   learning: boolean;
+  /** anonymous "this install is on" pings to the repair server (default on) */
+  usageStats?: boolean;
   /** UI + default reply language. */
   language: Language;
   userName: string;

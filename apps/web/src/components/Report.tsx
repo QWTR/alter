@@ -1,8 +1,8 @@
 // "Report a problem": the user writes what went wrong, sees exactly what is sent (scrubbed of tokens, paths and
 // emails), and the ALTTER repair server triages it, fixes it with AI and ships an update. Also lists my reports.
-import { Bug, CheckCircle2, ChevronDown, Clock, ImagePlus, Lightbulb, MessageCircle, Palette, Send, X, XCircle } from 'lucide-react';
+import { Bug, CheckCircle2, ChevronDown, Clock, HelpCircle, ImagePlus, Lightbulb, MessageCircle, Palette, Send, X, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { api, useData } from '../api';
+import { api, invalidate, useData, type Status } from '../api';
 import { ago, useT } from '../i18n';
 import { Modal, ModalHead, Segmented, Switch, toast } from './ui';
 
@@ -165,13 +165,65 @@ const STATUS: Record<string, { icon: typeof Bug; tone: string }> = {
   merged: { icon: CheckCircle2, tone: 'ok' },
   rejected: { icon: XCircle, tone: 'muted' },
   duplicate: { icon: XCircle, tone: 'muted' },
+  needs_info: { icon: HelpCircle, tone: 'warn' },
 };
 
-/** "My reports" — what happened to what I sent (fixed in 0.15.2, waiting for review, …). */
+interface Msg { from: 'ai' | 'team' | 'user'; text: string; at: string }
+type Rep = Sent & { messages?: Msg[] };
+/** The last message is a question nobody answered yet. */
+const waiting = (r: Rep) => r.status === 'needs_info' && r.messages?.length && r.messages[r.messages.length - 1].from !== 'user';
+
+function Thread({ r, onSent }: { r: Rep; onSent: () => void }) {
+  const t = useT() as unknown as (k: string, v?: Record<string, unknown>) => string;
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    setBusy(true);
+    try {
+      await api('/api/reports/reply', { method: 'POST', body: { id: r.id, text } });
+      setText('');
+      toast(t('rep.replied'), 'ok');
+      onSent();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="rep-thread">
+      {(r.messages ?? []).map((m, i) => (
+        <div key={i} className={`rep-msg ${m.from}`}>
+          <div className="rep-msg-who">{t(`rep.from.${m.from}`)} · {ago(m.at)}</div>
+          <div className="rep-msg-text">{m.text}</div>
+        </div>
+      ))}
+      {(waiting(r) || r.status === 'needs_info') && (
+        <div className="rep-answer">
+          <textarea className="input" rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('rep.answerPh')} />
+          <div className="row" style={{ justifyContent: 'flex-end' }}>
+            <button className="btn primary sm" disabled={busy || text.trim().length < 2} onClick={send}>
+              {busy ? <span className="spinner" /> : <Send />}
+              {t('rep.answer')}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "My reports" — what happened to what I sent (fixed in 0.15.2, a question from the AI, waiting for review, …). */
 export function MyReports() {
   const t = useT() as unknown as (k: string, v?: Record<string, unknown>) => string;
-  const { data } = useData<{ reports: Sent[] }>('/api/reports', 60_000);
+  const { data } = useData<{ reports: Rep[] }>('/api/reports', 60_000);
+  const reload = () => invalidate('/api/reports');
   const list = data?.reports ?? [];
+  const [open, setOpen] = useState<string | null>(null);
+  const asking = list.find(waiting)?.id;
+  useEffect(() => {
+    if (asking) setOpen(asking);
+  }, [asking]);
   return (
     <div className="card" style={{ textAlign: 'left' }}>
       <div className="row" style={{ marginBottom: list.length ? 12 : 0, gap: 12, flexWrap: 'wrap' }}>
@@ -186,22 +238,72 @@ export function MyReports() {
           {list.map((r) => {
             const s = STATUS[r.status ?? ''] ?? { icon: Clock, tone: 'accent' };
             const Icon = s.icon;
+            const n = r.messages?.length ?? 0;
+            const isOpen = open === r.id;
             return (
-              <div key={r.id} className="rep-item">
+              <div key={r.id} className={`rep-item${waiting(r) ? ' ask' : ''}`}>
                 <Icon className={`rep-ico ${s.tone}`} />
                 <div className="grow" style={{ minWidth: 0 }}>
-                  <div className="rep-title">{r.title}</div>
-                  <div className="faint small">
-                    {t(`rep.st.${r.status ?? 'new'}`)}
-                    {r.fixedIn ? ` · ${t('rep.fixedIn', { v: r.fixedIn })}` : ''} · {ago(r.at)}
-                  </div>
-                  {r.note && <div className="muted small">{r.note}</div>}
+                  <button type="button" className="rep-head" onClick={() => setOpen(isOpen ? null : r.id)} disabled={!n}>
+                    <div className="rep-title">{r.title}</div>
+                    <div className="faint small">
+                      {t(`rep.st.${r.status ?? 'new'}`)}
+                      {r.fixedIn ? ` · ${t('rep.fixedIn', { v: r.fixedIn })}` : ''} · {ago(r.at)}
+                      {n > 0 && <> · <MessageCircle className="rep-mini" /> {n}</>}
+                    </div>
+                  </button>
+                  {r.note && !isOpen && <div className="muted small">{r.note}</div>}
+                  {isOpen && n > 0 && <Thread r={r} onSent={reload} />}
                 </div>
+                {n > 0 && <ChevronDown className="rep-chev" style={{ transform: isOpen ? 'rotate(180deg)' : undefined }} />}
               </div>
             );
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/** A small card when the repair server asks something about my report — answer right there. */
+export function ReportQuestions() {
+  const { data: status } = useData<Status>('/api/status', 15_000);
+  return status?.you.kind === 'computer' ? <QuestionCard /> : null;
+}
+function QuestionCard() {
+  const t = useT() as unknown as (k: string, v?: Record<string, unknown>) => string;
+  const { data } = useData<{ reports: Rep[] }>('/api/reports', 5 * 60_000);
+  const reload = () => invalidate('/api/reports');
+  useEffect(() => {
+    const id = setInterval(reload, 5 * 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const [hidden, setHidden] = useState<string>(() => { try { return localStorage.getItem('alter.repAsk') ?? ''; } catch { return ''; } });
+  // on Settings → About the reports list is on screen and answers right there
+  const [onAbout, setOnAbout] = useState(() => /settings.*tab=about/.test(location.hash));
+  useEffect(() => {
+    const on = () => setOnAbout(/settings.*tab=about/.test(location.hash));
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  const q = (data?.reports ?? []).find((r) => waiting(r) && `${r.id}:${r.messages!.length}` !== hidden);
+  if (!q || onAbout) return null;
+  const hide = () => {
+    const k = `${q.id}:${q.messages!.length}`;
+    setHidden(k);
+    try { localStorage.setItem('alter.repAsk', k); } catch {}
+  };
+  return (
+    <div className="rep-ask-card" role="dialog" aria-label={t('rep.askTitle')}>
+      <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+        <HelpCircle className="rep-ico warn" />
+        <div className="grow" style={{ minWidth: 0 }}>
+          <b>{t('rep.askTitle')}</b>
+          <div className="faint small rep-title">{q.title}</div>
+        </div>
+        <button className="btn ghost sm icon" onClick={hide} aria-label={t('common.close')}><X /></button>
+      </div>
+      <Thread r={q} onSent={() => { reload(); }} />
     </div>
   );
 }

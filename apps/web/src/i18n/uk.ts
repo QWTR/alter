@@ -1444,6 +1444,17 @@ const uk: Dict = {
   'rep.imgHint': 'or paste it (Ctrl+V) or drop it here',
   'rep.imgMax': 'Up to {n} screenshots',
   'rep.imgPrivacy': 'Screenshots are sent as they are — crop out anything private first. They never go to GitHub.',
+  // report conversation + usage stats
+  'rep.st.needs_info': 'Питання до вас',
+  'rep.from.ai': 'ALTTER Repair',
+  'rep.from.team': 'Команда ALTTER',
+  'rep.from.user': 'Ви',
+  'rep.answer': 'Надіслати відповідь',
+  'rep.answerPh': 'Опишіть детальніше: де, що натиснули, чого очікували…',
+  'rep.replied': 'Надіслано — ALTTER Repair подбає про решту',
+  'rep.askTitle': 'Питання щодо вашого звіту',
+  'settings.usageStats': 'Анонімна статистика використання',
+  'settings.usageStatsHint': 'Повідомляє серверу ALTTER лише, що ця інсталяція працює: випадковий id, версію, систему, мову та кількість спарених телефонів. Без імен, чатів і файлів.',
 };
 
 export default uk;

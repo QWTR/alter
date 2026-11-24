@@ -11,7 +11,7 @@ export interface ProviderStatus {
   models: { id: string; label: string }[]; efforts: string[];
   health?: { ok: boolean; checkedAt: string; error?: string; latencyMs?: number };
 }
-export interface Settings { defaultProvider: string; learning: boolean; language: string; userName: string; onboarded: boolean; onLimit: 'ask' | 'switch'; defaultAccess?: 'chat' | 'read' | 'full' }
+export interface Settings { defaultProvider: string; learning: boolean; usageStats?: boolean; language: string; userName: string; onboarded: boolean; onLimit: 'ask' | 'switch'; defaultAccess?: 'chat' | 'read' | 'full' }
 export interface Limit { provider: string; message: string; until: string | null; at: string }
 export interface UsageTotals { runs: number; input: number; output: number; cached: number; cost: number; today: { runs: number; input: number; output: number } }
 export interface UsageSummary { days: number; byProvider: Record<string, UsageTotals>; daily: { day: string; provider: string; runs: number; input: number; output: number }[]; limits: Limit[] }

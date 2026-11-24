@@ -394,6 +394,13 @@ function DataTab({ status }: { status: Status }) {
         </div>
         <Switch on={status.settings.learning} onChange={(learning) => saveSettings({ learning })} />
       </div>
+      <div className="card row">
+        <div className="grow">
+          <b>{t('settings.usageStats')}</b>
+          <div className="small muted">{t('settings.usageStatsHint')}</div>
+        </div>
+        <Switch on={status.settings.usageStats !== false} onChange={(usageStats) => saveSettings({ usageStats })} />
+      </div>
       <div className="card" style={{ display: 'grid', gap: 12 }}>
         {[
           { label: t('settings.dataPath'), path: status.paths.data },

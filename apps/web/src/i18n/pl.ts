@@ -1444,6 +1444,17 @@ const pl: Dict = {
   'rep.imgHint': 'albo wklej (Ctrl+V) lub przeciągnij tutaj',
   'rep.imgMax': 'Maksymalnie {n} zrzuty ekranu',
   'rep.imgPrivacy': 'Zrzuty ekranu są wysyłane tak, jak są — najpierw wytnij to, co prywatne. Nigdy nie trafiają na GitHuba.',
+  // report conversation + usage stats
+  'rep.st.needs_info': 'Pytanie do Ciebie',
+  'rep.from.ai': 'ALTTER Repair',
+  'rep.from.team': 'Zespół ALTTER',
+  'rep.from.user': 'Ty',
+  'rep.answer': 'Wyślij odpowiedź',
+  'rep.answerPh': 'Opisz dokładniej: gdzie, co kliknąłeś, czego się spodziewałeś…',
+  'rep.replied': 'Wysłane — ALTTER Repair zajmie się resztą',
+  'rep.askTitle': 'Pytanie do Twojego zgłoszenia',
+  'settings.usageStats': 'Anonimowe statystyki użycia',
+  'settings.usageStatsHint': 'Wysyła do serwera ALTTER tylko informację, że ta instalacja działa: losowy identyfikator, wersję, system, język i liczbę sparowanych telefonów. Bez imion, czatów i plików.',
 };
 
 export default pl;

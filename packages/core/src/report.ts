@@ -10,7 +10,8 @@ export const REPAIR_URL = 'https://altter.v-room.app/_repair';
 export const REPORT_KINDS = ['bug', 'ui', 'idea', 'other'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
-export interface SentReport { id: string; kind: ReportKind; title: string; at: string; status?: string; fixedIn?: string | null; note?: string }
+export interface ReportMessage { from: 'ai' | 'team' | 'user'; text: string; at: string }
+export interface SentReport { id: string; kind: ReportKind; title: string; at: string; status?: string; fixedIn?: string | null; note?: string; messages?: ReportMessage[] }
 
 // the last error lines of this core — collected from console.error / console.warn
 const recent: string[] = [];
@@ -106,10 +107,62 @@ export async function myReports(): Promise<SentReport[]> {
   try {
     const r = await fetch(`${repairUrl()}/status?ids=${list.map((x) => x.id).join(',')}`, { headers: { 'user-agent': `ALTTER/${VERSION}` }, signal: AbortSignal.timeout(10_000) });
     if (r.ok) {
-      const j = (await r.json()) as Record<string, { status: string; fixedIn?: string | null; note?: string }>;
+      const j = (await r.json()) as Record<string, { status: string; fixedIn?: string | null; note?: string; messages?: ReportMessage[] }>;
       for (const x of list) if (j[x.id]) Object.assign(x, j[x.id]);
       saveConfig();
     }
   } catch {}
   return list;
+}
+
+/** Answers a question from the repair server (or the team) about one of my reports. */
+export async function replyReport(id: string, text: string): Promise<SentReport> {
+  const item = sentList().find((x) => x.id === id);
+  if (!item) throw new Error('No such report');
+  const t = String(text ?? '').trim();
+  if (t.length < 2) throw new Error('Write an answer');
+  const r = await fetch(`${repairUrl()}/reply`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'user-agent': `ALTTER/${VERSION}` },
+    body: JSON.stringify({ id, text: scrub(t).slice(0, 2000), installId: installId() }),
+    signal: AbortSignal.timeout(20_000),
+  }).catch(() => {
+    throw new Error('The repair server cannot be reached — check the internet connection and try again');
+  });
+  const j = (await r.json().catch(() => ({}))) as { status?: string; messages?: ReportMessage[]; error?: string };
+  if (!r.ok) throw new Error(j.error || `The repair server answered ${r.status}`);
+  if (j.status) item.status = j.status;
+  if (j.messages) item.messages = j.messages;
+  saveConfig();
+  return item;
+}
+
+// ---------------------------------------------------------------- usage statistics
+// Every few minutes the computer tells the repair server "this install is on": a random install id (hashed there),
+// the version, the system, the language and how many phones are paired. Nothing else — no names, chats or files.
+// Off with Settings → Data and privacy, config.usageStats = false or ALTER_NO_UPDATE_CHECK / ALTER_NO_STATS.
+let pingTimer: ReturnType<typeof setInterval> | undefined;
+export async function pingUsage(): Promise<void> {
+  const c = loadConfig() as any;
+  if (c.usageStats === false || process.env.ALTER_NO_STATS || process.env.ALTER_NO_UPDATE_CHECK) return;
+  await fetch(`${repairUrl()}/ping`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'user-agent': `ALTTER/${VERSION}` },
+    body: JSON.stringify({
+      installId: installId(),
+      version: VERSION,
+      os: platform(),
+      platform: `${platform()} ${release()} ${arch()}`,
+      app: process.versions.electron ? 'desktop' : 'server',
+      lang: String(c.language ?? ''),
+      devices: Array.isArray(c.devices) ? c.devices.length : 0,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  }).catch(() => {});
+}
+export function startUsagePings() {
+  if (pingTimer) return;
+  setTimeout(() => void pingUsage(), 30_000);
+  pingTimer = setInterval(() => void pingUsage(), 5 * 60_000);
+  pingTimer.unref?.();
 }

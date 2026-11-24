@@ -1459,6 +1459,17 @@ const en = {
   'rep.imgHint': 'or paste it (Ctrl+V) or drop it here',
   'rep.imgMax': 'Up to {n} screenshots',
   'rep.imgPrivacy': 'Screenshots are sent as they are — crop out anything private first. They never go to GitHub.',
+  // report conversation + usage stats
+  'rep.st.needs_info': 'A question for you',
+  'rep.from.ai': 'ALTTER Repair',
+  'rep.from.team': 'ALTTER team',
+  'rep.from.user': 'You',
+  'rep.answer': 'Send answer',
+  'rep.answerPh': 'Describe it a bit more: where, what you clicked, what you expected…',
+  'rep.replied': 'Sent — ALTTER Repair takes it from here',
+  'rep.askTitle': 'A question about your report',
+  'settings.usageStats': 'Anonymous usage statistics',
+  'settings.usageStatsHint': 'Tells the ALTTER server only that this install is on: a random id, the version, the system, the language and the number of paired phones. No names, chats or files.',
 };
 
 export default en;
