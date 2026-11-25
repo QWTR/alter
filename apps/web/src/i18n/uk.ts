@@ -1582,6 +1582,12 @@ const uk: Dict = {
   'mimp.from': 'з {ai}',
   'mimp.onbTitle': 'Вже користуєтеся ChatGPT, Claude чи Gemini?',
   'mimp.onbLead': 'Перенесіть те, що вони про вас памʼятають, — ALTTER знатиме вас з першого повідомлення. Можна й пізніше в Памʼяті.',
+  // jump
+  'chat.jumpLatest': 'Найновіші повідомлення',
+  'chat.jumpLive': 'ALTTER пише, донизу',
+  // now
+  'chat.sendNow': 'Надіслати зараз',
+  'chat.sendNowHint': 'Зупинити відповідь і надіслати одразу',
 };
 
 export default uk;

@@ -1582,6 +1582,12 @@ const pl: Dict = {
   'mimp.from': 'z {ai}',
   'mimp.onbTitle': 'Używasz już ChatGPT, Claude albo Gemini?',
   'mimp.onbLead': 'Przenieś to, co o Tobie pamiętają, a ALTTER będzie Cię znał od pierwszej wiadomości. Możesz to zrobić też później w Pamięci.',
+  // jump
+  'chat.jumpLatest': 'Najnowsze wiadomości',
+  'chat.jumpLive': 'ALTTER pisze, przewiń w dół',
+  // now
+  'chat.sendNow': 'Wyślij teraz',
+  'chat.sendNowHint': 'Przerwij bieżącą odpowiedź i wyślij to od razu',
 };
 
 export default pl;

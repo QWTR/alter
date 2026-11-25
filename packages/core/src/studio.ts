@@ -205,6 +205,49 @@ AI images (photos, illustrations, backgrounds, 3D renders, product shots, logo i
 Fonts: display/body take any Google Fonts family by name (e.g. "Montserrat", "Lobster", "Archivo Black") or a font file path (.ttf/.otf/.woff2) — the renderer loads it.${brand}`;
 }
 
+// ---------- story reels: a 3D story / absurd ad with a voice-over, made just by asking in the chat ----------
+
+const STORY = /(rolk|reel|tiktok|shorts?\b|reklam|spot\b|teledysk|ad\b|commercial|promo|filmik|video|wideo)/i;
+const STORY_KIND = /(histor|story|fabu|scenari|lektor|narrat|voice|g[łl]os|3d|absurd|pojeb|popierd|zwariow|[śs]mieszn|kreskówk|animowan|postaci|bohater|character|funny|crazy|weird|surreal|pixar)/i;
+/** A story reel (3D, a plot, a voice-over)? Also follow-ups in a chat that is already making one. */
+export function wantsStoryReel(message: string, history: { content: string }[] = []): boolean {
+  if (STORY.test(message) && STORY_KIND.test(message)) return true;
+  return history.slice(-6).some((m) => /voice-times\.mjs|STORY REEL|tekst dla lektora|voice-over script/i.test(m.content));
+}
+
+/** The method behind the 3D story reels: what worked, written down so every chat can do it without special buttons. */
+export function storyReelGuide(): string {
+  const dir = studioDir().replace(/\\/g, '/');
+  return `## STORY REEL (3D story / absurd ad with a voice-over, 9:16)
+The user only has to ask in the chat; you run the whole method below. It is a craft, not a brand: never put any product, company or app into the story unless the user named it in THIS chat (memories about their past projects do not count — at most ask "for which product?" in one line). If no product is named yet, write the story with [PRODUCT] in the last line and ask.
+Length: what they asked; otherwise 30–45 s; never more than 50 s. Short sentences, one sentence = one shot (2–4 s).
+### 1. First answer: the script (no files yet)
+- One-line pitch (title, format, length).
+- "Voice-over" code block: the exact text to paste into ElevenLabs, one sentence per line. Story shape: a hook in the first second (an impossible image), escalation every 3–5 s (each beat weirder but logical inside its own world), one real twist near the end, a dry last line, then the CTA/product line. Deadpan narration of absurd events is what makes it funny. Make it genuinely surprising — if the user wants it "crazy", avoid the first idea that comes to mind.
+- A shot list (time · what we see in 3D · on-screen text, if any), same order as the lines.
+- ElevenLabs tip: a calm documentary narrator voice, Stability ~35–45%, Style ~30–40%, keep the "…" pauses, export one MP3.
+- End: "Send the MP3 — or say go and I'll render the shots now and fit them to your voice later."
+### 2. Build (full access; when the user says go or sends the MP3)
+a) Look bible: one paragraph in English describing the style and each character exactly (e.g. "stylized 3D animated film still, soft global illumination, rich colour, shallow depth of field, a chubby grey pigeon with a tiny red scarf…"). Paste it verbatim at the start of EVERY image prompt so characters stay the same between shots.
+b) Shots: for each line \`node "${dir}/gen-image.mjs" "<look bible>. <this shot: camera, action, setting>" --style 3d --format reel --out assets/<reel>/s<NN>.jpg\` (add --n 2 for the hook and the twist and keep the better one). No text inside images.
+c) Timings: with the MP3 (an attachment path) run \`node "${dir}/voice-times.mjs" "<mp3>" --text "<the voice-over lines>"\` → JSON {duration, lines[{text,start,end}], words[{text,start,end}]}. Without an MP3 use ~0.38 s per word per line.
+d) videos/<reel>.tsx, meta { format: 'reel', seconds: <duration + 0.5>, theme: 'midnight' }:
+\`\`\`tsx
+import { Timeline, Scene, Photo, Text, Captions, Music, Sfx } from 'alter-kit';
+const words = [/* words from voice-times */];
+export default () => (<>
+  <Timeline overlap={0}>
+    <Scene dur={/* next line start − this line start */} enter="zoom" exit="none"><Photo src="assets/<reel>/s01.jpg" move="in" zoom={1.18} /></Scene>
+    {/* one Scene per line; vary move in/out/left/right; enter zoom|wipe|blur for hard cuts on beats */}
+  </Timeline>
+  <Music src="<voice-over.mp3>" volume={1} fadeIn={0} fadeOut={0.2} />
+  <Captions words={words} per={3} size={78} box />
+</>);
+\`\`\`
+Captions and Music sit outside the Timeline so they run on the whole video's clock. Optional background music under the voice at volume 0.12–0.18. The last scene: product/logo + CTA with Text or Logo, held 2–3 s.
+e) Render --draft, check frames at the hook, the twist and the end (--at <sec> --format jpg --draft and look at them): characters consistent, nothing cut off, captions readable. Fix, then the final render. End with the output path.`;
+}
+
 /** The chat while access is not full: creative work needs to run the renderer. */
 export const CREATIVE_NEEDS_FULL = `## ALTTER Studio
 Videos, motion graphics, 3D, edits and graphics are rendered on this computer, which needs "Full control" for this chat. Tell the user in one line to switch the chat to Full control (bottom of the chat) and send the request again; you may describe the plan (scenes, format, length) meanwhile. End the answer with this exact line on its own: [[altter:needs-full]] (the app shows a button that switches and continues).`;

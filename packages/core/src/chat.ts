@@ -28,7 +28,7 @@ import { closeHands, HANDS_GUIDE, HANDS_NEEDS_FULL, handsEnabled, handsMcpUrl, o
 import { listeningPort } from './pairing.ts';
 import { TRAVEL_GUIDE, wantsTravel } from './travel.ts';
 import { isPlanApproval, PLAN_APPROVED_GUIDE, PLAN_GUIDE, wantsPlan } from './plans.ts';
-import { CREATIVE_NEEDS_FULL, creativeEngine, ensureStudio, renderProgress, studioDir, wantsCreative } from './studio.ts';
+import { CREATIVE_NEEDS_FULL, creativeEngine, ensureStudio, renderProgress, storyReelGuide, studioDir, wantsCreative, wantsStoryReel } from './studio.ts';
 import { describeAttachments, getUpload, uploadsDir, type Attachment } from './uploads.ts';
 import { inboxFor } from './followups.ts';
 import { FILES_GUIDE, RICH_GUIDE } from './rich.ts';
@@ -250,7 +250,8 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     run('UPDATE conversations SET updated_at = ? WHERE id = ?', now(), conv.id);
     return { conversationId: conv.id, text: board.content, provider: 'team' };
   }
-  const creative = wantsCreative(message, history);
+  const storyReel = wantsStoryReel(message, history);
+  const creative = storyReel || wantsCreative(message, history);
   let studioReady = false;
   if (creative && conv.access === 'full' && !planning) {
     try {
@@ -275,6 +276,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     wantsTravel(message) && !creative ? TRAVEL_GUIDE : '',
     conv.access !== 'chat' && wantsWebEngine(message, history) && !creative ? WEB_ENGINE : '',
     creative ? (studioReady ? creativeEngine() : conv.access === 'full' ? '' : CREATIVE_NEEDS_FULL) : '',
+    storyReel ? storyReelGuide() : '',
     !agent && wantsAutomation(message, history) ? AUTOMATION_GUIDE : '',
     wantsSetup(message, history) ? SETUP_GUIDE : '',
     !agent && wantsTeamCard(message, history) ? TEAM_GUIDE : '',

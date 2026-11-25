@@ -1597,6 +1597,12 @@ const en = {
   'mimp.from': 'from {ai}',
   'mimp.onbTitle': 'Already use ChatGPT, Claude or Gemini?',
   'mimp.onbLead': 'Bring what they remember about you, so ALTTER knows you from the first message. You can also do it later in Memory.',
+  // jump
+  'chat.jumpLatest': 'Latest messages',
+  'chat.jumpLive': 'ALTTER is writing, jump down',
+  // now
+  'chat.sendNow': 'Send now',
+  'chat.sendNowHint': 'Stop the current answer and send this right away',
 };
 
 export default en;

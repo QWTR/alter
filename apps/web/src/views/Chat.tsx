@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowUp, AudioLines, Mic, Crosshair, ListChecks, Undo2, WandSparkles, Eye, FileText, Film, FolderKanban, Menu, MessageCircle, MonitorPlay, Music, Paperclip, Plus, Search, Settings2, Square, Terminal, Trash2, Upload, Wrench, X, Clock, CornerDownRight, Copy, Check, RotateCcw, Pencil, ShieldCheck, Zap } from 'lucide-react';
+import { ArrowDown, ArrowUp, AudioLines, Mic, Crosshair, ListChecks, Undo2, WandSparkles, Eye, FileText, Film, FolderKanban, Menu, MessageCircle, MonitorPlay, Music, Paperclip, Plus, Search, Settings2, Square, Terminal, Trash2, Upload, Wrench, X, Clock, CornerDownRight, Copy, Check, RotateCcw, Pencil, ShieldCheck, Zap } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ProviderPicker, getPref } from '../components/ProviderPicker';
@@ -475,9 +475,33 @@ export function ChatView() {
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   const showLive = !!live && !(live.done && messages.some((m) => m.role === 'assistant' && m.content === live.text));
 
+  // follow the answer only while you are at the bottom; scroll up to read and it stays where you are
+  const stick = useRef(true);
+  const lastTop = useRef(0);
+  const [away, setAway] = useState(false);
+  const toBottom = (smooth = true) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stick.current = true;
+    setAway(false);
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  };
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (gap < 60) stick.current = true;
+    else if (el.scrollTop < lastTop.current - 2) stick.current = false; // moved up: that is the reader, not new text
+    lastTop.current = el.scrollTop;
+    setAway(!stick.current && gap > 200);
+  };
+  // another chat, or my own new message: back to the bottom
+  const mine = messages.length ? messages[messages.length - 1].role === 'user' : false;
+  useEffect(() => { stick.current = true; lastTop.current = 0; setAway(false); requestAnimationFrame(() => toBottom(false)); }, [routeId]);
+  useEffect(() => { if (mine) toBottom(); }, [messages.length, mine]);
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: live && !live.done ? 'auto' : 'smooth' });
+    if (el && stick.current) el.scrollTo({ top: el.scrollHeight, behavior: live && !live.done ? 'auto' : 'smooth' });
   }, [messages.length, live?.text, live?.steps.length]);
 
   const patchLive = (k: string, f: (l: Live) => Live) => setLives((all) => (all[k] ? { ...all, [k]: f(all[k]) } : all));
@@ -697,6 +721,11 @@ export function ChatView() {
   const userInitial = (guest ? guest.host : status?.settings.userName || 'You').slice(0, 1).toUpperCase();
   const canSend = !guest || guest.guestsCanSend;
   const stop = () => (live?.remote ? api(`/api/room/${routeId}/stop`, { method: 'POST' }).catch(() => {}) : aborts.current[key]?.abort());
+  /** Interrupt and send this now (like a queued message in Claude Code). */
+  const sendNow = (text?: string) => {
+    if (text) setQueued((q) => ({ ...q, [key]: [text, ...(q[key] ?? []).filter((x) => x !== text)] }));
+    stop();
+  };
   const lastStep = live?.steps[live.steps.length - 1];
   const writingFile = busy && draft && !draft.done ? draft.file.split(/[\\/]/).pop() : undefined;
   const elapsed = live ? Math.max(0, Math.round((Date.now() - live.startedAt) / 1000)) : 0;
@@ -773,7 +802,7 @@ export function ChatView() {
           {host && routeId && <button className="btn ghost icon sm" title={t('chat.delete')} onClick={remove}><Trash2 /></button>}
         </div>
 
-        <div className="messages" ref={scrollRef}>
+        <div className="messages" ref={scrollRef} onScroll={onScroll}>
           <div className="messages-inner" data-anchor="list">
             {!messages.length && !showLive && (
               <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease }} style={{ textAlign: 'center', paddingTop: '9vh' }}>
@@ -834,7 +863,7 @@ export function ChatView() {
                     )}
                     <AnimatePresence>{live.progress && !live.done && <ProgressBar key="p" p={live.progress} />}</AnimatePresence>
                     {live.text || live.followUps?.length ? (
-                      <LiveAnswer text={live.text} followUps={live.followUps ?? []} />
+                      <LiveAnswer text={live.text} followUps={live.followUps ?? []} onSendNow={!live.done ? sendNow : undefined} />
                     ) : live.done ? null : <span className="typing-dots"><i /><i /><i /></span>}
                   </div>
                 </motion.div>
@@ -845,6 +874,13 @@ export function ChatView() {
         </div>
 
         <div className="composer">
+          <AnimatePresence>
+            {away && (
+              <motion.button key="jump" type="button" className="jump-latest" onClick={() => toBottom()} initial={{ opacity: 0, y: 8, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} exit={{ opacity: 0, y: 8, x: '-50%' }} transition={{ duration: 0.16 }}>
+                <ArrowDown size={15} />{showLive && live && !live.done ? t('chat.jumpLive') : t('chat.jumpLatest')}
+              </motion.button>
+            )}
+          </AnimatePresence>
           <AnimatePresence>
             {editFrom != null && (
               <motion.div className="queued-list" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}>
@@ -857,6 +893,7 @@ export function ChatView() {
                   <span key={i} className="queued-item">
                     <Clock size={13} />
                     <span className="truncate">{q}</span>
+                    <button type="button" className="queued-now" title={t('chat.sendNowHint')} onClick={() => sendNow()}><ArrowUp size={12} />{t('chat.sendNow')}</button>
                     <button type="button" className="btn ghost icon sm" title={t('common.remove')} onClick={() => setQueued((all) => ({ ...all, [key]: (all[key] ?? []).filter((_, j) => j !== i) }))}><X size={13} /></button>
                   </span>
                 ))}
@@ -979,11 +1016,10 @@ export function ChatView() {
               <span className="grow" />
               {busy ? (
                 <>
-                  {input.trim() && canSend && (
-                    <motion.button className="send" title={t('chat.followupSend')} initial={{ scale: 0.8 }} animate={{ scale: 1 }} whileTap={{ scale: 0.9 }}>
-                      <ArrowUp />
-                    </motion.button>
-                  )}
+                  {/* always there while it works: a follow-up goes in at once, no need to wait */}
+                  <motion.button className="send" title={t('chat.followupSend')} aria-label={t('chat.followupSend')} disabled={!canSend || !input.trim()} initial={{ scale: 0.8 }} animate={{ scale: 1 }} whileTap={{ scale: 0.9 }}>
+                    <ArrowUp />
+                  </motion.button>
                   <motion.button type="button" className="send" title={t('chat.stop')} onClick={stop} initial={{ scale: 0.8 }} animate={{ scale: 1 }} style={{ background: 'var(--surface-3)', color: 'var(--text)' }}>
                     <Square size={14} fill="currentColor" />
                   </motion.button>
@@ -1163,7 +1199,7 @@ function MsgActions({ text, onRetry, onEdit }: { text: string; onRetry?: () => v
 }
 
 /** The streaming answer with the messages sent mid-answer shown where they arrived. */
-function LiveAnswer({ text, followUps }: { text: string; followUps: { text: string; at: number; author?: Author | null }[] }) {
+function LiveAnswer({ text, followUps, onSendNow }: { text: string; followUps: { text: string; at: number; author?: Author | null }[]; onSendNow?: (text: string) => void }) {
   const t = useT();
   const parts: ({ kind: 'text'; text: string } | { kind: 'follow'; text: string; author?: Author | null })[] = [];
   let cut = 0;
@@ -1184,6 +1220,9 @@ function LiveAnswer({ text, followUps }: { text: string; followUps: { text: stri
             <CornerDownRight size={14} />
             <span className="followup-label">{p.author ? p.author.name : t('chat.followup')}</span>
             <span className="followup-text">{p.text}</span>
+            {onSendNow && !p.author && (
+              <button type="button" className="queued-now" title={t('chat.sendNowHint')} onClick={() => onSendNow(p.text)}><ArrowUp size={12} />{t('chat.sendNow')}</button>
+            )}
           </motion.div>
         ),
       )}
