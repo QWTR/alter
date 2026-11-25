@@ -162,7 +162,7 @@ export const Counter: React.FC<{ to: number; from?: number; at?: number; dur?: n
 export interface Word { text: string; start: number; end: number }
 
 /** Social-style captions: a few words at a time, the spoken word lit up. Pass `words` (with times) or `text` (spread over `dur`). */
-export const Captions: React.FC<{ text?: string; words?: Word[]; at?: number; dur?: number; per?: number; size?: number; place?: Place; box?: boolean }> = ({ text, words, at = 0, dur = 4, per = 3, size = 72, place = 'bottom', box = false }) => {
+export const Captions: React.FC<{ text?: string; words?: Word[]; at?: number; dur?: number; per?: number; size?: number; place?: Place; box?: boolean; upper?: boolean; y?: number }> = ({ text, words, at = 0, dur = 4, per = 3, size = 72, place = 'bottom', box = false, upper = true, y }) => {
   const t = useTime();
   const th = useTheme();
   const { u, portrait } = useFormat();
@@ -177,10 +177,10 @@ export const Captions: React.FC<{ text?: string; words?: Word[]; at?: number; du
   const group = list.slice(g, g + per);
   const p = ramp(t, group[0].start, group[0].start + 0.18, ease.back);
   return (
-    <div style={{ ...placeStyle(place, u, portrait) }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', columnGap: '0.34em', rowGap: '0.08em', fontFamily: font(th.display), fontWeight: 900, fontSize: u(size), lineHeight: 1.1, letterSpacing: '-0.02em', textTransform: 'uppercase', transform: `scale(${mix(0.85, 1, p)})`, padding: box ? `${u(14)}px ${u(26)}px` : 0, borderRadius: u(22), background: box ? 'rgba(0,0,0,.55)' : undefined, WebkitTextStroke: box ? undefined : `${u(7)}px rgba(0,0,0,.85)`, paintOrder: 'stroke fill' }}>
+    <div style={y !== undefined ? { position: 'absolute', left: u(40), right: u(40), top: u(y), display: 'flex', justifyContent: 'center', transform: 'translateY(-50%)' } : { ...placeStyle(place, u, portrait) }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', columnGap: '0.34em', rowGap: '0.08em', fontFamily: font(th.display), fontWeight: 900, fontSize: u(size), lineHeight: 1.1, letterSpacing: '-0.02em', textTransform: upper ? 'uppercase' : 'none', transform: `scale(${mix(0.85, 1, p)})`, padding: box ? `${u(14)}px ${u(26)}px` : 0, borderRadius: u(22), background: box ? 'rgba(0,0,0,.55)' : undefined, WebkitTextStroke: box ? undefined : `${u(7)}px rgba(0,0,0,.85)`, paintOrder: 'stroke fill' }}>
         {group.map((w, i) => {
-          const on = g + i === idx;
+          const on = per > 1 && g + i === idx;
           return <span key={i} style={{ color: on ? th.accent : '#fff', transform: on ? 'scale(1.08)' : undefined, display: 'inline-block' }}>{w.text}</span>;
         })}
       </div>

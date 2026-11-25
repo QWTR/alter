@@ -193,7 +193,8 @@ Components:
 - Text {text, at, out, size=96, anim: rise|pop|blur|fade|type|slide, hl: words in accent, marker (highlighter), stagger, place, face: display|body|mono, width, color}
 - Title {kicker, title, sub, hl, at, out, place, size=120} · List {items, numbered, at} · Counter {to, from, prefix, suffix, decimals, label, at, dur} · Chip {label, value, icon (emoji), x, y | place, accent, at, out} · LowerThird {name, role, at, out} · Captions {text + dur | words [{text,start,end}], at, per=3, size, box}
 - Photo {src, move: in|out|left|right|none, dur, fit, focus ("50% 30%"), zoom, look, dim, x,y,w,h,radius} · Clip {src, from (sec in source), rate (0.5 slow-mo, 2 fast), muted=true, volume, fit, focus, look, dim, x,y,w,h,radius} · look = warm|cool|film|bw|noir|vivid|fade|teal-orange or {brightness, contrast, saturate, warmth -1..1, hue, blur, vignette} · Device {type: phone|browser|laptop, url, at, scale, tilt} wrapping a Photo/Clip · Logo {src | text, sub, at, size}
-- Scene3D {preset: orbs|card|cube|rings|blob|tunnel, image (card/cube), color, speed, scale, at}
+- Scene3D {preset: orbs|card|cube|rings|blob|tunnel, image (card/cube), color, speed, scale, at} (abstract 3D only)
+- WORLD (a real animated 3D world: people, cars, houses, roads — see the story reel method) World {sky, cam | follow, shake, tint} > Ground, Road, Trees, Tree, House, Block, Car, Person, Bird, Clouds, Sign, Prop, Flame, Puffs · overlays Tag, Badge, Speedo, Notify, Shout
 - Bars {data [{label,value}], suffix, at} · Ring {value 0..1, label, at}
 - Music {src, volume, fadeIn, fadeOut, from} · Sfx {src, at, volume}
 - Custom bits: useTime(), useTheme(), useFormat() → {w,h,u(px),portrait}, ramp(t,a,b,ease), ease.out|back|inOut, mix, rand, media(path) + anything from 'remotion'.
@@ -201,7 +202,7 @@ src = a file path on disk (attachments too) or a URL; the renderer copies local 
 Style: one idea per scene, 2–4 s each, big type, one accent colour, motion on every scene, a strong hook in the first second, logo/CTA last. Match words to the user's language (Polish diacritics work).
 Video editing: \`node "${dir}/ff.mjs" probe <file>\` (duration, size, fps) first. Cut/join/scale/crop/rotate/compress/extract audio/loudnorm/GIF: \`node "${dir}/ff.mjs" <ffmpeg args>\` (-y added; its filters may be limited — if one is missing, do it in the kit). Speed, colour, titles, captions, overlays, reframing to 9:16: a kit video with Clip (rate, look, focus) as the background — always works. Results go in ./renders/.
 Graphics & photos: a still (meta.still = true, format post|square|thumb|banner|story) rendered with --format png; photo fixes (light, colour, crop, resize, collage) = a still with Photo {look, focus, zoom, fit}, --format jpg. 
-AI images (photos, illustrations, backgrounds, 3D renders, product shots, logo ideas): \`node "${dir}/gen-image.mjs" "<what, in English, concrete>" --style photo|cinematic|product|food|portrait|3d|isometric|flat|anime|watercolor|neon|minimal|poster|background|logo|sticker --format post|square|reel|wide|thumb|banner [--n 2] --out assets/<name>.jpg\` (prints OUTPUT <path>; free tier ~15 s per image, never put text in the prompt). Then use it: as the deliverable itself, or as Photo/Bg in a kit graphic or video where you add the real text, logo and brand colours. Brand graphics set (post, story, banner, thumbnail) = one still per format with the same layout.
+AI images (photos, illustrations, backgrounds, 3D renders, product shots, logo ideas): \`node "${dir}/gen-image.mjs" "<what, in English, concrete>" --style photo|cinematic|product|food|portrait|3d|lowpoly|isometric|flat|anime|watercolor|neon|minimal|poster|background|logo|sticker --format post|square|reel|wide|thumb|banner [--n 2] --out assets/<name>.png\` (prints OUTPUT <path>). You (Claude) cannot draw; this script hands the picture to ChatGPT (the user's account, ~40 s each, up to 3 at once) or Gemini. If it exits with NO_IMAGE_AI, tell the user in one line to sign in to ChatGPT/Codex in ALTTER — never fake it with stock-looking pictures (--free is a last resort the user must ask for). Never put text in the prompt. Then use it: as the deliverable itself, or as Photo/Bg in a kit graphic or video where you add the real text, logo and brand colours. Brand graphics set (post, story, banner, thumbnail) = one still per format with the same layout.
 Fonts: display/body take any Google Fonts family by name (e.g. "Montserrat", "Lobster", "Archivo Black") or a font file path (.ttf/.otf/.woff2) — the renderer loads it.${brand}`;
 }
 
@@ -221,31 +222,50 @@ export function storyReelGuide(): string {
   return `## STORY REEL (3D story / absurd ad with a voice-over, 9:16)
 The user only has to ask in the chat; you run the whole method below. It is a craft, not a brand: never put any product, company or app into the story unless the user named it in THIS chat (memories about their past projects do not count — at most ask "for which product?" in one line). If no product is named yet, write the story with [PRODUCT] in the last line and ask.
 Length: what they asked; otherwise 30–45 s; never more than 50 s. Short sentences, one sentence = one shot (2–4 s).
+"3D" here means a REAL ANIMATED 3D WORLD built in code with the kit's World (toy-like low-poly: blocky people, boxy cars, houses, roads, trees, a moving camera) + flat UI overlays (name tags, badges, a speedometer, a phone notification) + big one-word captions. NOT generated pictures with a Ken Burns zoom — still images are not animation. Only use gen-image when the user explicitly asks for realistic/AI pictures.
 ### 1. First answer: the script (no files yet)
 - One-line pitch (title, format, length).
 - "Voice-over" code block: the exact text to paste into ElevenLabs, one sentence per line. Story shape: a hook in the first second (an impossible image), escalation every 3–5 s (each beat weirder but logical inside its own world), one real twist near the end, a dry last line, then the CTA/product line. Deadpan narration of absurd events is what makes it funny. Make it genuinely surprising — if the user wants it "crazy", avoid the first idea that comes to mind.
-- A shot list (time · what we see in 3D · on-screen text, if any), same order as the lines.
-- ElevenLabs tip: a calm documentary narrator voice, Stability ~35–45%, Style ~30–40%, keep the "…" pauses, export one MP3.
-- End: "Send the MP3 — or say go and I'll render the shots now and fit them to your voice later."
+- A shot list (time · what we see in the 3D world: characters, camera, action · overlay: tag/badge/notification), same order as the lines. Only things the World kit can show (people, cars, houses, blocks of flats, roads, trees, birds, signs, boxes as props, flames, smoke, any colours/skies) — exaggerate with scale, colour, camera and overlays rather than needing new models.
+- ElevenLabs tip: a calm documentary narrator voice, Stability ~35–45%, Style ~30–40%, keep the "…" pauses, export one MP3. Brand names the voice mispronounces: write them phonetically for ElevenLabs and correct them in the captions.
+- End: "Send the MP3 — or say go and I'll build the 3D now and fit it to your voice later."
 ### 2. Build (full access; when the user says go or sends the MP3)
-a) Look bible: one paragraph in English describing the style and each character exactly (e.g. "stylized 3D animated film still, soft global illumination, rich colour, shallow depth of field, a chubby grey pigeon with a tiny red scarf…"). Paste it verbatim at the start of EVERY image prompt so characters stay the same between shots.
-b) Shots: for each line \`node "${dir}/gen-image.mjs" "<look bible>. <this shot: camera, action, setting>" --style 3d --format reel --out assets/<reel>/s<NN>.jpg\` (add --n 2 for the hook and the twist and keep the better one). No text inside images.
-c) Timings: with the MP3 (an attachment path) run \`node "${dir}/voice-times.mjs" "<mp3>" --text "<the voice-over lines>"\` → JSON {duration, lines[{text,start,end}], words[{text,start,end}]}. Without an MP3 use ~0.38 s per word per line.
-d) videos/<reel>.tsx, meta { format: 'reel', seconds: <duration + 0.5>, theme: 'midnight' }:
+a) Timings: with the MP3 run \`node "${dir}/voice-times.mjs" "<mp3>" --text "<the voice-over lines>"\` → JSON {duration, lines[{text,start,end}], words[{text,start,end}]}. Without an MP3 use ~0.38 s per word. If it runs over 50 s, tell the user (or speed it up with ff.mjs atempo, max 1.15).
+b) videos/<reel>.tsx — one Scene per line, each a World shot. Keep the same characters (same colours) and the same car (same colour + plate) across shots. Example of two shots:
 \`\`\`tsx
-import { Timeline, Scene, Photo, Text, Captions, Music, Sfx } from 'alter-kit';
-const words = [/* words from voice-times */];
+import { Timeline, Scene, World, Ground, Road, Trees, House, Block, Car, Person, Bird, Clouds, Sign, Prop, Tag, Badge, Speedo, Notify, Shout, Captions, Music } from 'alter-kit';
+export const meta = { format: 'reel', seconds: 31.5, theme: 'midnight', grain: false };
+const words = [/* words from voice-times, corrected spelling */];
+const drive = [[0, 2, -10], [4, 2, 60]]; // [t, x, z]: the car drives up the road
 export default () => (<>
   <Timeline overlap={0}>
-    <Scene dur={/* next line start − this line start */} enter="zoom" exit="none"><Photo src="assets/<reel>/s01.jpg" move="in" zoom={1.18} /></Scene>
-    {/* one Scene per line; vary move in/out/left/right; enter zoom|wipe|blur for hard cuts on beats */}
+    <Scene dur={3.4} enter="none" exit="none">
+      <World sky="day" cam={[{ t: 0, pos: [5, 2.4, 8], look: [-0.5, 1.4, 0] }, { t: 3.4, pos: [2.6, 2, 5.5], look: [-0.5, 1.6, 0] }]}>
+        <Ground /><Clouds /><House pos={[-1, 0, -5]} />
+        <Car pos={[-6, 0, -0.5]} face={90} color="#c9ccd1" plate="WGM 2137" />
+        <Person pos={[-1, 0, 0]} shirt="#c0392b" pants="#3b3b2f" cry mood="sad" />
+      </World>
+      <Tag text="Klaus, Dortmund" x={420} y={360} />
+      <Badge text="płacze" icon="😭" x={420} y={450} at={1} />
+    </Scene>
+    <Scene dur={3.1} enter="none" exit="none">
+      <World follow={{ path: drive, offset: [0, 3, -8], look: [0, 1.2, 8] }} shake={0.3}>
+        <Ground /><Road lanes={4} width={14} /><Trees side={10} />
+        <Car path={drive} color="#c9ccd1" plate="WGM 2137" flames />
+      </World>
+      <Speedo from={90} to={131} limit={130} />
+    </Scene>
   </Timeline>
   <Music src="<voice-over.mp3>" volume={1} fadeIn={0} fadeOut={0.2} />
-  <Captions words={words} per={3} size={78} box />
+  <Captions words={words} per={1} size={110} upper={false} y={1180} />
 </>);
 \`\`\`
-Captions and Music sit outside the Timeline so they run on the whole video's clock. Optional background music under the voice at volume 0.12–0.18. The last scene: product/logo + CTA with Text or Logo, held 2–3 s.
-e) Render --draft, check frames at the hook, the twist and the end (--at <sec> --format jpg --draft and look at them): characters consistent, nothing cut off, captions readable. Fix, then the final render. End with the output path.`;
+World: sky day|dusk|night|overcast|studio | [top, bottom] · cam {pos, look} or keyframes [{t, pos, look, fov}] (always move the camera a little — push in, orbit, crane) · follow {path, offset, look} = chase cam · shake 0–1 (speed, impacts) · tint (e.g. "#ff6a5a" rage) · fov.
+Things (units ≈ metres, y up, ground y=0; face = degrees; path = [[t, x, z], …] moves it and turns it to where it goes; at = pop in at second):
+Ground {color} · Road {from, to, width, lanes 2|4, face, barrier} (along z) · Trees {from, to, side, spread, gap, seed} · Tree {pos, kind pine|round} · House {pos, face, floors, wall, roof} · Block {pos, floors, w} (flats) · Car {pos|path, face, color, plate, kind sedan|hatch|van, siren (police light bar + side text; a string sets the text), brake, flames (rocket boost), smoke, bounce, tilt, scale} · Person {pos|path, face, skin, shirt, pants, hair, hat cap|helmet|hair|none, hatColor, mood smile|sad|shout|flat, cry, wave, jump, scale, height} (walks when moving) · Bird {pos|path, fly, color, scale} (pigeon; scale 2–4 when it is a main character; on a car roof give pos y ≈ 1.75 and the car's path) · Clouds · Sign {pos, text, bg, fg} · Prop {pos, size [w,h,d], color} (sofa, TV, box, desk…) · Flame {pos, size} · Puffs {pos, big} (smoke).
+Overlays (px on a 1080×1920 frame, appear at "at", vanish at "out"): Tag {text, x, y} (yellow name tag over a character) · Badge {text, icon emoji, mark x|ok, dark, x, y} (stack them 90 px apart) · Speedo {from, to, limit, unit} · Notify {title, text, time, icon, reply} (phone message from the top) · Shout {text, sub, y} (big word: ZURÜCK!, STOP!).
+Captions per={1} (one big word at a time, white with outline, mid-lower y≈1150–1250) — they and Music sit outside the Timeline. Optional background music under the voice at volume 0.12–0.18. Last scene: product/logo + CTA (Logo or Text over a World or Bg), held 2–3 s.
+c) Check before the final: render frames at the hook, the middle, the twist and the end (\`--at <sec> --format jpg --draft\`) and LOOK at them: characters in frame (heads not cut off), the camera not inside objects, overlays not covering faces, captions readable. Fix, then render --draft once, then the final render. End with the output path.`;
 }
 
 /** The chat while access is not full: creative work needs to run the renderer. */

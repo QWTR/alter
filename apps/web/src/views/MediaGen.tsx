@@ -64,7 +64,7 @@ export function MediaView() {
   }, [opts, kind]);
   const [provider, model] = choice ? choice.split('|') : ['', ''];
   const chosen = opts?.providers.find((p) => p.id === provider);
-  const usesFree = kind === 'image' && (!choice || provider === 'pollinations') && !opts?.providers.find((p) => p.id === 'pollinations')?.hasKey;
+  const usesFree = kind === 'image' && (choice ? provider === 'pollinations' : !opts?.providers.find((p) => p.id === 'chatgpt')?.hasKey) && !opts?.providers.find((p) => p.id === 'pollinations')?.hasKey;
   const videoReady = !!opts?.providers.some((p) => p.models.some((m) => m.kind === 'video') && p.hasKey);
 
   const generate = async (e?: React.FormEvent) => {

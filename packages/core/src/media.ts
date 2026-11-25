@@ -1,12 +1,15 @@
 // AI images and videos, made from a prompt — in the app (Media gallery) and by the AI itself (the "alter_media" MCP tools).
 // Our own implementation; the providers are plain HTTP APIs:
+//   chatgpt      — the user's ChatGPT account, through the Codex app (no key)  image  ← default when signed in
 //   pollinations — free, no key (Flux and friends)          image
 //   openai       — your own API key (gpt-image-1)           image
 //   google       — your own Gemini API key                  image
 //   fal          — your own fal.ai key (Flux, Kling, Veo…)  image + video
 // Files land in <ALTER_HOME>/generated, so a chat answer that names one shows it as a picture / player.
+import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { all, get, getDb, now, run } from './db.ts';
@@ -22,6 +25,7 @@ export interface ModelInfo { id: string; label: string; kind: MediaKind; note?: 
 export interface ProviderInfo { id: string; label: string; free: boolean; needsKey: boolean; hasKey: boolean; keyUrl?: string; models: ModelInfo[] }
 
 const MODELS: Record<string, ModelInfo[]> = {
+  chatgpt: [{ id: 'gpt-image', label: 'ChatGPT (your account)', kind: 'image' }],
   pollinations: [
     { id: 'flux', label: 'Flux (free)', kind: 'image' },
     { id: 'turbo', label: 'Turbo (free, fastest)', kind: 'image' },
@@ -63,14 +67,26 @@ export function setMediaKeys(patch: Keys) {
   return mediaOptions();
 }
 
+let codexAt = 0;
+let codexOk = false;
+export function chatgptReady(): boolean {
+  if (Date.now() - codexAt < 5 * 60_000) return codexOk;
+  codexAt = Date.now();
+  try {
+    const r = spawnSync('codex login status', { encoding: 'utf8', shell: true, timeout: 20_000, windowsHide: true });
+    codexOk = /logged in using chatgpt/i.test(`${r.stdout ?? ''}${r.stderr ?? ''}`);
+  } catch { codexOk = false; }
+  return codexOk;
+}
+
 export function mediaOptions(): { providers: ProviderInfo[]; aspects: Aspect[] } {
   const k = keys();
-  const providers = (['pollinations', 'fal', 'openai', 'google'] as const).map((id) => ({
+  const providers = (['chatgpt', 'pollinations', 'fal', 'openai', 'google'] as const).map((id) => ({
     id,
-    label: { pollinations: 'Pollinations', fal: 'fal.ai', openai: 'OpenAI', google: 'Google Gemini' }[id],
+    label: { chatgpt: 'ChatGPT', pollinations: 'Pollinations', fal: 'fal.ai', openai: 'OpenAI', google: 'Google Gemini' }[id],
     free: id === 'pollinations',
-    needsKey: id !== 'pollinations',
-    hasKey: !!k[id],
+    needsKey: id !== 'pollinations' && id !== 'chatgpt',
+    hasKey: id === 'chatgpt' ? chatgptReady() : !!k[id],
     keyUrl: KEY_URL[id],
     models: MODELS[id],
   }));
@@ -123,11 +139,12 @@ const sizeFor = (a: Aspect, base = 1024) => {
   return { width: r8(w), height: r8(h) };
 };
 
-/** Picks a provider/model that can do this kind with the keys the user has (free Pollinations for images). */
+/** Picks a provider/model that can do this kind: ChatGPT (signed in) → Gemini / OpenAI keys → free Pollinations. */
 function pick(kind: MediaKind, provider?: string, model?: string): { provider: string; model: string } {
   const k = keys();
   if (provider && MODELS[provider]) {
-    if (provider !== 'pollinations' && !k[provider as keyof Keys]) throw new Error(`No ${provider} API key yet — add it in Media → Keys.`);
+    if (provider === 'chatgpt' && !chatgptReady()) throw new Error('ChatGPT is not signed in on this computer (the Codex app). Sign in, or pick another provider.');
+    if (provider !== 'pollinations' && provider !== 'chatgpt' && !k[provider as keyof Keys]) throw new Error(`No ${provider} API key yet — add it in Media → Keys.`);
     const m = model && MODELS[provider].some((x) => x.id === model) ? model : model && provider === 'fal' ? model : MODELS[provider].find((x) => x.kind === kind)?.id;
     if (!m) throw new Error(`${provider} cannot make ${kind === 'video' ? 'videos' : 'images'}.`);
     return { provider, model: m };
@@ -136,6 +153,9 @@ function pick(kind: MediaKind, provider?: string, model?: string): { provider: s
     if (!k.fal) throw new Error('Videos need a fal.ai key (Kling, Veo…) — add it in Media → Keys. Images are free without a key.');
     return { provider: 'fal', model: MODELS.fal.find((x) => x.kind === 'video')!.id };
   }
+  if (chatgptReady()) return { provider: 'chatgpt', model: 'gpt-image' };
+  if (k.google) return { provider: 'google', model: MODELS.google[0].id };
+  if (k.openai) return { provider: 'openai', model: MODELS.openai[0].id };
   return { provider: 'pollinations', model: 'flux' };
 }
 
@@ -220,6 +240,36 @@ async function makeGoogle(prompt: string, model: string, aspect: Aspect) {
   return { data: Buffer.from(part.inlineData.data, 'base64'), ext: extOf(part.inlineData.mimeType, '.png') };
 }
 
+/** ChatGPT through the Codex app: it draws with its image tool and saves the file (about 30–60 s). */
+async function makeChatGPT(prompt: string, aspect: Aspect): Promise<{ data: Buffer; ext: string }> {
+  const work = mkdtempSync(join(tmpdir(), 'alter-img-'));
+  const started = Date.now();
+  const orient = aspect === '1:1' ? 'square 1:1' : `${['9:16', '3:4'].includes(aspect) ? 'vertical' : 'horizontal'} ${aspect}`;
+  const task = `Use your image generation tool to create exactly one image: ${prompt}. Composition: ${orient}.\nThen copy the generated image file into the current directory as image.png. Reply only with the file path.`;
+  try {
+    await new Promise<void>((res, rej) => {
+      const child = spawn(`codex exec --skip-git-repo-check --ephemeral -s workspace-write -C "${work}" -`, { shell: true, windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
+      let err = '';
+      child.stderr.on('data', (d) => { err = (err + d).slice(-1500); });
+      const timer = setTimeout(() => child.kill(), 6 * 60_000);
+      child.stdin.end(task);
+      child.on('error', rej);
+      child.on('close', (code) => { clearTimeout(timer); code ? rej(new Error(`ChatGPT: ${err.trim().split('\n').pop() || 'exit ' + code}`)) : res(); });
+    });
+    let src: string | undefined = join(work, 'image.png');
+    if (!existsSync(src)) {
+      let best: { p: string; m: number } | null = null;
+      const walk = (d: string) => { try { for (const e of readdirSync(d, { withFileTypes: true })) { const p = join(d, e.name); if (e.isDirectory()) walk(p); else if (/\.(png|jpe?g|webp)$/i.test(e.name)) { const m = statSync(p).mtimeMs; if (m >= started && (!best || m > best.m)) best = { p, m }; } } } catch {} };
+      walk(join(homedir(), '.codex', 'generated_images'));
+      src = (best as { p: string } | null)?.p;
+    }
+    if (!src) throw new Error('ChatGPT did not make an image');
+    return { data: readFileSync(src), ext: extOf(null, '.' + (src.split('.').pop() ?? 'png').toLowerCase()) };
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
 /** fal.ai queue: submit, wait, read the result (image or video URL), download it. */
 async function makeFal(prompt: string, model: string, aspect: Aspect, kind: MediaKind, onWait?: () => void) {
   const auth = { authorization: `Key ${keys().fal}`, 'content-type': 'application/json' };
@@ -275,7 +325,8 @@ export function startMedia(req: GenerateRequest): MediaRow {
     let done: MediaRow;
     try {
       const out =
-        provider === 'pollinations' ? await inLine(() => makePollinations(row.prompt, model, aspect))
+        provider === 'chatgpt' ? await makeChatGPT(row.prompt, aspect)
+        : provider === 'pollinations' ? await inLine(() => makePollinations(row.prompt, model, aspect))
         : provider === 'openai' ? await makeOpenAI(row.prompt, model, aspect)
         : provider === 'google' ? await makeGoogle(row.prompt, model, aspect)
         : await makeFal(row.prompt, model, aspect, kind);
@@ -323,8 +374,8 @@ export const mediaMcpUrl = (port: number, token: string) => `http://127.0.0.1:${
 const MEDIA_TOOLS = [
   {
     name: 'generate_image',
-    description: 'Make an AI image from a prompt and save it on this computer. Free by default (Pollinations/Flux); other providers when the user added keys. Write the prompt in English, concrete: subject, style, light, composition, colours. Returns the file path — put that path in your answer so the user sees the picture.',
-    inputSchema: { type: 'object', properties: { prompt: { type: 'string' }, aspect: { type: 'string', enum: ASPECTS }, provider: { type: 'string', enum: ['pollinations', 'fal', 'openai', 'google'] }, model: { type: 'string' } }, required: ['prompt'] },
+    description: 'Make an AI image from a prompt and save it on this computer. Drawn by ChatGPT (the user’s account) when signed in, else Gemini/OpenAI keys, else free Pollinations (low quality). Takes 30–60 s. Write the prompt in English, concrete: subject, style, light, composition, colours. Returns the file path — put that path in your answer so the user sees the picture.',
+    inputSchema: { type: 'object', properties: { prompt: { type: 'string' }, aspect: { type: 'string', enum: ASPECTS }, provider: { type: 'string', enum: ['chatgpt', 'pollinations', 'fal', 'openai', 'google'] }, model: { type: 'string' } }, required: ['prompt'] },
   },
   {
     name: 'generate_video',
