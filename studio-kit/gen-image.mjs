@@ -3,13 +3,13 @@
 //   1. ChatGPT through the Codex app (signed in with ChatGPT; no key) — the default
 //   2. Gemini (GEMINI_API_KEY / GOOGLE_API_KEY) · 3. OpenAI (OPENAI_API_KEY)
 //   4. Pollinations (free, low quality) — only with --free
-//   node gen-image.mjs "<what to show>" [--style 3d] [--format reel | --size 1080x1920] [--n 1-4] [--via codex|gemini|openai|free] [--out ./assets/name.png]
+//   node gen-image.mjs "<what to show / change>" [--from frame.jpg] [--style 3d] [--format reel | --size 1080x1920] [--n 1-4] [--via codex|gemini|openai|free] [--out ./assets/name.png]
 // Claude cannot draw: when Claude runs this, the picture is made by ChatGPT/Gemini.
 // For animated 3D (story reels, characters that move) do NOT use images: build the scene with the kit's World (3D in code).
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 const STYLES = {
   photo: 'professional photograph, natural light, sharp focus, realistic textures, 35mm, high detail',
@@ -51,7 +51,14 @@ const aspect = ratio < 0.7 ? '9:16' : ratio < 0.9 ? '4:5' : ratio > 1.6 ? '16:9'
 const orient = ratio < 0.9 ? `vertical ${aspect}` : ratio > 1.15 ? `horizontal ${aspect}` : 'square 1:1';
 const n = Math.max(1, Math.min(4, Number(opt.n) || 1));
 const style = STYLES[opt.style];
-const prompt = `${what}${style ? `. Style: ${style}` : ''}. Composition: ${orient}. No text, letters, logos or watermarks in the image unless asked.`;
+// --from <image>[,<image>]: edit / build on these pictures (a frame from the user's video, a product photo…)
+const refs = typeof opt.from === 'string' ? opt.from.split(',').map((p) => resolve(p.trim())).filter((p) => existsSync(p)) : [];
+if (typeof opt.from === 'string' && !refs.length) { console.error(`--from: file not found (${opt.from})`); process.exit(2); }
+const keep = 'Keep the same people (faces, bodies, clothes), the same place, the same camera angle, lens and lighting, so it looks like a frame from the same video; photorealistic. Change only this: ';
+const prompt = refs.length
+  ? `${keep}${what}${style ? `. Style: ${style}` : ''}. Composition: ${orient}. No added text, letters or watermarks.`
+  : `${what}${style ? `. Style: ${style}` : ''}. Composition: ${orient}. No text, letters, logos or watermarks in the image unless asked.`;
+const mimeOf = (p) => (/\.png$/i.test(p) ? 'image/png' : /\.webp$/i.test(p) ? 'image/webp' : 'image/jpeg');
 const base = resolve(typeof opt.out === 'string' ? opt.out : `assets/${what.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40).replace(/^-|-$/g, '') || 'image'}.png`);
 const outFile = (i, ext) => (n === 1 ? base : base.replace(/(\.\w+)?$/, `-${i + 1}$1`)).replace(/\.\w+$/, '') + ext;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -67,10 +74,10 @@ function codexReady() {
 function viaCodex(i) {
   const work = mkdtempSync(join(tmpdir(), 'alter-img-'));
   const started = Date.now();
-  const task = `Use your image generation tool to create exactly one image: ${prompt}\nThen copy the generated image file into the current directory as image.png. Reply only with the file path.`;
+  const task = `${refs.length ? 'Edit the attached image with your image generation tool (it is the base / reference): ' : 'Use your image generation tool to create exactly one image: '}${prompt}\nThen copy the generated image file into the current directory as image.png. Reply only with the file path.`;
   return new Promise((res, rej) => {
     // the task goes in on stdin ("-"): no quoting trouble with the Windows shell
-    const child = spawn(`codex exec --skip-git-repo-check --ephemeral -s workspace-write -C "${work}" -`, { shell: true, windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
+    const child = spawn(`codex exec --skip-git-repo-check --ephemeral -s workspace-write -C "${work}"${refs.map((r) => ` -i "${r}"`).join('')} -`, { shell: true, windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
     let errText = '';
     child.stderr.on('data', (d) => { errText = (errText + d).slice(-2000); });
     const timer = setTimeout(() => child.kill(), 6 * 60_000);
@@ -99,12 +106,12 @@ function viaCodex(i) {
 
 // ---------- 2. Gemini ----------
 async function viaGemini(i) {
-  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const key = process.env.ALTER_GOOGLE_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   const model = process.env.ALTER_GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspect } } }),
+    body: JSON.stringify({ contents: [{ parts: [...refs.map((r) => ({ inlineData: { mimeType: mimeOf(r), data: readFileSync(r).toString('base64') } })), { text: prompt }] }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspect } } }),
   });
   const j = await r.json().catch(() => ({}));
   const part = j?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
@@ -115,9 +122,21 @@ async function viaGemini(i) {
 // ---------- 3. OpenAI ----------
 async function viaOpenai(i) {
   const size = ratio < 0.9 ? '1024x1536' : ratio > 1.15 ? '1536x1024' : '1024x1024';
+  if (refs.length) {
+    const form = new FormData();
+    form.set('model', process.env.ALTER_OPENAI_IMAGE_MODEL || 'gpt-image-1');
+    form.set('prompt', prompt);
+    form.set('size', size);
+    for (const r of refs) form.append('image[]', new Blob([readFileSync(r)], { type: mimeOf(r) }), basename(r));
+    const r = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { authorization: `Bearer ${(process.env.ALTER_OPENAI_KEY || process.env.OPENAI_API_KEY)}` }, body: form });
+    const j = await r.json().catch(() => ({}));
+    const b64 = j?.data?.[0]?.b64_json;
+    if (!r.ok || !b64) throw new Error(j?.error?.message ?? String(r.status));
+    return save(i, Buffer.from(b64, 'base64'), '.png');
+  }
   const r = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${(process.env.ALTER_OPENAI_KEY || process.env.OPENAI_API_KEY)}` },
     body: JSON.stringify({ model: process.env.ALTER_OPENAI_IMAGE_MODEL || 'gpt-image-1', prompt, size, n: 1 }),
   });
   const j = await r.json().catch(() => ({}));
@@ -142,9 +161,9 @@ async function viaFree(i) {
 const available = [];
 const via = typeof opt.via === 'string' ? opt.via : opt.free ? 'free' : null;
 if (!via || via === 'codex') if (codexReady()) available.push(['ChatGPT', viaCodex, 3]);
-if (!via || via === 'gemini') if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) available.push(['Gemini', viaGemini, 4]);
-if (!via || via === 'openai') if (process.env.OPENAI_API_KEY) available.push(['OpenAI', viaOpenai, 4]);
-if (via === 'free') available.push(['Pollinations', viaFree, 1]);
+if (!via || via === 'gemini') if (process.env.ALTER_GOOGLE_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) available.push(['Gemini', viaGemini, 4]);
+if (!via || via === 'openai') if ((process.env.ALTER_OPENAI_KEY || process.env.OPENAI_API_KEY)) available.push(['OpenAI', viaOpenai, 4]);
+if (via === 'free' && !refs.length) available.push(['Pollinations', viaFree, 1]);
 if (!available.length) {
   console.error('NO_IMAGE_AI: no AI that can draw is connected. Ask the user to sign in to ChatGPT in ALTTER (Settings → AI → ChatGPT/Codex), or set GEMINI_API_KEY. Do NOT fall back to stock-looking pictures; for animated 3D build the scene in code with World instead.');
   process.exit(3);

@@ -975,7 +975,7 @@ const uk: Dict = {
   'media.keyHint.pollinations': 'Зображення Flux. Безкоштовно без ключа (повільніше, водяний знак).',
   'media.keyHint.fal': 'Відео (Kling, Veo) і зображення Flux Pro. Також для 3D у Blender.',
   'media.keyHint.openai': 'GPT Image — чудово з текстом на зображенні.',
-  'media.keyHint.google': 'Модель зображень Gemini — швидка, стабільний стиль.',
+  'media.keyHint.google': 'Відео Gemini (Omni Flash) для AI-вставок у рілсах + зображення Gemini. Google AI Pro/Ultra містить щомісячні кредити: developers.google.com/profile → активуйте переваги, потім вставте ключ з AI Studio в тому ж проєкті.',
   'prompts.title': 'Бібліотека промптів',
   'prompts.lead': 'Готові та власні промпти з {{полями}}. Один дотик — і промпт у чаті або в «Зображення й відео».',
   'prompts.new': 'Новий промпт',

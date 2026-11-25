@@ -975,7 +975,7 @@ const pl: Dict = {
   'media.keyHint.pollinations': 'Obrazy Flux. Za darmo bez klucza (wolniej, znak wodny); z kluczem: bez limitu.',
   'media.keyHint.fal': 'Wideo (Kling, Veo) i obrazy Flux Pro. Używany też do modeli 3D w Blenderze.',
   'media.keyHint.openai': 'GPT Image — świetny, gdy na obrazie ma być tekst.',
-  'media.keyHint.google': 'Model obrazów Gemini — szybki, dobry w spójnym stylu.',
+  'media.keyHint.google': 'Wideo Gemini (Omni Flash) do wstawek AI w rolkach + obrazy Gemini. Plan Google AI Pro/Ultra ma na to miesięczne kredyty: developers.google.com/profile → aktywuj korzyści, potem wklej tu klucz z AI Studio z tego samego projektu.',
   'prompts.title': 'Biblioteka promptów',
   'prompts.lead': 'Gotowe prompty i Twoje własne, z {{polami}} do uzupełnienia. Jedno stuknięcie wysyła prompt do czatu albo do Obrazów i wideo.',
   'prompts.new': 'Nowy prompt',

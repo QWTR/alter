@@ -990,7 +990,7 @@ const en = {
   'media.keyHint.pollinations': 'Flux images. Free without a key (slower, watermark); with a key: no limit.',
   'media.keyHint.fal': 'Videos (Kling, Veo) and Flux Pro images. Also used for 3D models in Blender.',
   'media.keyHint.openai': 'GPT Image — great with text inside pictures.',
-  'media.keyHint.google': 'Gemini image model — fast, good at edits and consistent style.',
+  'media.keyHint.google': 'Gemini video (Omni Flash) for the AI clips in reels + Gemini images. Google AI Pro/Ultra includes monthly credits for it: developers.google.com/profile → activate the benefits, then paste a key from AI Studio in that same project.',
   'prompts.title': 'Prompt library',
   'prompts.lead': 'Ready prompts and your own, with {{blanks}} to fill in. One tap sends one to a chat or to Images & video.',
   'prompts.new': 'New prompt',

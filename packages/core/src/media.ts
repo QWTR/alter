@@ -458,3 +458,12 @@ export const mediaFileExists = (id: string) => {
   const r = get<MediaRow>('SELECT file FROM media_items WHERE id = ?', id);
   return !!r?.file && existsSync(r.file);
 };
+
+/** The studio scripts (gen-image / gen-video) run in the AI's shell: hand them the user's media keys. */
+export function shareMediaKeys() {
+  const k = keys();
+  const set = (name: string, v?: string) => { if (v) process.env[name] = v; else delete process.env[name]; };
+  set('ALTER_FAL_KEY', k.fal);
+  set('ALTER_GOOGLE_KEY', k.google);
+  set('ALTER_OPENAI_KEY', k.openai);
+}

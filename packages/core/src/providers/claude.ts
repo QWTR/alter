@@ -74,7 +74,7 @@ export const claude: Provider = {
 
   steerable: true,
 
-  async run({ prompt, onDelta, onActivity, onDraft, fileDirs = [], fast, access = 'chat', tools = [], cwd, signal, timeoutMs, model, effort, mcp = [], blockTools = [], inbox }) {
+  async run({ prompt, onDelta, onActivity, onDraft, fileDirs = [], fast, access = 'chat', tools = [], cwd, signal, timeoutMs, model, effort, mcp = [], blockTools = [], inbox, browser }) {
     // file writes stream in as partial tool input: forwarded so the preview can build the page live
     const drafts = new Map<number, { id: string; tool: string; json: string }>();
     let draftSeq = 0;
@@ -101,6 +101,7 @@ export const claude: Provider = {
       args.push('--mcp-config', mcpFile);
     }
     if (blockTools.length) args.push('--disallowedTools', blockTools.join(','));
+    if (browser) args.push('--chrome');
     for (const d of fileDirs) args.push('--add-dir', d);
     if (fast) args.push('--model', 'haiku');
     else if (model) args.push('--model', model);

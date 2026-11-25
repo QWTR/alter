@@ -29,7 +29,7 @@ export async function providerStatuses(fresh = false): Promise<ProviderStatus[]>
   return Promise.all(
     providers.map(async (p) => {
       const d = await detect(p, fresh);
-      let h = health[p.id];
+      let h = staleHealth(p.id, health[p.id]);
       // already signed in through the CLI itself (e.g. after a reinstall): connected, no test call needed
       if (!h && d.installed && p.id !== 'demo' && (await p.authStatus?.().catch(() => undefined)) === true) {
         markConnected(p.id);
@@ -81,7 +81,7 @@ export async function testProvider(id: string) {
     if (!(await detect(p, true)).installed) throw new Error('not-installed');
     const { text } = await p.run({ prompt: 'Reply with exactly: OK', fast: true, access: 'chat', timeoutMs: 90_000 });
     if (!/ok/i.test(text)) throw new Error(text.slice(0, 200));
-    result = { ok: true, checkedAt: new Date().toISOString(), latencyMs: Date.now() - t };
+    result = { ok: true, checkedAt: new Date().toISOString(), latencyMs: Date.now() - t, ...(id === 'gemini' ? { via: 'agy' } : {}) };
   } catch (err) {
     const msg = (err as Error).message;
     result = { ok: false, checkedAt: new Date().toISOString(), error: /login|auth|credential|sign in|401|unauthor/i.test(msg) ? 'not-signed-in' : msg.slice(0, 300) };
@@ -97,8 +97,8 @@ export async function testProvider(id: string) {
 const CRED_FILES: Record<string, string[]> = {
   claude: [join(homedir(), '.claude', '.credentials.json'), join(homedir(), '.claude.json')],
   codex: [join(homedir(), '.codex', 'auth.json')],
-  gemini: [join(homedir(), '.gemini', 'oauth_creds.json')],
 };
+const credFiles = (p: Provider) => p.credFiles ?? CRED_FILES[p.id] ?? [];
 const mtime = (files: string[]) => Math.max(0, ...files.map((f) => { try { return statSync(f).mtimeMs; } catch { return 0; } }));
 const connecting = new Map<string, () => void>();
 
@@ -122,21 +122,18 @@ function installHidden(p: Provider): Promise<void> {
 
 function markConnected(id: string) {
   const cfg = loadConfig();
-  cfg.providerHealth[id] = { ok: true, checkedAt: new Date().toISOString() };
+  cfg.providerHealth[id] = { ok: true, checkedAt: new Date().toISOString(), ...(id === 'gemini' ? { via: 'agy' } : {}) };
   saveConfig();
   emit('provider.tested', { id, ok: true });
 }
 
-/** Gemini signs in on its first run once Google login is chosen as the auth type. */
-function preferGoogleLogin() {
-  const file = join(homedir(), '.gemini', 'settings.json');
-  let s: any = {};
-  try { s = JSON.parse(readFileSync(file, 'utf8')); } catch {}
-  if (s.selectedAuthType || s.security?.auth?.selectedType) return;
-  s.selectedAuthType = 'oauth-personal';
-  s.security = { ...(s.security ?? {}), auth: { ...(s.security?.auth ?? {}), selectedType: 'oauth-personal' } };
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify(s, null, 2));
+/** A "connected" Gemini from before 0.16.7 was the retired Gemini CLI — check it again through agy. */
+function staleHealth(id: string, h: ProviderStatus['health']) {
+  if (id !== 'gemini' || !h || (h as { via?: string }).via === 'agy') return h;
+  const cfg = loadConfig();
+  delete cfg.providerHealth[id];
+  saveConfig();
+  return undefined;
 }
 
 /**
@@ -158,7 +155,7 @@ export async function connectProvider(id: string): Promise<{ started: true }> {
     try {
       if (!(await detect(p, true)).installed) {
         progress('installing');
-        await installHidden(p);
+        await (p.install ? p.install() : installHidden(p));
         detectCache.delete(p.id);
       }
       progress('checking');
@@ -169,13 +166,13 @@ export async function connectProvider(id: string): Promise<{ started: true }> {
       }
 
       progress('signing-in');
-      const before = mtime(CRED_FILES[id] ?? []);
-      if (id === 'gemini') preferGoogleLogin();
+      const before = mtime(credFiles(p));
       const args = p.loginArgs ?? ['-p', 'Reply with exactly: OK'];
       const env = { ...process.env };
       delete env.CLAUDECODE;
       delete env.CLAUDE_CODE_ENTRYPOINT;
-      child = spawn([id === 'codex' ? 'codex' : id, ...args].join(' '), { shell: true, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env });
+      const bin = p.loginBin?.() ?? id;
+      child = spawn([/\s/.test(bin) ? `"${bin}"` : bin, ...args].join(' '), { shell: true, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env });
       let exited = false;
       let sentUrl = false;
       const onOut = (d: Buffer) => {
@@ -192,12 +189,16 @@ export async function connectProvider(id: string): Promise<{ started: true }> {
 
       const deadline = Date.now() + 10 * 60_000;
       let stopped = false;
+      let lastPoll = Date.now();
       const c = child;
       connecting.set(id, () => { stopped = true; killTree(c.pid); });
       while (!stopped && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 2000));
-        const changed = mtime(CRED_FILES[id] ?? []) > before;
-        if (!changed && !exited) continue;
+        // keyring logins (agy) leave no file to watch: ask the CLI every ~10 s instead
+        const keyring = !credFiles(p).length && Date.now() - lastPoll > 10_000;
+        if (keyring) lastPoll = Date.now();
+        const changed = mtime(credFiles(p)) > before;
+        if (!changed && !exited && !(keyring && (await p.authStatus?.()) === true)) continue;
         const signed = (await p.authStatus?.()) ?? (await testProvider(id)).ok;
         if (signed) {
           markConnected(id);

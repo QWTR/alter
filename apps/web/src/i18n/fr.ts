@@ -975,7 +975,7 @@ const fr: Dict = {
   'media.keyHint.pollinations': 'Images Flux. Gratuit sans clé (plus lent, filigrane).',
   'media.keyHint.fal': 'Vidéo (Kling, Veo) et images Flux Pro. Aussi pour la 3D dans Blender.',
   'media.keyHint.openai': 'GPT Image — idéal pour du texte dans l’image.',
-  'media.keyHint.google': 'Modèle d’image Gemini — rapide, style cohérent.',
+  'media.keyHint.google': 'Vidéo Gemini (Omni Flash) pour les clips IA des reels + images Gemini. Google AI Pro/Ultra inclut des crédits mensuels : developers.google.com/profile → activez les avantages, puis collez ici une clé AI Studio du même projet.',
   'prompts.title': 'Bibliothèque de prompts',
   'prompts.lead': 'Prompts prêts et personnels, avec des {{blancs}} à remplir. Un geste les envoie dans un chat ou vers Images et vidéo.',
   'prompts.new': 'Nouveau prompt',

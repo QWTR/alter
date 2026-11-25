@@ -36,6 +36,8 @@ export interface RunOptions {
   fileDirs?: string[];
   /** Extra MCP servers (streamable HTTP) for this run, e.g. ALTTER's own "hands" (mouse/keyboard/screen). */
   mcp?: { name: string; url?: string; headers?: Record<string, string>; command?: string; args?: string[]; env?: Record<string, string> }[];
+  /** Let the AI drive the user's own signed-in browser (Claude in Chrome extension — works in Chrome, Brave, Edge). */
+  browser?: boolean;
   /** Messages the user sends while this answer is still running ("and also…", "how is it going?"). */
   inbox?: Inbox;
 }
@@ -82,6 +84,12 @@ export interface Provider {
   loginCmd: string;
   /** Args for a sign-in that only opens the browser (no terminal window). */
   loginArgs?: string[];
+  /** The program the login args go to (default: the provider id). */
+  loginBin?: () => string;
+  /** Installs the CLI itself (instead of running installCmd in a shell). */
+  install?: () => Promise<void>;
+  /** Files the CLI writes when signed in (watched for a change during sign-in); [] = none (keyring). */
+  credFiles?: string[];
   /** Cheap check whether the CLI is signed in (no AI call). undefined = can't tell. */
   authStatus?(): Promise<boolean | undefined>;
   models?: { id: string; label: string }[];

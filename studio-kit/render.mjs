@@ -60,7 +60,17 @@ for (const m of source.matchAll(/(?:\bmedia\(|\b(?:src|image|music)\s*=\s*\{?)\s
   const lit = m[2];
   if (/^(https?:|data:|blob:)/.test(lit)) continue;
   const real = lit.replace(/\\\\/g, '\\');
-  const path = isAbsolute(real) ? real : resolve(dirname(src), real);
+  const path = isAbsolute(real) ? real : [resolve(dirname(src), real), resolve(process.cwd(), real)].find((p) => existsSync(p)) ?? resolve(dirname(src), real);
+  if (!existsSync(path) || !statSync(path).isFile()) continue;
+  const dest = join(extDir, key(lit));
+  if (!existsSync(dest) || statSync(dest).size !== statSync(path).size) copyFileSync(path, dest);
+}
+// any other quoted path to a media file (inside objects / arrays: hits={[{ src: '…', sfx: '…' }]})
+for (const m of source.matchAll(/(["'`])([^"'`\n]{3,400}?\.(?:png|jpe?g|webp|gif|avif|svg|mp4|mov|webm|m4v|mkv|mp3|wav|m4a|aac|ogg|flac))\1/gi)) {
+  const lit = m[2];
+  if (/^(https?:|data:|blob:)/.test(lit)) continue;
+  const real = lit.replace(/\\\\/g, '\\');
+  const path = isAbsolute(real) ? real : [resolve(dirname(src), real), resolve(process.cwd(), real)].find((p) => existsSync(p)) ?? resolve(dirname(src), real);
   if (!existsSync(path) || !statSync(path).isFile()) continue;
   const dest = join(extDir, key(lit));
   if (!existsSync(dest) || statSync(dest).size !== statSync(path).size) copyFileSync(path, dest);
@@ -69,7 +79,7 @@ for (const m of source.matchAll(/(?:\bmedia\(|\b(?:src|image|music)\s*=\s*\{?)\s
 for (const m of source.matchAll(/(["'`])([^"'`\n]+\.(?:ttf|otf|woff2?))\1/gi)) {
   const lit = m[2];
   const real = lit.replace(/\\\\/g, '\\');
-  const path = isAbsolute(real) ? real : resolve(dirname(src), real);
+  const path = isAbsolute(real) ? real : [resolve(dirname(src), real), resolve(process.cwd(), real)].find((p) => existsSync(p)) ?? resolve(dirname(src), real);
   if (existsSync(path) && statSync(path).isFile()) copyFileSync(path, join(extDir, key(lit)));
 }
 // any Google Font the video names → registered with the kit (only those get bundled)

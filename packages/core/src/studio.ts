@@ -196,6 +196,7 @@ Components:
 - Scene3D {preset: orbs|card|cube|rings|blob|tunnel, image (card/cube), color, speed, scale, at} (abstract 3D only)
 - WORLD (a real animated 3D world: people, cars, houses, roads — see the story reel method) World {sky, cam | follow, shake, tint} > Ground, Road, Trees, Tree, House, Block, Car, Person, Bird, Clouds, Sign, Prop, Flame, Puffs · overlays Tag, Badge, Speedo, Notify, Shout
 - Bars {data [{label,value}], suffix, at} · Ring {value 0..1, label, at}
+- EDITS of the user's footage: Footage {src, keep [[from,to]], words, hits [{at, dur, src (an AI video clip), from, volume}], punch [times], captions} (all in source time) · Punch {at, to} · Shake {at, dur, amount}. Inserts are AI VIDEO clips (see CHAOS EDIT), never stills, emoji or synthetic sound effects.
 - Music {src, volume, fadeIn, fadeOut, from} · Sfx {src, at, volume}
 - Custom bits: useTime(), useTheme(), useFormat() → {w,h,u(px),portrait}, ramp(t,a,b,ease), ease.out|back|inOut, mix, rand, media(path) + anything from 'remotion'.
 src = a file path on disk (attachments too) or a URL; the renderer copies local files in.
@@ -418,4 +419,59 @@ export function serveMedia(req: IncomingMessage, res: ServerResponse, pathname: 
   if (!file || !existsSync(file)) return false;
   sendFileRange(req, res, file, { 'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream', 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff', 'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(basename(file))}` });
   return true;
+}
+
+// ---------- chaos edits: the user's own clip → deadpan tutorial with absurd AI VIDEO inserts ----------
+
+const EDIT_WORDS = /(zmontuj|montaż|montuj|przer[óo]b|edytuj|edit|vfx|efekt|chaos|pojeb|popierd|absurd|zwariow|[śs]mieszn|crazy|insane|viral|rolk|reel|tiktok|insta|wstawk)/i;
+/** A video attached and an ask to edit it into something crazy (or a follow-up in a chat that is doing it). */
+export function wantsChaosEdit(message: string, history: { content: string }[] = [], hasVideo = false): boolean {
+  if (hasVideo && EDIT_WORDS.test(message)) return true;
+  return history.slice(-6).some((m) => /CHAOS EDIT|gen-video\.mjs|gen-image\.mjs[^\n]*--from|<Footage|Veo pack|labs\.google\/flow|Frames to video|NO_VIDEO_|grab-download|ALTTER frame input|gemini\.google\.com/i.test(m.content));
+}
+
+export function chaosEditGuide(): string {
+  const dir = studioDir().replace(/\\/g, '/');
+  return `## CHAOS EDIT (the user's own video → a "deadpan tutorial gone absurd" reel with AI VIDEO inserts)
+The format (viral on Instagram/TikTok): someone calmly explains an ordinary thing (how to use stairs, a vacuum, a kettle…). At 3–6 moments the picture HARD-CUTS to a short AI-generated VIDEO that starts from that exact frame — same person, same room, same camera — and then something impossible happens in motion: the stairs fire rocket boosters and blast through the roof, crash and explode; the vacuum turns into a jet engine and swallows the kitchen. 2–5 s later it hard-cuts back to the real footage, which goes on exactly where it stopped, as if nothing happened. While the clip plays the user's video is PAUSED: only the clip's own sound is heard — the voice and the clip never play at the same time, and no word is lost.
+HARD RULES: the inserts are VIDEOS made by a video AI from the real frame. Never use still pictures as inserts (no Ken Burns, no zooming photos), never add emoji / flying icons / particles / glitches / flashes on top, never add synthesised sound effects — the AI clip's own sound (Gemini/Kling make it) is the sound. Clean hard cuts only.
+1. Look: \`node "${dir}/ff.mjs" probe <video>\` and \`node "${dir}/voice-times.mjs" <video>\` (words + lines with times; any language). Read the transcript.
+2. Plan (4–8 short lines to the user, then go on): what to KEEP (cut long pauses, false starts, fumbling — usually 30–55 s stays) and 3–6 HITS — source times where the person names or touches the object. Each hit is a visual punchline in MOTION that ESCALATES (weird → bigger → biggest) and takes what they say literally or to the extreme ("rozłączamy odkurzacz" → it bursts apart into a hundred flying parts; "zbiornik na kurz" → the bin opens into a black hole and the room gets sucked in). Physical, cinematic, real-looking: fire, rockets, explosions, transformation, giant scale, the room turning into space/ocean.
+3. Which video AI — in this order:
+   (A) THE USER'S OWN GEMINI IN THEIR BROWSER (default; their Google AI subscription, no keys). You have the Claude in Chrome tools (mcp__claude-in-chrome__*) — they work in the user's own signed-in browser (Chrome / Brave / Edge). Load them with ToolSearch first (one call: "select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__find,mcp__claude-in-chrome__file_upload,mcp__claude-in-chrome__tabs_close_mcp"). Never type into or read their other tabs or chats. Per hit, in its OWN new tab (tabs_context_mcp {createIfEmpty:true} once, then tabs_create_mcp; run up to 3 hits at the same time, the rest after):
+     i. navigate the tab to https://gemini.google.com/app , then javascript_tool SETUP (opens the tools menu, picks "Create video", adds a hidden file input):
+        const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); const lab=(e)=>(e.getAttribute('aria-label')||e.innerText||'').trim(); for(let i=0;i<30&&!document.querySelector('[contenteditable=true]');i++) await sleep(500); [...document.querySelectorAll('button')].find(b=>/narzędzi|Dodaj pliki|upload|tools/i.test(lab(b)))?.click(); await sleep(900); const it=[...document.querySelectorAll('button,[role=menuitem],[role=menuitemcheckbox],[role=option]')].find(e=>/^(Utwórz film|Create video|Create videos|Video|Wideo)$/i.test((e.innerText||'').trim())); it?.click(); await sleep(900); let f=document.getElementById('alter-file'); if(!f){f=document.createElement('input');f.type='file';f.id='alter-file';f.setAttribute('aria-label','ALTTER frame input');f.style.cssText='position:fixed;left:0;top:0;width:10px;height:10px;opacity:0.01;z-index:99999';document.body.appendChild(f);} ({video: !!it, signedIn: !/^(Zaloguj się|Sign in)$/im.test(document.body.innerText)})
+        If signedIn is false: tell the user in one line to sign in to Gemini in that browser, and wait. If video is false the plan has no video in this browser: go to (B).
+     ii. find "ALTTER frame input" → file_upload { ref, paths: [absolute path of assets/<reel>/f<N>.jpg] }.
+     iii. javascript_tool SEND (put the English prompt in PROMPT; start it with "Use this image as the exact first frame and animate it."):
+        const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); const lab=(e)=>(e.getAttribute('aria-label')||e.innerText||'').trim(); const PROMPT="..."; const file=document.getElementById('alter-file').files[0]; const ed=document.querySelector('[contenteditable=true]'); ed.focus(); const dt=new DataTransfer(); dt.items.add(new File([file],file.name,{type:file.type})); ed.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true})); await sleep(2500); ed.focus(); document.execCommand('insertText',false,PROMPT); await sleep(500); const fmt=[...document.querySelectorAll('button')].find(b=>/^Format obrazu|^Aspect ratio/i.test(lab(b))); if(fmt&&!/pionow|9:16|portrait/i.test(lab(fmt))){fmt.click(); await sleep(700); [...document.querySelectorAll('button,[role=menuitem],[role=menuitemradio],[role=option]')].find(e=>/pionow|9:16|portrait/i.test(e.innerText||''))?.click(); await sleep(700);} [...document.querySelectorAll('button')].find(b=>/^(Wyślij|Send)/i.test(lab(b)))?.click(); await sleep(4000); location.href
+     iv. WAIT (a video takes 1–4 min; each call waits ≤ 38 s, repeat it): const end=Date.now()+38000; let v; while(Date.now()<end){v=document.querySelector('video'); if(v&&(v.currentSrc||v.src))break; await new Promise(r=>setTimeout(r,4000));} ({ready: !!(v&&(v.currentSrc||v.src)), said: [...document.querySelectorAll('model-response')].pop()?.innerText?.slice(0,200)})
+        If it says it is at capacity / try again later: wait ~2 min, then redo this hit from i. in the same tab. If it refuses the content: soften the prompt (no injuries, no weapons) and redo. If it says the daily limit is reached: finish the hits you have and tell the user which ones are missing and that the limit resets tomorrow.
+     v. javascript_tool DOWNLOAD: const v=document.querySelector('video'); const r=await fetch(v.currentSrc||v.src,{credentials:'include'}); const b=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='alter-<reel>-v<N>.mp4'; document.body.appendChild(a); a.click(); a.remove(); b.size
+        then \`node "${dir}/grab-download.mjs" <that size> assets/<reel>/v<N>.mp4\` (finds it in Downloads by size, even under a temporary name). Close the tab when the clip is saved.
+     Gemini's clips are 8–10 s with their own sound; the payoff is usually in the first 3–5 s — use dur 3–4.5 in the hit and cut right after the payoff.
+   (B) only if (A) is impossible (no Claude in Chrome tools, or the browser's Gemini has no video): the Higgsfield plugin if listed in "Plugins you can use"; else \`node "${dir}/gen-video.mjs" "<motion>" --from <frame> --seconds 5 --out assets/<reel>/v<N>.mp4\` (Google Gemini key → Gemini Omni Flash, or fal.ai key → Kling, from Media → Keys; NO_VIDEO_BILLING = the key's project has no billing/credits yet). If NEITHER is available (gen-video prints NO_VIDEO_AI and there is no Higgsfield plugin), use the user's OWN subscription by hand — never fall back to stills: (C) make a "Veo pack": extract the frame of every hit (step 4a) into assets/<reel>/, then answer with, per hit: the frame file path (ALTTER shows it, they can download it) and a ready English prompt in a code block. Tell them in 3 lines: open Google Flow (labs.google/flow — included in Google AI Pro/Ultra) or the Gemini app → Video → "Frames to video" / add the image, paste the prompt, 9:16, generate, download, and send all the clips back here in this chat (any order — say which is which by name v1, v2…). Also one line: for fully automatic inserts paste a Gemini API key in Media → Keys (aistudio.google.com/apikey; Google AI Pro/Ultra include monthly credits for it at developers.google.com/profile) — then ALTTER makes the clips itself. When the clips arrive (attachments in a later message), check each one and continue from step 5 with them as the hits.
+4. For every hit (start them all at once in the background, then wait):
+   a) the real frame at the hit: \`node "${dir}/ff.mjs" -ss <at> -i <video> -frames:v 1 -q:v 2 assets/<reel>/f<N>.jpg\`
+   b) the clip FROM THAT FRAME (start image = the real frame, so the cut is invisible). Prompt in English, concrete motion and camera: "Handheld phone video. The man keeps holding the vacuum; after half a second it violently transforms into a roaring jet turbine, sucking towels, magnets and a chair into it, the fridge door rips off and flies in, camera shakes. Realistic, same kitchen and lighting." 5 s, 9:16.
+   c) (only if the video AI can't do the change in one go) make an end frame first with \`node "${dir}/gen-image.mjs" "<the changed scene>" --from assets/<reel>/f<N>.jpg --format reel --out assets/<reel>/e<N>.png\` and use it as the end/last frame of the clip.
+   Then watch each clip (ff.mjs probe + a few frames as jpg): it must start like the real frame and the absurd thing must clearly happen. Regenerate a weak one once.
+5. videos/<reel>.tsx — everything in SOURCE time, Footage does the cutting:
+\`\`\`tsx
+import { Footage, footageLength } from 'alter-kit';
+const words = [/* all words from voice-times, spelling fixed */];
+const KEEP: [number, number][] = [[0.2, 9.8], [13, 33.5], [34, 44], [52, 63]];
+const HITS = [
+  { at: 24.2, dur: 3.5, src: 'assets/<reel>/v1.mp4' },
+  { at: 36.0, dur: 4, src: 'assets/<reel>/v2.mp4', from: 0.3 },
+];
+export const meta = { format: 'reel', seconds: footageLength(KEEP, HITS), theme: 'bold', grain: false };
+export default () => (
+  <Footage src="<the user's video path>" keep={KEEP} words={words} hits={HITS}
+    punch={[/* 0–3 source times for a sharp zoom on a deadpan look */]}
+    captions={{ per: 2, size: 84, y: 1300, upper: false }} />
+);
+\`\`\`
+Hit: at = source time where the video pauses and the clip goes in — the SAME moment as the clip's start frame, and on a word boundary (a word's start or end from voice-times, never inside a word; pick the frame there in step 4a), dur = how long the clip plays (2.5–5 s; cut right after the payoff), src = the clip, from = skip the clip's first seconds, volume = the clip's sound (default 1). meta.seconds MUST be footageLength(KEEP, HITS) — the clips add to the length. Never set mode:'over' for AI clips (that would play the voice and the clip at the same time). Use absolute paths if a relative one is not found.
+6. Check: render frames just before, inside and after 2–3 hits (--at <output sec> --format jpg --draft) and LOOK: the cut in is seamless, the absurd thing is visible, captions readable. Then the final render (no --draft). End with the output path and one line per hit (what happens).`;
 }

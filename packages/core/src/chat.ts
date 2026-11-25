@@ -1,4 +1,4 @@
-import { closeMediaTools, MEDIA_GUIDE, mediaMcpUrl, openMediaTools, wantsMedia } from './media.ts';
+import { closeMediaTools, MEDIA_GUIDE, mediaMcpUrl, openMediaTools, shareMediaKeys, wantsMedia } from './media.ts';
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { draftFrom, pagesIn, previewFor, type Draft, type Preview } from './preview.ts';
@@ -28,7 +28,7 @@ import { closeHands, HANDS_GUIDE, HANDS_NEEDS_FULL, handsEnabled, handsMcpUrl, o
 import { listeningPort } from './pairing.ts';
 import { TRAVEL_GUIDE, wantsTravel } from './travel.ts';
 import { isPlanApproval, PLAN_APPROVED_GUIDE, PLAN_GUIDE, wantsPlan } from './plans.ts';
-import { CREATIVE_NEEDS_FULL, creativeEngine, ensureStudio, renderProgress, storyReelGuide, studioDir, wantsCreative, wantsStoryReel } from './studio.ts';
+import { chaosEditGuide, CREATIVE_NEEDS_FULL, creativeEngine, ensureStudio, renderProgress, storyReelGuide, studioDir, wantsChaosEdit, wantsCreative, wantsStoryReel } from './studio.ts';
 import { describeAttachments, getUpload, uploadsDir, type Attachment } from './uploads.ts';
 import { inboxFor } from './followups.ts';
 import { FILES_GUIDE, RICH_GUIDE } from './rich.ts';
@@ -250,9 +250,11 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     run('UPDATE conversations SET updated_at = ? WHERE id = ?', now(), conv.id);
     return { conversationId: conv.id, text: board.content, provider: 'team' };
   }
-  const storyReel = wantsStoryReel(message, history);
-  const creative = storyReel || wantsCreative(message, history);
+  const chaosEdit = wantsChaosEdit(message, history, files.some((f) => /^video\//.test(f.type) || /\.(mp4|mov|m4v|webm|mkv)$/i.test(f.name)));
+  const storyReel = !chaosEdit && wantsStoryReel(message, history);
+  const creative = chaosEdit || storyReel || wantsCreative(message, history);
   let studioReady = false;
+  if (creative) shareMediaKeys();
   if (creative && conv.access === 'full' && !planning) {
     try {
       await ensureStudio((label, pct) => req.onProgress?.({ stage: 'install', pct: (pct ?? 0) * 100, label }));
@@ -277,6 +279,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     conv.access !== 'chat' && wantsWebEngine(message, history) && !creative ? WEB_ENGINE : '',
     creative ? (studioReady ? creativeEngine() : conv.access === 'full' ? '' : CREATIVE_NEEDS_FULL) : '',
     storyReel ? storyReelGuide() : '',
+    chaosEdit ? chaosEditGuide() : '',
     !agent && wantsAutomation(message, history) ? AUTOMATION_GUIDE : '',
     wantsSetup(message, history) ? SETUP_GUIDE : '',
     !agent && wantsTeamCard(message, history) ? TEAM_GUIDE : '',
@@ -341,7 +344,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
   const mcp = mcpList.length ? mcpList : undefined;
   if (agent) setAgentStatus(agent.id, 'working', `chat: ${message.replace(/\s+/g, ' ')}`);
   const startedAt = Date.now();
-  const runOn = (p: typeof provider) => p.run({ inbox: p.steerable ? inboxFor(conv!.id) : undefined, mcp, prompt, onDraft, files: files.map((f) => f.file), fileDirs: dirs.length ? dirs : undefined, model: p.id === picked ? model || undefined : undefined, effort: p.id === picked ? effort || undefined : undefined, onDelta: req.onDelta, onActivity, access: planning ? (conv!.access === 'chat' ? 'chat' : 'read') : conv!.access, tools: [...(agent?.tools ?? []), ...(planning ? [] : pluginTools())], cwd: project?.folder ?? (studioReady ? cwd : undefined), signal: handsSession ? handsAbort.signal : req.signal, blockTools: handsSession ? ['Task', 'Agent'] : undefined, timeoutMs: handsSession ? 120 * 60_000 : conv!.access === 'full' || studioReady ? 60 * 60_000 : 20 * 60_000 });
+  const runOn = (p: typeof provider) => p.run({ browser: chaosEdit || undefined, inbox: p.steerable ? inboxFor(conv!.id) : undefined, mcp, prompt, onDraft, files: files.map((f) => f.file), fileDirs: dirs.length ? dirs : undefined, model: p.id === picked ? model || undefined : undefined, effort: p.id === picked ? effort || undefined : undefined, onDelta: req.onDelta, onActivity, access: planning ? (conv!.access === 'chat' ? 'chat' : 'read') : conv!.access, tools: [...(agent?.tools ?? []), ...(planning ? [] : pluginTools())], cwd: project?.folder ?? (studioReady ? cwd : undefined), signal: handsSession ? handsAbort.signal : req.signal, blockTools: handsSession ? ['Task', 'Agent'] : undefined, timeoutMs: handsSession ? 120 * 60_000 : conv!.access === 'full' || studioReady ? 60 * 60_000 : 20 * 60_000 });
   let text: string;
   let followUps: FollowUp[] | undefined;
   try {

@@ -16,6 +16,8 @@ export interface ProviderHealth {
   checkedAt: string;
   error?: string;
   latencyMs?: number;
+  /** which CLI the check went through (gemini: 'agy' since 0.16.7) */
+  via?: string;
 }
 
 export const LANGUAGES = ['en', 'pl', 'de', 'es', 'fr', 'uk'] as const;
