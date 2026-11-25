@@ -1588,6 +1588,10 @@ const pl: Dict = {
   // now
   'chat.sendNow': 'Wyślij teraz',
   'chat.sendNowHint': 'Przerwij bieżącą odpowiedź i wyślij to od razu',
+  // ptag
+  'ptag.title': 'Użyj wtyczki w tej wiadomości',
+  'ptag.none': 'Nie masz jeszcze wtyczek.',
+  'ptag.add': 'Dodaj wtyczki…',
 };
 
 export default pl;

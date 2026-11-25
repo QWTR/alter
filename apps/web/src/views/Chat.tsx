@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { ProviderPicker, getPref } from '../components/ProviderPicker';
 import { AccessPicker, PlusMenu, ProjectPicker } from '../components/ComposerMenus';
 import { MentionMenu, useMentions } from '../components/Mentions';
+import { PluginTagMenu, usePluginTags } from '../components/PluginTags';
 import { ensureLocalVoice, useVoice, VoiceBars, VoiceStrip } from '../components/Voice';
 import { getLang } from '../i18n';
 import { Robot } from '../components/Robot';
@@ -329,6 +330,8 @@ export function ChatView() {
   useLayoutEffect(fitBox, [input, fitBox]);
   useEffect(() => { window.addEventListener('resize', fitBox); return () => window.removeEventListener('resize', fitBox); }, [fitBox]);
   const mentions = useMentions(input, setInput, taRef, host);
+  // #plugin: tell the AI which plugin to use for this message
+  const ptags = usePluginTags(input, setInput, taRef, host);
   // ---------- voice: dictation + hands-free conversation ----------
   const voice = useVoice(getLang());
   const [talk, setTalk] = useState(false);
@@ -371,18 +374,18 @@ export function ChatView() {
   useEffect(() => () => voice.cancel(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** "+" → tag an agent: puts "@" at the caret and opens the list. */
-  const insertAt = () => {
+  const insertAt = (ch: '@' | '#' = '@') => {
     const ta = taRef.current;
     const pos = ta?.selectionStart ?? input.length;
     const before = input.slice(0, pos);
-    const ins = (before && !/\s$/.test(before) ? ' ' : '') + '@';
+    const ins = (before && !/\s$/.test(before) ? ' ' : '') + ch;
     setInput(before + ins + input.slice(pos));
     requestAnimationFrame(() => {
       if (!ta) return;
       ta.focus();
       const p = pos + ins.length;
       ta.setSelectionRange(p, p);
-      mentions.reopen();
+      (ch === '#' ? ptags : mentions).reopen();
     });
   };
 
@@ -903,6 +906,7 @@ export function ChatView() {
           </AnimatePresence>
           <form className="composer-box" data-anchor="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
             <MentionMenu m={mentions} />
+            <PluginTagMenu m={ptags} />
             <VoiceStrip state={voice.state} level={voice.level} interim={voice.interim} conversation={talk} onStop={voice.stop} onCancel={() => { setTalk(false); voice.cancel(); }} />
             <input ref={fileRef} type="file" multiple hidden onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
             <AnimatePresence initial={false}>
@@ -951,14 +955,15 @@ export function ChatView() {
               rows={1}
               value={input}
               placeholder={!canSend ? t('session.watchOnly') : busy ? t('chat.followupPlaceholder') : planMode ? t('plan.placeholder') : picks.length ? t('chat.placeholderPicks') : files.length ? t('chat.placeholderFiles') : agent ? t('chat.placeholderAgent', { name: agentName(agent, t) }) : project ? t('chat.placeholderProject', { project: project.name }) : t('chat.placeholder')}
-              onSelect={mentions.track}
+              onSelect={() => { mentions.track(); ptags.track(); }}
               onChange={(e) => {
                 setInput(e.target.value);
                 mentions.track();
+                ptags.track();
                 room.send({ typing: e.target.value });
               }}
               onKeyDown={(e) => {
-                if (mentions.onKey(e)) return;
+                if (mentions.onKey(e) || ptags.onKey(e)) return;
                 if (e.key === 'Escape' && busy) { e.preventDefault(); stop(); return; }
                 if (e.key === 'Escape' && editFrom != null) { setEditFrom(null); setInput(''); return; }
                 if (e.key === 'ArrowUp' && !input && lastUser && !lastUser.author) { e.preventDefault(); setInput(lastUser.content); return; }
@@ -987,7 +992,8 @@ export function ChatView() {
                   canEnhance={input.trim().length >= 6}
                   enhancing={enhancing}
                   onEnhance={enhance}
-                  onMention={insertAt}
+                  onMention={() => insertAt('@')}
+                  onPlugins={host ? () => insertAt('#') : undefined}
                   onLibrary={() => setLibrary(true)}
                 />
               )}

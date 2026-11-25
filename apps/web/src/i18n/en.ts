@@ -1603,6 +1603,10 @@ const en = {
   // now
   'chat.sendNow': 'Send now',
   'chat.sendNowHint': 'Stop the current answer and send this right away',
+  // ptag
+  'ptag.title': 'Use a plugin for this message',
+  'ptag.none': 'No plugins yet.',
+  'ptag.add': 'Add plugins…',
 };
 
 export default en;

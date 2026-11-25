@@ -120,8 +120,8 @@ export function ProjectPicker({ projects, value, onChange, locked }: { projects:
 }
 
 /** The "+" next to attach and mic: tag agents, improve the prompt, plan mode, plugins. */
-export function PlusMenu({ planMode, onPlan, canEnhance, enhancing, onEnhance, onMention, onLibrary }: {
-  planMode: boolean; onPlan: () => void; canEnhance: boolean; enhancing: boolean; onEnhance: () => void; onMention: () => void; onLibrary?: () => void;
+export function PlusMenu({ planMode, onPlan, canEnhance, enhancing, onEnhance, onMention, onLibrary, onPlugins }: {
+  planMode: boolean; onPlan: () => void; canEnhance: boolean; enhancing: boolean; onEnhance: () => void; onMention: () => void; onLibrary?: () => void; onPlugins?: () => void;
 }) {
   const t = useT();
   return (
@@ -134,7 +134,7 @@ export function PlusMenu({ planMode, onPlan, canEnhance, enhancing, onEnhance, o
           <Item i={2} icon={ListChecks} color="#22c55e" title={t('plan.toggle')} hint={t('plan.toggleHint')} active={planMode} onClick={() => { onPlan(); close(); }} />
           {onLibrary && <Item i={3} icon={BookOpen} color="#e87ba4" title={t('prompts.fromLibrary')} hint={t('prompts.fromLibraryHint')} onClick={() => { close(); onLibrary(); }} />}
           <Item i={4} icon={ImagePlus} color="#2ee6ff" title={t('nav.media')} hint={t('plus.mediaHint')} onClick={() => { close(); navigate('/media'); }} />
-          <Item i={5} icon={Puzzle} color="#ff9a3d" title={t('plugins.title')} hint={t('plus.pluginsHint')} onClick={() => { close(); navigate('/settings?tab=plugins'); }} />
+          <Item i={5} icon={Puzzle} color="#ff9a3d" title={t('plugins.title')} hint={t('plus.pluginsHint')} onClick={() => { close(); if (onPlugins) onPlugins(); else navigate('/settings?tab=plugins'); }} />
         </>
       )}
     </Menu>

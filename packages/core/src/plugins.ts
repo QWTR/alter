@@ -396,3 +396,14 @@ export function pluginsGuide(): string {
     return `- ${p.title} (tools mcp__${p.name}__…)${c ? `: ${c.description}${c.guide ? ' ' + c.guide : ''}` : ''}`;
   }).join('\n')}\nUse them when they fit the task; if one is not connected or fails, say so in one line and continue.`;
 }
+
+/** "#figma" in a message = the user picked that plugin for this request. */
+export function taggedPlugins(message: string): string {
+  const tags = new Set([...message.matchAll(/(?:^|\s)#([\p{L}\d_-]{2,40})/gu)].map((m) => m[1].toLowerCase()));
+  if (!tags.size) return '';
+  const hit = listPlugins().filter((p) => tags.has(p.name.toLowerCase()));
+  if (!hit.length) return '';
+  return `## Plugins the user picked for this message\n${hit.map((p) => p.enabled
+    ? `- #${p.name} = ${p.title}: use its tools (mcp__${p.name}__…) for this request, even if another way would also work.`
+    : `- #${p.name} = ${p.title}: it is turned off. Say so in one line (Settings → Plugins turns it on) and do what you can without it.`).join('\n')}`;
+}

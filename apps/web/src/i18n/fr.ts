@@ -1588,6 +1588,10 @@ const fr: Dict = {
   // now
   'chat.sendNow': 'Envoyer',
   'chat.sendNowHint': 'Arrêter la réponse et envoyer tout de suite',
+  // ptag
+  'ptag.title': 'Utiliser un plugin pour ce message',
+  'ptag.none': 'Aucun plugin pour l’instant.',
+  'ptag.add': 'Ajouter des plugins…',
 };
 
 export default fr;

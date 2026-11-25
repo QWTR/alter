@@ -22,7 +22,7 @@ import { setAgentStatus } from './status.ts';
 import { closeTeam, mentionsIn, openTeam, teamGuide, teamMcpUrl, wantsTeam } from './team.ts';
 import { listAgents } from './agents.ts';
 import { expertSkills } from './skills.ts';
-import { pluginServers, pluginsGuide, pluginTools } from './plugins.ts';
+import { pluginServers, pluginsGuide, pluginTools, taggedPlugins } from './plugins.ts';
 import { squadFor, startSquad, TEAM_GUIDE, wantsTeamCard } from './squad.ts';
 import { closeHands, HANDS_GUIDE, HANDS_NEEDS_FULL, handsEnabled, handsMcpUrl, openHands, wantsHands, type HandsSession } from './hands.ts';
 import { listeningPort } from './pairing.ts';
@@ -284,6 +284,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     !planning && conv.access !== 'chat' && (wantsMedia(message) || agent?.tools?.includes('media')) ? MEDIA_GUIDE : '',
     expertSkills(message).text,
     planning ? '' : pluginsGuide(),
+    planning ? '' : taggedPlugins(message),
     planning ? '' : RICH_GUIDE,
     !planning && conv.access !== 'chat' ? FILES_GUIDE : '',
     !planning && conv.access !== 'full' && !author && !req.parentId ? NEEDS_FULL_GUIDE : '',

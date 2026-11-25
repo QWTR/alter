@@ -1588,6 +1588,10 @@ const uk: Dict = {
   // now
   'chat.sendNow': 'Надіслати зараз',
   'chat.sendNowHint': 'Зупинити відповідь і надіслати одразу',
+  // ptag
+  'ptag.title': 'Використати плагін у цьому повідомленні',
+  'ptag.none': 'Плагінів ще немає.',
+  'ptag.add': 'Додати плагіни…',
 };
 
 export default uk;

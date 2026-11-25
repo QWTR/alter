@@ -27,7 +27,7 @@ const ICONS: Record<string, LucideIcon> = {
 const CATS = ['all', 'office', 'tasks', 'meet', 'sales', 'finance', 'commerce', 'hr', 'auto', 'create', 'design', 'web', 'dev', 'data'] as const;
 type Cat = (typeof CATS)[number];
 
-function PluginIcon({ icon, color, size = 42 }: { icon?: string; color?: string; size?: number }) {
+export function PluginIcon({ icon, color, size = 42 }: { icon?: string; color?: string; size?: number }) {
   const I = (icon && ICONS[icon]) || Puzzle;
   return (
     <div className="plug-ic" style={{ width: size, height: size, color: color ?? 'var(--accent-strong)', background: `color-mix(in srgb, ${color ?? 'var(--accent)'} 16%, transparent)` }}>

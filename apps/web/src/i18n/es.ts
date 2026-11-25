@@ -1588,6 +1588,10 @@ const es: Dict = {
   // now
   'chat.sendNow': 'Enviar ahora',
   'chat.sendNowHint': 'Detener la respuesta y enviar ya',
+  // ptag
+  'ptag.title': 'Usar un plugin en este mensaje',
+  'ptag.none': 'Aún no hay plugins.',
+  'ptag.add': 'Añadir plugins…',
 };
 
 export default es;
