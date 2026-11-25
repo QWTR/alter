@@ -1,6 +1,6 @@
 {
   "name": "@alter/desktop",
-  "version": "0.16.7",
+  "version": "0.16.8",
   "description": "ALTTER desktop app (Electron): runs the ALTTER core in the background and shows the app in a window + tray.",
   "license": "AGPL-3.0-only",
   "author": "ALTTER contributors",

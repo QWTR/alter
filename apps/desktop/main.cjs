@@ -259,7 +259,12 @@ function trayMenu() {
 
 function createTray() {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'build', 'tray.png'));
-  tray = new Tray(icon);
+  // A fixed id makes Windows reuse ONE tray slot: an icon left behind by a killed or crashed
+  // instance gets replaced instead of piling up as another "A". The id is tied to the exe
+  // path, so only the installed app uses it (a dev/test build elsewhere would be refused).
+  const guid = process.platform === 'win32' && app.isPackaged && !process.env.ALTER_USER_DATA
+    ? '6f1c2a7e-4b8d-4e5a-9c3f-a17e2d0b5c41' : undefined;
+  try { tray = guid ? new Tray(icon, guid) : new Tray(icon); } catch { tray = new Tray(icon); }
   tray.setToolTip('ALTTER');
   tray.setContextMenu(trayMenu());
   tray.on('click', showWindow);
@@ -311,6 +316,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', (e) => e.preventDefault()); // stay in the tray
   app.on('before-quit', () => {
     quitting = true;
+    if (tray) { tray.destroy(); tray = null; }
     if (core) core.close();
   });
 }
