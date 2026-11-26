@@ -164,6 +164,13 @@ export function ChatView() {
   const { data: providers } = useData<ProviderStatus[]>(host ? '/api/providers' : null, 10_000);
   const { data: status } = useData<Status>(host ? '/api/status' : null, 15_000);
   const { data: conv } = useData<Conversation & { messages: Message[] }>(routeId ? `/api/conversations/${routeId}` : null, 2000);
+  // guests and workspace members get no live events: refresh the chat now and then, so team boards, answers
+  // from the others and a team created on the host's screen show up without reopening the chat
+  useEffect(() => {
+    if (!guest || !routeId) return;
+    const id = setInterval(() => { if (!document.hidden) invalidate(`/api/conversations/${routeId}`); }, 3000);
+    return () => clearInterval(id);
+  }, [routeId]);
   const [filter, setFilter] = useState('');
 
   const projectId = conv?.project_id ?? projectFromQuery ?? null;

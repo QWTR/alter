@@ -32,7 +32,7 @@ export function TeamCard({ card, pending, index, messageId, conversationId }: { 
     );
   const v = doneCard ?? card;
   const done = !!v.done;
-  const canApply = !guest && messageId != null && !!conversationId && !pending && !done;
+  const canApply = (!guest || !!guest.member) && messageId != null && !!conversationId && !pending && !done;
   const toggle = (i: number) => setSkip((k) => (k.includes(i) ? k.filter((x) => x !== i) : [...k, i]));
   const apply = async () => {
     setBusy(true);
@@ -71,7 +71,7 @@ export function TeamCard({ card, pending, index, messageId, conversationId }: { 
             {v.start === false ? t('team.create') : t('team.createStart')}
           </motion.button>
         )}
-        {done && <button className="btn" onClick={() => navigate('/agents')}><Users />{t('team.open')}</button>}
+        {done && !guest && <button className="btn" onClick={() => navigate('/agents')}><Users />{t('team.open')}</button>}
       </div>
     </motion.div>
   );

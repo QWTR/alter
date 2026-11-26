@@ -963,13 +963,15 @@ route('POST', '/api/plugins/:id/login', async ({ auth, params }) => {
 });
 // ---------- self-running teams ----------
 route('POST', '/api/conversations/:id/messages/:mid/team/:n', ({ auth, params, body }) => {
-  ownerOnly(auth, 'create teams');
+  // a workspace member may create the team in a chat of their workspace
+  const pid = getConversation(params[0])?.project_id ?? null;
+  if (!(isGuest(auth) && auth.member && pid && auth.member.projectIds.includes(pid))) ownerOnly(auth, 'create teams');
   try {
     return applyTeam(params[0], Number(params[1]), Number(params[2]), Array.isArray(body.skip) ? body.skip.map(Number) : []);
   } catch (e) {
     throw new HttpError(400, (e as Error).message);
   }
-});
+}, { guest: true });
 /** Start a team's job again (a stopped board's "Start again"); workspace members may do it in their workspace. */
 route('POST', '/api/squads/start', ({ auth, body }) => {
   const groupId = String(body?.groupId ?? '');
@@ -980,13 +982,13 @@ route('POST', '/api/squads/start', ({ auth, body }) => {
   if (!(isGuest(auth) && auth.member && pid && auth.member.projectIds.includes(pid))) ownerOnly(auth, 'start teams');
   if (!g || !goal || !getConversation(conversationId)) throw new HttpError(400, 'Team, chat and goal are needed');
   try { return startSquad(conversationId, g.id, goal); } catch (e) { throw new HttpError(409, (e as Error).message); }
-});
+}, { guest: true });
 route('POST', '/api/squads/:runId/stop', ({ auth, params }) => {
   // workspace members may stop a team working in their workspace
   const pid = squadProject(params[0]);
   if (!(isGuest(auth) && auth.member && pid && auth.member.projectIds.includes(pid))) ownerOnly(auth, 'stop teams');
   return { stopped: stopSquad(params[0]) };
-});
+}, { guest: true });
 route('DELETE', '/api/tunnel', ({ auth }) => {
   ownerOnly(auth, 'close the internet link');
   stopTunnel();
