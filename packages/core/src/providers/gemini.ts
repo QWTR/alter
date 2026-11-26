@@ -145,6 +145,7 @@ export const gemini: Provider = {
       },
     });
     const out = (text || final).trim();
+    if (!out && signal?.aborted) throw new Error('Stopped.');
     if (!out) {
       const msg = error || r.stderr.trim() || `agy exited with code ${r.code}`;
       if (/auth|sign in|login|credential/i.test(msg)) authCache = { at: Date.now(), ok: false };

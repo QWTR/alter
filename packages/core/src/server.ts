@@ -6,6 +6,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { acceptProposal } from './proposals.ts';
 import { addLink, applySetup, removeLink } from './setup.ts';
 import { deleteGroup, handleTeamMcp, listGroups, saveGroup } from './team.ts';
+import { handleCouncilMcp } from './council.ts';
 import { agentStatuses } from './status.ts';
 import { ensureVoice, transcribe, voiceStatus } from './voice.ts';
 import { sendFollowUp } from './followups.ts';
@@ -1103,6 +1104,10 @@ export function startServer(port = loadConfig().port, host = loadConfig().host) 
       if (url.pathname.startsWith('/mcp/team/')) {
         if (!isLoopback(req) || req.headers[RELAY_HEADER] || req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']) return send(res, 403, { error: 'Forbidden' });
         return handleTeamMcp(req, res, url.pathname.slice('/mcp/team/'.length), listeningPort);
+      }
+      if (url.pathname.startsWith('/mcp/council/')) {
+        if (!isLoopback(req) || req.headers[RELAY_HEADER] || req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']) return send(res, 403, { error: 'Forbidden' });
+        return handleCouncilMcp(req, res, url.pathname.slice('/mcp/council/'.length));
       }
       if (url.pathname.startsWith('/mcp/media/')) {
         if (!isLoopback(req) || req.headers[RELAY_HEADER] || req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']) return send(res, 403, { error: 'Forbidden' });

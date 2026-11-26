@@ -177,9 +177,11 @@ ipcMain.on('win:openSession', (_e, raw) => {
 // ---------- agents on the screen: their cursors, drawn over every monitor ----------
 let overlays = [];
 let overlayClose = null;
+// closed with × on the panel: stays away until the agents are done (they keep working; Ctrl+Alt+Q still stops them)
+let overlayHidden = false;
 function ensureOverlays() {
   clearTimeout(overlayClose);
-  if (overlays.length) return;
+  if (overlays.length || overlayHidden) return;
   const primaryId = screen.getPrimaryDisplay().id;
   let lang = 'en';
   try { lang = coreApi?.loadConfig().language || 'en'; } catch {}
@@ -203,19 +205,20 @@ function ensureOverlays() {
     w.loadFile(path.join(__dirname, 'overlay', 'overlay.html'), { query: { primary: d.id === primaryId ? '1' : '0', lang } });
     overlays.push(o);
   }
-  globalShortcut.register('Control+Alt+Q', () => coreApi?.stopAllHands());
+  if (!globalShortcut.isRegistered('Control+Alt+Q')) globalShortcut.register('Control+Alt+Q', () => coreApi?.stopAllHands());
 }
-function closeOverlays() {
+function closeOverlays(keepShortcut = false) {
   for (const o of overlays) if (!o.win.isDestroyed()) o.win.destroy();
   overlays = [];
-  globalShortcut.unregister('Control+Alt+Q');
+  if (!keepShortcut) globalShortcut.unregister('Control+Alt+Q');
 }
 const dip = (x, y) => (process.platform === 'win32' ? screen.screenToDipPoint({ x, y }) : { x, y });
 function toOverlay(type, data) {
   if (type === 'hands.session' && !data.open) {
     // last agent done: the overlay fades away a moment later
-    if (!coreApi.handsSessions().length) overlayClose = setTimeout(closeOverlays, 2500);
+    if (!coreApi.handsSessions().length) { overlayHidden = false; overlayClose = setTimeout(() => closeOverlays(), 2500); }
   } else ensureOverlays();
+  if (overlayHidden) return;
   const p = typeof data.x === 'number' ? dip(data.x, data.y) : null;
   const fr = typeof data.fromX === 'number' ? dip(data.fromX, data.fromY) : null;
   const p2 = typeof data.x2 === 'number' ? dip(data.x2, data.y2) : null;
@@ -228,6 +231,7 @@ function toOverlay(type, data) {
 }
 ipcMain.on('overlay:interactive', (e, on) => BrowserWindow.fromWebContents(e.sender)?.setIgnoreMouseEvents(!on, { forward: true }));
 ipcMain.on('overlay:stop', () => coreApi?.stopAllHands());
+ipcMain.on('overlay:hide', () => { overlayHidden = true; closeOverlays(true); });
 
 function showWindow() {
   if (!win) return;

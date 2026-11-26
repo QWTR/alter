@@ -44,6 +44,12 @@ function describeTool(name: string, input: any): string {
     const to = input.to ? `→${input.to} ` : '';
     return `${name}: ${to}${String(what).replace(/\s+/g, ' ').slice(0, 120)}`;
   }
+  // the AI council: who is asked and about what
+  if (name === 'mcp__alter_council__ask_ai') {
+    const ai = String(input.ai ?? 'all').toLowerCase();
+    const who = /all|wszys/.test(ai) ? 'ChatGPT + Gemini' : /gpt|codex|chat/.test(ai) ? 'ChatGPT' : /gemini/.test(ai) ? 'Gemini' : /claude/.test(ai) ? 'Claude' : ai;
+    return `Council → ${who}: ${String(input.question ?? '').replace(/\s+/g, ' ').slice(0, 110)}`;
+  }
   // file paths stay whole (the UI shows the file name and opens a live preview from them)
   if (input.file_path || input.notebook_path) return `${name}: ${input.file_path ?? input.notebook_path}`;
   const arg = input.command ?? input.path ?? input.pattern ?? input.url ?? input.query ?? '';
@@ -183,7 +189,9 @@ export const claude: Provider = {
       onDelta?.(note);
     }
     const text = streamed.trim() || final.trim();
-    if (!text) throw new Error(error || r.stderr.trim() || `claude exited with code ${r.code}`);
+    // stopped by the user (stop button, "stop all agents" on the screen): say so instead of a cryptic exit code
+    if (!text && signal?.aborted) throw new Error('Stopped.');
+    if (!text) throw new Error(error || r.stderr.trim() || `Claude stopped unexpectedly (exit code ${r.code}). Write "continue" to try again.`);
     if (!streamed && final) onDelta?.(final);
     return { text, usage, followUps: followUps.length && streamed.trim() ? followUps : undefined };
   },

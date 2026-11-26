@@ -22,15 +22,20 @@ export function setHandsEnabled(on: boolean) {
   saveConfig();
 }
 
-const HANDS = /\b(computer\w*|komputer\w*|na [żz]ywo|live\b|kursor\w*|ruszaj\w* mysz\w*|mysz\w*|myszk\w*|kursor\w*|na (moim )?(ekranie|pulpicie|komputerze)|steruj\w*|klikaj\w*|kliknij|otw[óo]rz (program|aplikacj\w*)|blender\w*|photoshop\w*|gimp|figm\w*|excel\w*|word\b|paint\b|obs\b|davinci|premiere|after effects|unity|unreal|autocad|fusion 360|sketchup|on my (screen|desktop|computer)|mouse|cursor|control my|use my computer|click)/i;
-/** Does this message ask the AI to operate apps on the screen? */
-export const wantsHands = (msg: string) => HANDS.test(msg);
+// asking to work on the screen itself (letter-aware boundaries: \b breaks on Polish letters)
+const HANDS = /(?<!\p{L})(na [żz]ywo na ekranie|na (moim )?(ekranie|pulpicie)|na moim komputerze|u[żz]yj\p{L}* (mojego )?komputera|przejmij\p{L}* (komputer|myszk|ekran)\p{L}*|steruj\p{L}* (komputer|ekran|mysz|program)\p{L}*|otw[óo]rz (program|aplikacj\p{L}*)|on my (screen|desktop)|control my (computer|screen|pc)|use my computer|computer use)/iu;
+// words that also show up in specs ("keyboard and mouse"): only in a short, direct request
+const WEAK = /(?<!\p{L})(kursor\p{L}*|ruszaj\p{L}* mysz\p{L}*|mysz\p{L}*|klikaj\p{L}*|kliknij|mouse|cursor|click)(?!\p{L})/iu;
+// desktop apps that are driven by clicking (not code engines like Unity/Unreal/Godot: those are built in code)
+const APPS = /(?<!\p{L})(blender\p{L}*|photoshop\p{L}*|gimp|figm\p{L}*|excel\p{L}*|word|paint|obs|davinci|premiere|after effects|autocad|fusion 360|sketchup)(?!\p{L})/iu;
+/** Does this message ask the AI to operate apps on the screen? A long spec that only mentions an app or a mouse is not such a request. */
+export const wantsHands = (msg: string) => HANDS.test(msg) || (msg.length < 600 && (WEAK.test(msg) || APPS.test(msg)));
 const NUM: Record<string, number> = { dwa: 2, dwoch: 2, dwóch: 2, dwaj: 2, two: 2, trzy: 3, trzech: 3, three: 3, cztery: 4, czterech: 4, four: 4 };
 /** How many on-screen agents a chat message asks for (1 = just this one). */
 export function crewSize(msg: string): number {
   const m = msg.match(/(?<![\p{L}\d])([2-4]|dwa|dw[oó]ch|dwaj|trzy|trzech|cztery|czterech|two|three|four)\s+(agent|ai\b|kursor|bot)/iu);
   if (m) return Number(m[1]) || NUM[m[1].toLowerCase()] || 1;
-  return /(?<!\p{L})(zesp[oó][łl]\w*|team\b|crew\b|(kilku|kilka|paru|par[ęe]|wielu|several|multiple|few)\s+agent\w*|agent(ów|ow|ach|ami|ki)\b|agents\b|dzia[łl](y|ów|ow|em)?\b|wsp[oó][łl]prac\w*)/iu.test(msg) ? 3 : 1;
+  return /(?<!\p{L})(zesp[oó][łl]\w*|team\b|crew\b|(kilku|kilka|paru|par[ęe]|wielu|several|multiple|few)\s+agent\w*|agent(ów|ow|ach|ami|ki)\b|agents\b|dzia[łl](y|ów|ow|em)?(?!\p{L})|wsp[oó][łl]prac\w*)/iu.test(msg) ? 3 : 1;
 }
 
 // ---------- sessions (one per AI run that may use the hands) ----------

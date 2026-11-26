@@ -20,6 +20,7 @@ import { SETUP_GUIDE, wantsSetup } from './setup.ts';
 import { projectDirs } from './links.ts';
 import { setAgentStatus } from './status.ts';
 import { closeTeam, mentionsIn, openTeam, teamGuide, teamMcpUrl, wantsTeam } from './team.ts';
+import { bigBuild, closeCouncil, councilGuide, councilMcpUrl, councilMembers, openCouncil, wantsCouncil } from './council.ts';
 import { listAgents } from './agents.ts';
 import { expertSkills } from './skills.ts';
 import { pluginServers, pluginsGuide, pluginTools, taggedPlugins } from './plugins.ts';
@@ -270,6 +271,9 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
   // other agents: @mentions (or asking to involve them) give this answer the alter_team tools
   const mentioned = mentionsIn(message);
   const useTeam = !planning && (mentioned.agents.length > 0 || mentioned.groups.length > 0 || (wantsTeam(message) && listAgents().some((a) => !a.monitor && a.id !== agent?.id)));
+  // the AI council: the lead (Claude / ChatGPT — they can use tools) consults the user's other AIs for big builds or when stuck
+  const councilWanted = !planning && !req.parentId && !author && conv.access !== 'chat' && (provider.id === 'claude' || provider.id === 'codex') && (wantsCouncil(message) || bigBuild(message) || !!project?.folder);
+  const councilWith = councilWanted ? await councilMembers(provider.id) : [];
   const calendar = planning ? '' : await calendarContext(message).catch(() => '');
   const extra = planning ? PLAN_GUIDE : [
     whoIsWriting(author, history, project?.name ?? null),
@@ -287,6 +291,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     wantsSetup(message, history) ? SETUP_GUIDE : '',
     !agent && wantsTeamCard(message, history) ? TEAM_GUIDE : '',
     useTeam ? teamGuide(mentioned) : '',
+    councilWith.length ? councilGuide(provider.id, councilWith, bigBuild(message) || wantsCouncil(message)) : '',
     !planning && conv.access !== 'chat' && (wantsMedia(message) || agent?.tools?.includes('media')) ? MEDIA_GUIDE : '',
     expertSkills(message).text,
     planning ? '' : pluginsGuide(),
@@ -343,7 +348,8 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
   const handsSession: HandsSession | undefined = useHands ? openHands(req.hands?.name ?? agent?.name ?? 'ALTTER', req.hands?.color ?? HANDS_COLORS[(agent?.name ?? 'ALTTER').length % HANDS_COLORS.length], handsAbort, { crew: req.parentId ?? (req.hands?.brief ? conv.id : undefined), conversationId: conv.id, lead: !req.parentId && !!req.hands?.brief }) : undefined;
   const teamSession = useTeam ? openTeam(agent?.name ?? 'ALTTER', agent?.id ?? null, 0, req.signal) : undefined;
   const mediaToken = !planning && conv.access !== 'chat' && (wantsMedia(message) || !!agent?.tools?.includes('media')) ? openMediaTools(conv.id) : null;
-  const mcpList = [...(mediaToken ? [{ name: 'alter_media', url: mediaMcpUrl(listeningPort(), mediaToken) }] : []), ...(handsSession ? [{ name: 'alter_hands', url: handsMcpUrl(listeningPort(), handsSession) }] : []), ...(teamSession ? [{ name: 'alter_team', url: teamMcpUrl(listeningPort(), teamSession) }] : []), ...(planning ? [] : pluginServers())];
+  const councilSession = councilWith.length ? openCouncil({ lead: provider.id, members: councilWith, cwd: project?.folder ?? (studioReady ? cwd : undefined), dirs: dirs.length ? dirs : undefined, signal: req.signal, onActivity }) : undefined;
+  const mcpList = [...(councilSession ? [{ name: 'alter_council', url: councilMcpUrl(listeningPort(), councilSession) }] : []), ...(mediaToken ? [{ name: 'alter_media', url: mediaMcpUrl(listeningPort(), mediaToken) }] : []), ...(handsSession ? [{ name: 'alter_hands', url: handsMcpUrl(listeningPort(), handsSession) }] : []), ...(teamSession ? [{ name: 'alter_team', url: teamMcpUrl(listeningPort(), teamSession) }] : []), ...(planning ? [] : pluginServers())];
   const mcp = mcpList.length ? mcpList : undefined;
   if (agent) setAgentStatus(agent.id, 'working', `chat: ${message.replace(/\s+/g, ' ')}`);
   const startedAt = Date.now();
@@ -366,6 +372,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     if (handsSession) closeHands(handsSession);
     if (mediaToken) closeMediaTools(mediaToken);
     if (teamSession) closeTeam(teamSession);
+    if (councilSession) closeCouncil(councilSession);
     if (agent) setAgentStatus(agent.id, 'idle', `chat: ${message.replace(/\s+/g, ' ')}`);
   }
   if (poll) req.onProgress?.(null);

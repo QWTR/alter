@@ -37,6 +37,14 @@
   .hud.on { opacity: 1; transform: none; }
   .hud-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-weight: 700; font-size: 13px; }
   .hud-head svg { width: 16px; height: 16px; }
+  .hud-btn { width: 24px; height: 24px; border: 0; border-radius: 7px; background: rgba(255,255,255,.07); color: rgba(255,255,255,.75); display: grid; place-items: center; cursor: pointer; flex: none; padding: 0; }
+  .hud-btn:hover { background: rgba(255,255,255,.16); color: #fff; }
+  .hud-btn svg { width: 13px; height: 13px; }
+  .hud.mini { width: auto; padding: 8px 10px; }
+  .hud.mini #rows, .hud.mini .stop, .hud.mini #hud-title { display: none; }
+  .hud.mini .hud-head { margin-bottom: 0; }
+  .hud-count { display: none; font-weight: 700; font-size: 12.5px; }
+  .hud.mini .hud-count { display: inline; }
   .hud-head span { margin-left: auto; font-weight: 500; font-size: 11px; color: rgba(255,255,255,.5); }
   .row { display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 10px; background: rgba(255,255,255,.04); margin-bottom: 5px; transition: background .2s; }
   .row b { font-size: 12.5px; }
@@ -60,7 +68,9 @@
 <div id="hud" class="hud" hidden>
   <div class="hud-head">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 12.6 21 21"/><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
-    <b id="hud-title"></b><span id="hud-time"></span>
+    <b id="hud-title"></b><b class="hud-count" id="hud-count"></b><span id="hud-time"></span>
+    <button class="hud-btn" id="hud-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg></button>
+    <button class="hud-btn" id="hud-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
   </div>
   <div id="rows"></div>
   <button class="stop" id="stop"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="3"/></svg><span id="stop-label"></span><small>Ctrl+Alt+Q</small></button>
@@ -69,12 +79,12 @@
   const q = new URLSearchParams(location.search);
   const primary = q.get('primary') === '1';
   const L = {
-    en: { title: 'Agents at work', stop: 'Stop all', look: 'looking at the screen', aim: 'moving', click: 'click', 'double-click': 'double-click', 'right-click': 'right-click', move: 'moving', drag: 'dragging', scroll: 'scrolling', type: 'typing', key: 'keys', open: 'opening', wait: 'waiting', say: 'says', note: 'note for the team', stopped: 'stopped', done: 'done', hold: 'has the mouse' },
-    pl: { title: 'Agenci przy pracy', stop: 'Zatrzymaj wszystkich', look: 'patrzy na ekran', aim: 'przesuwa', click: 'klika', 'double-click': 'dwuklik', 'right-click': 'prawy klik', move: 'przesuwa', drag: 'przeciąga', scroll: 'przewija', type: 'pisze', key: 'skrót', open: 'otwiera', wait: 'czeka', say: 'mówi', note: 'notatka dla zespołu', stopped: 'zatrzymany', done: 'gotowe', hold: 'przejął myszkę' },
-    de: { title: 'Agenten bei der Arbeit', stop: 'Alle stoppen', look: 'schaut auf den Bildschirm', aim: 'bewegt', click: 'klickt', 'double-click': 'Doppelklick', 'right-click': 'Rechtsklick', move: 'bewegt', drag: 'zieht', scroll: 'scrollt', type: 'tippt', key: 'Tasten', open: 'öffnet', wait: 'wartet', say: 'sagt', note: 'Notiz fürs Team', stopped: 'gestoppt', done: 'fertig', hold: 'hat die Maus' },
-    es: { title: 'Agentes trabajando', stop: 'Detener a todos', look: 'mira la pantalla', aim: 'mueve', click: 'clic', 'double-click': 'doble clic', 'right-click': 'clic derecho', move: 'mueve', drag: 'arrastra', scroll: 'desplaza', type: 'escribe', key: 'teclas', open: 'abre', wait: 'espera', say: 'dice', note: 'nota para el equipo', stopped: 'detenido', done: 'listo', hold: 'tiene el ratón' },
-    fr: { title: 'Agents au travail', stop: 'Tout arrêter', look: 'regarde l’écran', aim: 'déplace', click: 'clic', 'double-click': 'double-clic', 'right-click': 'clic droit', move: 'déplace', drag: 'glisse', scroll: 'défile', type: 'tape', key: 'touches', open: 'ouvre', wait: 'attend', say: 'dit', note: 'note pour l’équipe', stopped: 'arrêté', done: 'terminé', hold: 'a la souris' },
-    uk: { title: 'Агенти працюють', stop: 'Зупинити всіх', look: 'дивиться на екран', aim: 'рухає', click: 'клік', 'double-click': 'подвійний клік', 'right-click': 'правий клік', move: 'рухає', drag: 'тягне', scroll: 'гортає', type: 'пише', key: 'клавіші', open: 'відкриває', wait: 'чекає', say: 'каже', note: 'нотатка для команди', stopped: 'зупинено', done: 'готово', hold: 'тримає мишу' },
+    en: { mini: 'Minimize', expand: 'Expand', close: 'Hide (the agents keep working, Ctrl+Alt+Q stops them)', n: 'agents', title: 'Agents at work', stop: 'Stop all', look: 'looking at the screen', aim: 'moving', click: 'click', 'double-click': 'double-click', 'right-click': 'right-click', move: 'moving', drag: 'dragging', scroll: 'scrolling', type: 'typing', key: 'keys', open: 'opening', wait: 'waiting', say: 'says', note: 'note for the team', stopped: 'stopped', done: 'done', hold: 'has the mouse' },
+    pl: { mini: 'Zwiń', expand: 'Rozwiń', close: 'Ukryj (agenci pracują dalej, Ctrl+Alt+Q ich zatrzymuje)', n: 'agentów', title: 'Agenci przy pracy', stop: 'Zatrzymaj wszystkich', look: 'patrzy na ekran', aim: 'przesuwa', click: 'klika', 'double-click': 'dwuklik', 'right-click': 'prawy klik', move: 'przesuwa', drag: 'przeciąga', scroll: 'przewija', type: 'pisze', key: 'skrót', open: 'otwiera', wait: 'czeka', say: 'mówi', note: 'notatka dla zespołu', stopped: 'zatrzymany', done: 'gotowe', hold: 'przejął myszkę' },
+    de: { mini: 'Minimieren', expand: 'Aufklappen', close: 'Ausblenden (die Agenten arbeiten weiter, Strg+Alt+Q stoppt sie)', n: 'Agenten', title: 'Agenten bei der Arbeit', stop: 'Alle stoppen', look: 'schaut auf den Bildschirm', aim: 'bewegt', click: 'klickt', 'double-click': 'Doppelklick', 'right-click': 'Rechtsklick', move: 'bewegt', drag: 'zieht', scroll: 'scrollt', type: 'tippt', key: 'Tasten', open: 'öffnet', wait: 'wartet', say: 'sagt', note: 'Notiz fürs Team', stopped: 'gestoppt', done: 'fertig', hold: 'hat die Maus' },
+    es: { mini: 'Minimizar', expand: 'Expandir', close: 'Ocultar (los agentes siguen trabajando, Ctrl+Alt+Q los detiene)', n: 'agentes', title: 'Agentes trabajando', stop: 'Detener a todos', look: 'mira la pantalla', aim: 'mueve', click: 'clic', 'double-click': 'doble clic', 'right-click': 'clic derecho', move: 'mueve', drag: 'arrastra', scroll: 'desplaza', type: 'escribe', key: 'teclas', open: 'abre', wait: 'espera', say: 'dice', note: 'nota para el equipo', stopped: 'detenido', done: 'listo', hold: 'tiene el ratón' },
+    fr: { mini: 'Réduire', expand: 'Agrandir', close: 'Masquer (les agents continuent, Ctrl+Alt+Q les arrête)', n: 'agents', title: 'Agents au travail', stop: 'Tout arrêter', look: 'regarde l’écran', aim: 'déplace', click: 'clic', 'double-click': 'double-clic', 'right-click': 'clic droit', move: 'déplace', drag: 'glisse', scroll: 'défile', type: 'tape', key: 'touches', open: 'ouvre', wait: 'attend', say: 'dit', note: 'note pour l’équipe', stopped: 'arrêté', done: 'terminé', hold: 'a la souris' },
+    uk: { mini: 'Згорнути', expand: 'Розгорнути', close: 'Сховати (агенти працюють далі, Ctrl+Alt+Q зупиняє їх)', n: 'агентів', title: 'Агенти працюють', stop: 'Зупинити всіх', look: 'дивиться на екран', aim: 'рухає', click: 'клік', 'double-click': 'подвійний клік', 'right-click': 'правий клік', move: 'рухає', drag: 'тягне', scroll: 'гортає', type: 'пише', key: 'клавіші', open: 'відкриває', wait: 'чекає', say: 'каже', note: 'нотатка для команди', stopped: 'зупинено', done: 'готово', hold: 'тримає мишу' },
   }[q.get('lang')] || null;
   const T = L || { title: 'Agents at work', stop: 'Stop all' };
   const tr = (k) => (L && L[k]) || k;
@@ -159,6 +169,7 @@
     if (!primary) return;
     const list = [...agents.values()];
     hud.hidden = !list.length;
+    document.getElementById('hud-count').textContent = `${list.length} ${T.n || 'agents'}`;
     requestAnimationFrame(() => hud.classList.toggle('on', list.length > 0));
     document.getElementById('rows').innerHTML = list.map((a) => `<div class="row"><span class="dot" style="background:${a.color};border-color:${a.color}"></span><b>${esc(a.name)}</b><span class="what">${esc(a.action || '…')}</span></div>`).join('');
   }
@@ -175,6 +186,19 @@
     if (now !== inside) { inside = now; window.alterOverlay.setInteractive(now); }
   });
   document.getElementById('stop').addEventListener('click', () => window.alterOverlay.stop());
+  // minimize to a small pill (remembered) or hide everything until the agents are done
+  let mini = false;
+  try { mini = localStorage.getItem('altter.hud.mini') === '1'; } catch {}
+  const setMini = (on) => {
+    mini = on;
+    hud.classList.toggle('mini', on);
+    document.getElementById('hud-mini').title = on ? (T.expand || 'Expand') : (T.mini || 'Minimize');
+    try { localStorage.setItem('altter.hud.mini', on ? '1' : '0'); } catch {}
+  };
+  setMini(mini);
+  document.getElementById('hud-mini').addEventListener('click', () => setMini(!mini));
+  document.getElementById('hud-close').title = T.close || 'Hide';
+  document.getElementById('hud-close').addEventListener('click', () => { window.alterOverlay.setInteractive(false); window.alterOverlay.hide(); });
 
   // ---------- events from ALTTER ----------
   window.alterOverlay.on((m) => {

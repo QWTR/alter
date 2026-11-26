@@ -54,6 +54,7 @@ export const codex: Provider = {
 
     let text = messages.join('\n\n').trim();
     if (!text && r.code === 0 && !r.stdout.trimStart().startsWith('{')) text = r.stdout.trim();
+    if (!text && signal?.aborted) throw new Error('Stopped.');
     if (!text) throw new Error(error || r.stderr.trim() || `codex exited with code ${r.code}`);
     return { text, usage };
   },

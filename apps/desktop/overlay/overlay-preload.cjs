@@ -6,4 +6,6 @@ contextBridge.exposeInMainWorld('alterOverlay', {
   /** The HUD is clickable only while the mouse is over it; everywhere else clicks go to the apps below. */
   setInteractive: (on) => ipcRenderer.send('overlay:interactive', !!on),
   stop: () => ipcRenderer.send('overlay:stop'),
+  /** Close the panel and the cursors until the agents are done (they keep working). */
+  hide: () => ipcRenderer.send('overlay:hide'),
 });

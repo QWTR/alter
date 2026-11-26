@@ -155,7 +155,7 @@ for (let i = 0; i < sizes.length; i++) {
   const base = 0.25 + (0.75 * i) / sizes.length;
   const span = 0.75 / sizes.length;
   if (isStill) {
-    await renderStill({ ...browser, composition, serveUrl, output, frame: at !== undefined ? Math.min(comp.durationInFrames - 1, Math.round(at * comp.fps)) : 0, imageFormat: ext === 'jpg' ? 'jpeg' : ext, scale: draft ? 0.5 : 1, jpegQuality: 92 });
+    await renderStill({ ...browser, composition, serveUrl, output, frame: at !== undefined ? Math.min(comp.durationInFrames - 1, Math.round(at * comp.fps)) : 0, imageFormat: ext === 'jpg' ? 'jpeg' : ext, scale: draft ? 0.5 : 1, ...(ext === 'jpg' ? { jpegQuality: 92 } : {}) });
     progress('render', base + span, true);
   } else {
     await renderMedia({
