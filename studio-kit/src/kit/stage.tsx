@@ -144,7 +144,7 @@ export const Stage: React.FC<{ meta: Meta; children: React.ReactNode }> = ({ met
     <ThemeCtx.Provider value={theme}>
       <AbsoluteFill style={{ background: theme.bg, color: theme.ink, fontFamily: font(theme.body), overflow: 'hidden' }}>
         {children}
-        {meta.grain !== false && <Grain />}
+        {meta.grain === true && <Grain amount={0.035} />}
       </AbsoluteFill>
     </ThemeCtx.Provider>
   );

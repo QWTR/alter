@@ -1,6 +1,6 @@
 {
   "name": "alter",
-  "version": "0.16.8",
+  "version": "0.16.9",
   "private": true,
   "description": "Alter — your personal AI that runs on the AI subscriptions you already pay for (Claude, ChatGPT, Gemini). Desktop + phone, shared memory, agents that learn your day.",
   "license": "AGPL-3.0-only",

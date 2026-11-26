@@ -13,7 +13,7 @@ import { getUpload, sendFileRange } from './uploads.ts';
 export const studioDir = () => join(HOME, 'studio');
 const kitDir = () => process.env.ALTER_STUDIO_KIT_DIR ?? resolve(import.meta.dirname, '../../../studio-kit');
 
-export interface Brand { accent?: string; accent2?: string; display?: string; body?: string; logo?: string; theme?: string; name?: string; fontFile?: string; imageKey?: string }
+export interface Brand { accent?: string; accent2?: string; display?: string; body?: string; logo?: string; theme?: string; name?: string; fontFile?: string; imageKey?: string; reelUse?: string; swear?: string; audience?: string }
 
 export const getBrand = (): Brand => ((loadConfig() as any).brand ?? {}) as Brand;
 /** What the UI sees: the image key only as set / not set. */
@@ -29,7 +29,7 @@ export function shareImageKey() {
 }
 export function setBrand(b: Brand): Brand {
   const clean: Brand = {};
-  for (const k of ['accent', 'accent2', 'display', 'body', 'logo', 'theme', 'name', 'fontFile', 'imageKey'] as const) if (typeof b[k] === 'string' && b[k]!.trim()) clean[k] = b[k]!.trim().slice(0, 300);
+  for (const k of ['accent', 'accent2', 'display', 'body', 'logo', 'theme', 'name', 'fontFile', 'imageKey', 'reelUse', 'swear', 'audience'] as const) if (typeof b[k] === 'string' && b[k]!.trim()) clean[k] = b[k]!.trim().slice(0, 300);
   if (b.imageKey === '') delete clean.imageKey;
   else if (!clean.imageKey && getBrand().imageKey) clean.imageKey = getBrand().imageKey; // the UI never gets the key back
   (loadConfig() as any).brand = clean;
@@ -184,12 +184,14 @@ export const meta = { format: 'reel', seconds: 12, theme: 'midnight' };
 export default () => (<Timeline><Scene dur={3}><Bg variant="aurora" /><Title kicker="…" title="…" hl={['word']} /></Scene>…</Timeline>);
 \`\`\`
 2. Render: \`node "${dir}/render.mjs" videos/<name>.tsx --draft\` (half size, fast) to check, then without --draft for the final. Flags: --sizes reel,square,wide (all formats at once) · --format mp4|webm|gif|png|jpg · --at <sec> (one frame as an image) · --out <path>. It prints "OUTPUT <path>" (default ./renders/).
-"WebGL context lost" lines at the end of a render are harmless. 3. Optionally look at a frame: \`--at 2 --format jpg --draft\` and open the image. End the answer with the output path(s) — ALTTER shows them as a player.
-meta: format reel|story (1080×1920) square post(1080×1350) wide(1920×1080) thumb(1280×720) banner · seconds · fps (30) · theme midnight|neon|sunset|racing|luxury|mono|paper|fresh|bold · brand {accent, accent2, display, body} · still: true (one image: posters, posts, thumbnails — no Scene needed) · grain: false.
+"WebGL context lost" lines at the end of a render are harmless. 3. Optionally look at a frame: \`--at 2 --format jpg --draft\` and open the image. End the answer with the output path(s) — ALTTER shows them as a player. If the result is a reel / short video (9:16), add the REEL HAND-OFF after the path:
+${REEL_HANDOFF}
+
+meta: format reel|story (1080×1920) square post(1080×1350) wide(1920×1080) thumb(1280×720) banner · seconds · fps (30) · theme midnight|neon|sunset|racing|luxury|mono|paper|fresh|bold · brand {accent, accent2, display, body} · still: true (one image: posters, posts, thumbnails — no Scene needed) · grain: true only if the user asks for film noise (off by default).
 Times are seconds, relative to the Scene. Sizes are px on a 1080-wide frame (scaled to any format). place: center|top|bottom|left|right|top-left|bottom-left. Tall formats keep text out of the social UI zones automatically.
 Components:
 - Timeline {overlap=0.3} > Scene {dur, enter, exit: fade|up|down|left|right|zoom|blur|wipe|iris|none, tr} · Between {from, to} (show children for a while; time restarts at from)
-- Bg {variant: glow|aurora|grid|dots|gradient|spotlight|solid, color, color2, intensity} · Particles {kind: specks|bokeh|confetti|snow, count} · Grain (auto)
+- Bg {variant: glow|aurora|grid|dots|gradient|spotlight|solid, color, color2, intensity} · Particles {kind: specks|bokeh|confetti|snow, count} · Grain (film noise — OFF; only if the user asks for it)
 - Text {text, at, out, size=96, anim: rise|pop|blur|fade|type|slide, hl: words in accent, marker (highlighter), stagger, place, face: display|body|mono, width, color}
 - Title {kicker, title, sub, hl, at, out, place, size=120} · List {items, numbered, at} · Counter {to, from, prefix, suffix, decimals, label, at, dur} · Chip {label, value, icon (emoji), x, y | place, accent, at, out} · LowerThird {name, role, at, out} · Captions {text + dur | words [{text,start,end}], at, per=3, size, box}
 - Photo {src, move: in|out|left|right|none, dur, fit, focus ("50% 30%"), zoom, look, dim, x,y,w,h,radius} · Clip {src, from (sec in source), rate (0.5 slow-mo, 2 fast), muted=true, volume, fit, focus, look, dim, x,y,w,h,radius} · look = warm|cool|film|bw|noir|vivid|fade|teal-orange or {brightness, contrast, saturate, warmth -1..1, hue, blur, vignette} · Device {type: phone|browser|laptop, url, at, scale, tilt} wrapping a Photo/Clip · Logo {src | text, sub, at, size}
@@ -200,11 +202,73 @@ Components:
 - Music {src, volume, fadeIn, fadeOut, from} · Sfx {src, at, volume}
 - Custom bits: useTime(), useTheme(), useFormat() → {w,h,u(px),portrait}, ramp(t,a,b,ease), ease.out|back|inOut, mix, rand, media(path) + anything from 'remotion'.
 src = a file path on disk (attachments too) or a URL; the renderer copies local files in.
-Style: one idea per scene, 2–4 s each, big type, one accent colour, motion on every scene, a strong hook in the first second, logo/CTA last. Match words to the user's language (Polish diacritics work).
+Style: one idea per scene, 2–4 s each, big type, one accent colour, motion on every scene, a strong hook in the first second, logo/CTA last.
+Effects stay SUBTLE (users hate noisy FX): no film grain/noise, no glitches, flashes, RGB split, lens flares, confetti/particle storms, heavy shake or whoosh/boom/riser sound effects — unless the user asks for them. Allowed: soft fades and cuts, gentle camera moves, a small punch-in, at most a light shake (≤ 0.15) on one real impact, quiet background music under a voice. Match words to the user's language (Polish diacritics work).
 Video editing: \`node "${dir}/ff.mjs" probe <file>\` (duration, size, fps) first. Cut/join/scale/crop/rotate/compress/extract audio/loudnorm/GIF: \`node "${dir}/ff.mjs" <ffmpeg args>\` (-y added; its filters may be limited — if one is missing, do it in the kit). Speed, colour, titles, captions, overlays, reframing to 9:16: a kit video with Clip (rate, look, focus) as the background — always works. Results go in ./renders/.
 Graphics & photos: a still (meta.still = true, format post|square|thumb|banner|story) rendered with --format png; photo fixes (light, colour, crop, resize, collage) = a still with Photo {look, focus, zoom, fit}, --format jpg. 
 AI images (photos, illustrations, backgrounds, 3D renders, product shots, logo ideas): \`node "${dir}/gen-image.mjs" "<what, in English, concrete>" --style photo|cinematic|product|food|portrait|3d|lowpoly|isometric|flat|anime|watercolor|neon|minimal|poster|background|logo|sticker --format post|square|reel|wide|thumb|banner [--n 2] --out assets/<name>.png\` (prints OUTPUT <path>). You (Claude) cannot draw; this script hands the picture to ChatGPT (the user's account, ~40 s each, up to 3 at once) or Gemini. If it exits with NO_IMAGE_AI, tell the user in one line to sign in to ChatGPT/Codex in ALTTER — never fake it with stock-looking pictures (--free is a last resort the user must ask for). Never put text in the prompt. Then use it: as the deliverable itself, or as Photo/Bg in a kit graphic or video where you add the real text, logo and brand colours. Brand graphics set (post, story, banner, thumbnail) = one still per format with the same layout.
 Fonts: display/body take any Google Fonts family by name (e.g. "Montserrat", "Lobster", "Archivo Black") or a font file path (.ttf/.otf/.woff2) — the renderer loads it.${brand}`;
+}
+
+// ---------- reel preferences (Studio → Brand): what reels are for, swearing, audience ----------
+
+const USE: Record<string, string> = { ad: 'an ad for a product or business (end with the product + CTA)', fun: 'entertainment / memes for social media (no product unless named)', edu: 'education / explaining something (clear, still funny)', personal: 'personal / for friends (inside jokes are fine)' };
+const SWEAR: Record<string, string> = {
+  none: 'NO swearing or vulgar words at all (voice-over, captions, overlays)',
+  mild: 'mild only ("kurde", "cholera", "do diabła" level) — at most 1–2 for punch',
+  full: 'strong swearing is allowed where it makes it funnier (deadpan "kurwa" on the twist lands) — never slurs or insults aimed at real groups or real people; platforms may limit reach of ads with swearing, say so once if it is an ad',
+};
+/** The user's defaults for reels, or what to ask before writing the script. */
+export function reelPrefs(mode: 'ask' | 'soft' = 'ask'): string {
+  const b = getBrand();
+  const known = [b.reelUse && USE[b.reelUse] && `purpose: ${USE[b.reelUse]}`, b.swear && SWEAR[b.swear] && `language: ${SWEAR[b.swear]}`, b.audience && `audience / platform: ${b.audience}`].filter(Boolean);
+  const missing = [!(b.reelUse && USE[b.reelUse]) && 'what the reel is for (ad for which product / entertainment / education / personal)', !(b.swear && SWEAR[b.swear]) && 'whether it may swear (none / mild / full)', !b.audience && 'who it is for and where it goes (TikTok / Instagram / YouTube…)'].filter(Boolean);
+  return `## REEL PREFERENCES (Studio → Brand)
+${known.length ? 'Set by the user: ' + known.join(' · ') + '. Follow them unless this chat says otherwise.' : 'None set in Studio.'}
+${missing.length && mode === 'soft' ? `Not set: ${missing.join('; ')}. Do NOT stop to ask: assume entertainment, keep the user's own words as they are and add no swearing of your own; at the end add one line that they can set this once in Studio → Brand → Reels.` : missing.length ? `Not set: ${missing.join('; ')}. If this chat has not answered these yet, your FIRST answer to a new reel request is only these questions — one short message, numbered, each with the options (the user can answer "1b 2c" or in words; no script yet). Add one line: "You can set these once in Studio → Brand → Reels, then I won't ask." When they answer (or say "whatever / you pick"), continue with the method. Never ask again in the same chat. These questions were turned on by the user on purpose: they win over older memories like "do reels without asking"; skip them only when THIS message says so (e.g. "bez pytania", "[TEST ALTTER]", "you pick") — then assume entertainment and no swearing.` : 'Do not ask about these — go straight to the method.'}`;
+}
+
+// ---------- after a reel: the scenario, the script and how to make one like it ----------
+
+const ELEVEN_STEPS = `ElevenLabs (the voice-over; the free plan is enough to start):
+   1. elevenlabs.io → sign up / log in → "Text to Speech" (in the app: Create → Text to Speech).
+   2. Voice: Voices → Voice Library → search "narrator" / "documentary" (calm, deep, deadpan works best for absurd stories) → Add → pick it. For Polish choose the model "Eleven Multilingual v2" (or the newest multilingual one).
+   3. Settings: Stability ~35–45%, Similarity ~75%, Style ~30–40%, Speaker boost on, Speed 1.0 (0.9 for a slower, drier read).
+   4. Paste the whole voice-over script (one sentence per line; "…" = a pause). Words it says wrong: write them the way they sound (e.g. "WiFi" → "łajfaj", "AI" → "ej aj") — the captions keep the right spelling.
+   5. Generate → listen → regenerate only the lines that sound off (select the line → Regenerate) → Download → MP3.
+   6. Send the MP3 here in the chat (drag it in) with "make the reel with this voice" — ALTTER times every word, builds the scenes to it and adds the captions.`;
+
+/** Appended to every reel guide: after the final render, teach the user to make one like it. */
+const REEL_HANDOFF = `## REEL HAND-OFF (after the final render — in the user's language, short headings, scannable)
+After the output path add a section titled like "How to make a reel like this" with:
+1. **Scenario** — the idea in one line, why it works (the hook, the escalation, the twist, the dry ending), then the beats with times (0:00–0:03 hook: …), taken from the reel you just made.
+2. **Script** — a code block with the exact voice-over text used (one sentence per line, ready to paste into ElevenLabs). For an edit of the user's own footage: their spoken lines (cleaned) plus what each insert shows, so they can film a new one.
+3. **Step by step** — numbered, concrete, nothing assumed:
+   - the idea: how to pick a topic/product and the absurd escalation (3 example ideas in their niche);
+   - the voice: ${ELEVEN_STEPS}
+     (for an edit of their own video instead: film 30–60 s vertically, calm deadpan explanation of an ordinary thing, steady phone, good light, one take; then send the video with "make it a crazy reel");
+   - what to write to ALTTER (the exact message), what ALTTER does, how to ask for changes ("slower captions", "different ending", "swap scene 3");
+   - publishing: first frame = the hook, caption idea, 3–5 hashtags, best length (20–45 s), post as a Reel/TikTok in 9:16.
+4. One line: "Questions about any step — ask, I'll walk you through it." Keep the whole hand-off under ~35 lines; never repeat the whole build log.`;
+
+const REEL_HOWTO = /(jak|w jaki spos[óo]b|co zrobi[ćc]|poka[żz]|naucz|krok po kroku|how (do i|to|can i)|teach me|step by step)[^.?!\n]{0,80}(rolk|reel|tiktok|short|film|wideo|video|animac|3d|lektor|g[łl]os|voice|eleven|scenari|skrypt|script)|(eleven ?labs|elevenlabs)/i;
+/** "How do I make a reel like this / a 3D animation / the voice?" — a coach answer, works in any access mode. */
+export function wantsReelHowTo(message: string, history: { content: string }[] = []): boolean {
+  if (REEL_HOWTO.test(message)) return true;
+  return /(jak|how)\b/i.test(message) && history.slice(-4).some((m) => /REEL HAND-OFF|How to make a reel like this|Jak zrobi[ćc] tak[ąa] rolk/i.test(m.content));
+}
+
+/** Coach mode: help the user make a reel (or a similar one) themselves, every step. */
+export function reelCoachGuide(): string {
+  return `## REEL COACH (the user asks how to make a reel / a 3D animation / a voice-over, or how to make one like the one in this chat)
+${reelPrefs().replace(/your FIRST answer to a new reel request is only these questions[^.]*\./, 'still give a full answer now (script fitting the most likely answer), and ask these briefly at the end so the next script fits.')}
+Answer as a patient step-by-step guide in the user's language — they may be a complete beginner. Help with EVERYTHING they ask: the idea, the script, the voice, filming, sending it to ALTTER, changes, posting.
+- If it is about a reel from this chat: start from that reel (its scenario and script), then the steps to make another like it.
+- Otherwise ask nothing first: pick the most likely kind and say which other kinds exist in one line — (a) a 3D story / absurd ad with a voice-over (ALTTER builds the animated 3D world), (b) a crazy edit of their own video with AI video inserts, (c) motion graphics / a promo with text and logo.
+- Always give: a ready script they can use right now (code block, one sentence per line, 30–45 s), then numbered steps. For the voice: ${ELEVEN_STEPS}
+  No ElevenLabs? Their own voice works too: record it on the phone in a quiet room, 20 cm from the mouth, one take per sentence is fine — send the file the same way.
+- Be concrete: exact buttons, exact settings, exact messages to type to ALTTER. Short paragraphs, numbered steps, no theory.
+- End by offering the next step ("Send the MP3 when ready" / "Shall I write 3 more scripts?"). If they ask a follow-up about one step, explain just that step in more detail.`;
 }
 
 // ---------- story reels: a 3D story / absurd ad with a voice-over, made just by asking in the chat ----------
@@ -214,13 +278,17 @@ const STORY_KIND = /(histor|story|fabu|scenari|lektor|narrat|voice|g[łl]os|3d|a
 /** A story reel (3D, a plot, a voice-over)? Also follow-ups in a chat that is already making one. */
 export function wantsStoryReel(message: string, history: { content: string }[] = []): boolean {
   if (STORY.test(message) && STORY_KIND.test(message)) return true;
+  // the user answered the reel questions ("1b 2c"): the request is a few messages back
+  if (history.slice(-4).some((m) => STORY.test(m.content) && STORY_KIND.test(m.content))) return true;
   return history.slice(-6).some((m) => /voice-times\.mjs|STORY REEL|tekst dla lektora|voice-over script/i.test(m.content));
 }
 
 /** The method behind the 3D story reels: what worked, written down so every chat can do it without special buttons. */
 export function storyReelGuide(): string {
   const dir = studioDir().replace(/\\/g, '/');
-  return `## STORY REEL (3D story / absurd ad with a voice-over, 9:16)
+  return `${reelPrefs()}
+
+## STORY REEL (3D story / absurd ad with a voice-over, 9:16)
 The user only has to ask in the chat; you run the whole method below. It is a craft, not a brand: never put any product, company or app into the story unless the user named it in THIS chat (memories about their past projects do not count — at most ask "for which product?" in one line). If no product is named yet, write the story with [PRODUCT] in the last line and ask.
 Length: what they asked; otherwise 30–45 s; never more than 50 s. Short sentences, one sentence = one shot (2–4 s).
 "3D" here means a REAL ANIMATED 3D WORLD built in code with the kit's World (toy-like low-poly: blocky people, boxy cars, houses, roads, trees, a moving camera) + flat UI overlays (name tags, badges, a speedometer, a phone notification) + big one-word captions. NOT generated pictures with a Ken Burns zoom — still images are not animation. Only use gen-image when the user explicitly asks for realistic/AI pictures.
@@ -228,7 +296,8 @@ Length: what they asked; otherwise 30–45 s; never more than 50 s. Short senten
 - One-line pitch (title, format, length).
 - "Voice-over" code block: the exact text to paste into ElevenLabs, one sentence per line. Story shape: a hook in the first second (an impossible image), escalation every 3–5 s (each beat weirder but logical inside its own world), one real twist near the end, a dry last line, then the CTA/product line. Deadpan narration of absurd events is what makes it funny. Make it genuinely surprising — if the user wants it "crazy", avoid the first idea that comes to mind.
 - A shot list (time · what we see in the 3D world: characters, camera, action · overlay: tag/badge/notification), same order as the lines. Only things the World kit can show (people, cars, houses, blocks of flats, roads, trees, birds, signs, boxes as props, flames, smoke, any colours/skies) — exaggerate with scale, colour, camera and overlays rather than needing new models.
-- ElevenLabs tip: a calm documentary narrator voice, Stability ~35–45%, Style ~30–40%, keep the "…" pauses, export one MP3. Brand names the voice mispronounces: write them phonetically for ElevenLabs and correct them in the captions.
+- The voice is made in ElevenLabs — walk the user through it step by step (short, numbered):
+  ${ELEVEN_STEPS}
 - End: "Send the MP3 — or say go and I'll build the 3D now and fit it to your voice later."
 ### 2. Build (full access; when the user says go or sends the MP3)
 a) Timings: with the MP3 run \`node "${dir}/voice-times.mjs" "<mp3>" --text "<the voice-over lines>"\` → JSON {duration, lines[{text,start,end}], words[{text,start,end}]}. Without an MP3 use ~0.38 s per word. If it runs over 50 s, tell the user (or speed it up with ff.mjs atempo, max 1.15).
@@ -250,7 +319,7 @@ export default () => (<>
       <Badge text="płacze" icon="😭" x={420} y={450} at={1} />
     </Scene>
     <Scene dur={3.1} enter="none" exit="none">
-      <World follow={{ path: drive, offset: [0, 3, -8], look: [0, 1.2, 8] }} shake={0.3}>
+      <World follow={{ path: drive, offset: [0, 3, -8], look: [0, 1.2, 8] }} shake={0.1}>
         <Ground /><Road lanes={4} width={14} /><Trees side={10} />
         <Car path={drive} color="#c9ccd1" plate="WGM 2137" flames />
       </World>
@@ -261,12 +330,14 @@ export default () => (<>
   <Captions words={words} per={1} size={110} upper={false} y={1180} />
 </>);
 \`\`\`
-World: sky day|dusk|night|overcast|studio | [top, bottom] · cam {pos, look} or keyframes [{t, pos, look, fov}] (always move the camera a little — push in, orbit, crane) · follow {path, offset, look} = chase cam · shake 0–1 (speed, impacts) · tint (e.g. "#ff6a5a" rage) · fov.
+World: sky day|dusk|night|overcast|studio | [top, bottom] · cam {pos, look} or keyframes [{t, pos, look, fov}] (always move the camera a little — push in, orbit, crane) · follow {path, offset, look} = chase cam · shake 0–0.15 (keep it subtle; only on a real impact or high speed) · tint (e.g. "#ff6a5a" rage) · fov.
 Things (units ≈ metres, y up, ground y=0; face = degrees; path = [[t, x, z], …] moves it and turns it to where it goes; at = pop in at second):
 Ground {color} · Road {from, to, width, lanes 2|4, face, barrier} (along z) · Trees {from, to, side, spread, gap, seed} · Tree {pos, kind pine|round} · House {pos, face, floors, wall, roof} · Block {pos, floors, w} (flats) · Car {pos|path, face, color, plate, kind sedan|hatch|van, siren (police light bar + side text; a string sets the text), brake, flames (rocket boost), smoke, bounce, tilt, scale} · Person {pos|path, face, skin, shirt, pants, hair, hat cap|helmet|hair|none, hatColor, mood smile|sad|shout|flat, cry, wave, jump, scale, height} (walks when moving) · Bird {pos|path, fly, color, scale} (pigeon; scale 2–4 when it is a main character; on a car roof give pos y ≈ 1.75 and the car's path) · Clouds · Sign {pos, text, bg, fg} · Prop {pos, size [w,h,d], color} (sofa, TV, box, desk…) · Flame {pos, size} · Puffs {pos, big} (smoke).
 Overlays (px on a 1080×1920 frame, appear at "at", vanish at "out"): Tag {text, x, y} (yellow name tag over a character) · Badge {text, icon emoji, mark x|ok, dark, x, y} (stack them 90 px apart) · Speedo {from, to, limit, unit} · Notify {title, text, time, icon, reply} (phone message from the top) · Shout {text, sub, y} (big word: ZURÜCK!, STOP!).
 Captions per={1} (one big word at a time, white with outline, mid-lower y≈1150–1250) — they and Music sit outside the Timeline. Optional background music under the voice at volume 0.12–0.18. Last scene: product/logo + CTA (Logo or Text over a World or Bg), held 2–3 s.
-c) Check before the final: render frames at the hook, the middle, the twist and the end (\`--at <sec> --format jpg --draft\`) and LOOK at them: characters in frame (heads not cut off), the camera not inside objects, overlays not covering faces, captions readable. Fix, then render --draft once, then the final render. End with the output path.`;
+c) Check before the final: render frames at the hook, the middle, the twist and the end (\`--at <sec> --format jpg --draft\`) and LOOK at them: characters in frame (heads not cut off), the camera not inside objects, overlays not covering faces, captions readable. Fix, then render --draft once, then the final render. End with the output path, then the REEL HAND-OFF (below).
+
+${REEL_HANDOFF}`;
 }
 
 /** The chat while access is not full: creative work needs to run the renderer. */
@@ -432,7 +503,10 @@ export function wantsChaosEdit(message: string, history: { content: string }[] =
 
 export function chaosEditGuide(): string {
   const dir = studioDir().replace(/\\/g, '/');
-  return `## CHAOS EDIT (the user's own video → a "deadpan tutorial gone absurd" reel with AI VIDEO inserts)
+  return `${reelPrefs('soft')}
+(For an edit of the user's own video the voice stays theirs: the language preference applies to captions you add and to the AI clips' prompts.)
+
+## CHAOS EDIT (the user's own video → a "deadpan tutorial gone absurd" reel with AI VIDEO inserts)
 The format (viral on Instagram/TikTok): someone calmly explains an ordinary thing (how to use stairs, a vacuum, a kettle…). At 3–6 moments the picture HARD-CUTS to a short AI-generated VIDEO that starts from that exact frame — same person, same room, same camera — and then something impossible happens in motion: the stairs fire rocket boosters and blast through the roof, crash and explode; the vacuum turns into a jet engine and swallows the kitchen. 2–5 s later it hard-cuts back to the real footage, which goes on exactly where it stopped, as if nothing happened. While the clip plays the user's video is PAUSED: only the clip's own sound is heard — the voice and the clip never play at the same time, and no word is lost.
 HARD RULES: the inserts are VIDEOS made by a video AI from the real frame. Never use still pictures as inserts (no Ken Burns, no zooming photos), never add emoji / flying icons / particles / glitches / flashes on top, never add synthesised sound effects — the AI clip's own sound (Gemini/Kling make it) is the sound. Clean hard cuts only.
 1. Look: \`node "${dir}/ff.mjs" probe <video>\` and \`node "${dir}/voice-times.mjs" <video>\` (words + lines with times; any language). Read the transcript.
@@ -473,5 +547,7 @@ export default () => (
 );
 \`\`\`
 Hit: at = source time where the video pauses and the clip goes in — the SAME moment as the clip's start frame, and on a word boundary (a word's start or end from voice-times, never inside a word; pick the frame there in step 4a), dur = how long the clip plays (2.5–5 s; cut right after the payoff), src = the clip, from = skip the clip's first seconds, volume = the clip's sound (default 1). meta.seconds MUST be footageLength(KEEP, HITS) — the clips add to the length. Never set mode:'over' for AI clips (that would play the voice and the clip at the same time). Use absolute paths if a relative one is not found.
-6. Check: render frames just before, inside and after 2–3 hits (--at <output sec> --format jpg --draft) and LOOK: the cut in is seamless, the absurd thing is visible, captions readable. Then the final render (no --draft). End with the output path and one line per hit (what happens).`;
+6. Check: render frames just before, inside and after 2–3 hits (--at <output sec> --format jpg --draft) and LOOK: the cut in is seamless, the absurd thing is visible, captions readable. Then the final render (no --draft). End with the output path and one line per hit (what happens), then the REEL HAND-OFF (below).
+
+${REEL_HANDOFF}`;
 }

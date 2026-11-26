@@ -28,7 +28,7 @@ import { closeHands, HANDS_GUIDE, HANDS_NEEDS_FULL, handsEnabled, handsMcpUrl, o
 import { listeningPort } from './pairing.ts';
 import { TRAVEL_GUIDE, wantsTravel } from './travel.ts';
 import { isPlanApproval, PLAN_APPROVED_GUIDE, PLAN_GUIDE, wantsPlan } from './plans.ts';
-import { chaosEditGuide, CREATIVE_NEEDS_FULL, creativeEngine, ensureStudio, renderProgress, storyReelGuide, studioDir, wantsChaosEdit, wantsCreative, wantsStoryReel } from './studio.ts';
+import { chaosEditGuide, CREATIVE_NEEDS_FULL, creativeEngine, ensureStudio, reelCoachGuide, renderProgress, storyReelGuide, studioDir, wantsChaosEdit, wantsCreative, wantsReelHowTo, wantsStoryReel } from './studio.ts';
 import { describeAttachments, getUpload, uploadsDir, type Attachment } from './uploads.ts';
 import { inboxFor } from './followups.ts';
 import { FILES_GUIDE, RICH_GUIDE } from './rich.ts';
@@ -280,6 +280,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     creative ? (studioReady ? creativeEngine() : conv.access === 'full' ? '' : CREATIVE_NEEDS_FULL) : '',
     storyReel ? storyReelGuide() : '',
     chaosEdit ? chaosEditGuide() : '',
+    !planning && wantsReelHowTo(message, history) ? reelCoachGuide() : '',
     !agent && wantsAutomation(message, history) ? AUTOMATION_GUIDE : '',
     wantsSetup(message, history) ? SETUP_GUIDE : '',
     !agent && wantsTeamCard(message, history) ? TEAM_GUIDE : '',

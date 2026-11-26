@@ -2069,3 +2069,21 @@ html, body, #root { overflow-x: clip; }
 .plugin-tags .picker-item.off { opacity: 0.55; }
 .plugin-tags .plug-ic { flex: none; border-radius: 9px; display: grid; place-items: center; }
 .ptag-st.login, .ptag-st.offline, .ptag-st.missing { color: var(--warn, #e0a030); }
+
+.studio-reels { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
+
+/* ---------- update progress panel ---------- */
+.update-size { margin-left: 6px; opacity: .75; font-weight: 500; }
+.update-panel { margin: 10px 16px 0; padding: 12px 14px; border-radius: 14px; font-size: 13.5px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); color: var(--text); flex: none; }
+.update-panel > .row > svg { color: var(--accent-strong); flex: none; }
+.update-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.update-steps li { display: flex; align-items: center; gap: 8px; color: var(--text-3, var(--muted)); }
+.update-steps li.now { color: var(--text); font-weight: 600; }
+.update-steps li.done { color: var(--text-2, var(--text)); }
+.update-steps .dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--border); flex: none; }
+.update-steps li.done .dot { background: var(--accent); border-color: var(--accent); color: #fff; }
+.update-steps li.now .dot { border-color: var(--accent); }
+.update-steps .dot .spinner { width: 10px; height: 10px; }
+.update-bar { height: 4px; border-radius: 4px; background: color-mix(in srgb, var(--text) 10%, transparent); margin-top: 10px; overflow: hidden; }
+.update-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .4s ease; }
+@media (prefers-reduced-motion: reduce) { .update-bar i { transition: none; } }

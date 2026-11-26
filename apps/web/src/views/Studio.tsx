@@ -427,6 +427,25 @@ function BrandCard({ brand }: { brand: Brand }) {
           {b.logo && <button type="button" className="btn ghost icon sm" onClick={() => setB({ ...b, logo: '' })}><X size={14} /></button>}
         </div>
       </Field>
+      <div className="studio-reels">
+        <b className="small">{t('studio.reels')}</b>
+        <p className="small muted" style={{ margin: '2px 0 8px' }}>{t('studio.reelsLead')}</p>
+        <div className="grid-2">
+          <Field label={t('studio.reelUse')}>
+            <select className="select" value={b.reelUse ?? ''} onChange={(e) => setB({ ...b, reelUse: e.target.value })}>
+              {(['', 'ad', 'fun', 'edu', 'personal'] as const).map((v) => <option key={v} value={v}>{t(`studio.reelUse.${v || 'ask'}` as Key)}</option>)}
+            </select>
+          </Field>
+          <Field label={t('studio.swear')}>
+            <select className="select" value={b.swear ?? ''} onChange={(e) => setB({ ...b, swear: e.target.value })}>
+              {(['', 'none', 'mild', 'full'] as const).map((v) => <option key={v} value={v}>{t(`studio.swear.${v || 'ask'}` as Key)}</option>)}
+            </select>
+          </Field>
+        </div>
+        <Field label={t('studio.audience')}>
+          <input className="input" placeholder={t('studio.audiencePh')} value={b.audience ?? ''} onChange={(e) => setB({ ...b, audience: e.target.value })} />
+        </Field>
+      </div>
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <button className="btn primary sm" onClick={save} disabled={busy}>{busy && <span className="spinner" />}{t('common.save')}</button>
       </div>

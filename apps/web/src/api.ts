@@ -36,7 +36,7 @@ export interface Message { id: number; role: 'user' | 'assistant'; content: stri
 /** A rendered video / image / sound the answer points to. */
 export interface MediaItem { url: string; name: string; kind: 'video' | 'image' | 'audio'; size: number; mtime: number; folder?: string }
 export interface RenderProgress { stage: string; pct: number; label?: string }
-export interface Brand { accent?: string; accent2?: string; display?: string; body?: string; logo?: string; theme?: string; name?: string; fontFile?: string; hasImageKey?: boolean }
+export interface Brand { accent?: string; accent2?: string; display?: string; body?: string; logo?: string; theme?: string; name?: string; fontFile?: string; hasImageKey?: boolean; reelUse?: string; swear?: string; audience?: string }
 export interface StudioInfo { dir: string; ready: boolean; installing: boolean; upToDate: boolean; error: string | null; brand: Brand; renders: MediaItem[] }
 export type MonitorType = 'http' | 'tcp' | 'ping' | 'command';
 export interface MonitorSpec { type: MonitorType; target: string; everyMinutes: number; autoFix: boolean }
