@@ -128,7 +128,7 @@ export function AgentChat({ id, ws, name, avatar, onClose, embedded }: AgentChat
               <motion.div key={r.id} className="ac-turn" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
                 {r.task && (
                   <div className="ac-msg ac-in">
-                    <div className="ac-who small faint">{fromLead ? <><Crown size={11} />{t('ac.lead')}</> : <><User size={11} />{r.trigger === 'manual' ? t('ac.you') : t(`activity.trigger.${r.trigger}` as Key)}</>} · {formatTime(r.started_at)}</div>
+                    <div className="ac-who small faint">{r.author ? <><User size={11} />{r.author}</> : fromLead ? <><Crown size={11} />{t('ac.lead')}</> : <><User size={11} />{r.trigger === 'manual' ? t('ac.you') : t(`activity.trigger.${r.trigger}` as Key)}</>} · {formatTime(r.started_at)}</div>
                     <Long text={r.task} />
                   </div>
                 )}

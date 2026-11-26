@@ -4,7 +4,8 @@
 // (two levels deep at most), so a lead can split a job, collect the parts and put them together.
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { getAgent, listAgents, runAgent, type Agent } from './agents.ts';
+import { getAgent, isRunning, listAgents, runAgent, setTeamHook, type Agent } from './agents.ts';
+import { listeningPort } from './pairing.ts';
 import { loadConfig, saveConfig } from './config.ts';
 import { emit } from './events.ts';
 import { agentStatuses } from './status.ts';
@@ -71,12 +72,33 @@ export function openTeam(caller: string, callerAgentId: string | null, depth = 0
 export const closeTeam = (s: TeamSession) => sessions.delete(s.token);
 export const teamMcpUrl = (port: number, s: TeamSession) => `http://127.0.0.1:${port}/mcp/team/${s.token}`;
 
+// Every agent on a team gets the team tool on each run (its own chat, the team's job, a schedule):
+// it can hand work to a teammate or ask one, and gets the answer back — the lead talks to UI, UI asks Gameplay…
+export function teamToolsFor(agent: Agent, signal?: AbortSignal) {
+  const groups = listGroups().filter((g) => g.members.includes(agent.id));
+  if (!groups.length) return null;
+  const s = openTeam(agent.name, agent.id, 0, signal);
+  const mates = groups.flatMap((g) => g.members.filter((id) => id !== agent.id).map((id) => {
+    const a = getAgent(id);
+    return a ? `- ${a.name}${g.lead === a.id ? ' (lead)' : ''}: ${(a.description || a.instructions).replace(/^[^:]{1,40}:\s*/, '').replace(/\s+/g, ' ').slice(0, 120)}` : '';
+  })).filter(Boolean);
+  const lead = groups.some((g) => g.lead === agent.id);
+  const guide = `## Your team: ${groups.map((g) => '@' + g.name).join(', ')} — tool ask_agent from the "alter_team" MCP server
+You work together with:\n${[...new Set(mates)].join('\n')}
+- ask_agent(name, task) gives a teammate a task or a question and returns their answer (it can take minutes; independent asks can run in parallel). Use it instead of saying you have no connection to them.
+- ${lead ? 'You lead: pass the user\'s decisions and new rules on to the right teammates yourself, give them concrete tasks, collect their answers and report back.' : 'Ask the teammate who owns a part instead of guessing (e.g. the code contract, a file path), and tell the lead when you finish something others depend on.'}
+- Something only another role may change (files outside your access, their department): ask that teammate to do it.`;
+  return { mcp: { name: 'alter_team', url: teamMcpUrl(listeningPort(), s) }, guide, close: () => closeTeam(s) };
+}
+setTeamHook(teamToolsFor);
+
 /** Runs an agent on a task for someone and returns what it says. */
 export async function askAgent(agent: Agent, task: string, from: string, depth: number, port: number): Promise<string> {
+  if (isRunning(agent.id)) return `${agent.name} is busy with another task right now. Try again in a while, or go on without them and say so.`;
   // the asked agent may ask others too, one level further
   const sub = depth < 1 ? openTeam(agent.name, agent.id, depth + 1) : null;
   try {
-    const r = await runAgent(agent.id, 'team', `## Asked by ${from}\nAnswer ${from} directly and concretely — they will use your answer in their work. If you did something (files, changes), say exactly what and where.`, task, sub ? [{ name: 'alter_team', url: teamMcpUrl(port, sub) }] : undefined);
+    const r = await runAgent(agent.id, 'team', `## Asked by ${from}\nAnswer ${from} directly and concretely — they will use your answer in their work. If you did something (files, changes), say exactly what and where.`, task, sub ? [{ name: 'alter_team', url: teamMcpUrl(port, sub) }] : [], from);
     if (r.status === 'error') return `${agent.name} could not do it: ${r.error ?? 'error'}`;
     return r.output ?? '(no answer)';
   } finally {

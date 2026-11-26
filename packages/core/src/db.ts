@@ -84,6 +84,7 @@ export function getDb(): DatabaseSync {
   addColumn('memories', 'project_id', 'TEXT');
   addColumn('runs', 'detail', 'TEXT');
   addColumn('runs', 'task', 'TEXT');
+  addColumn('runs', 'author', 'TEXT');
   addColumn('conversations', 'agent_id', 'TEXT');
   // v0.6: attachments + who wrote a message (online sessions)
   addColumn('messages', 'attachments', 'TEXT');

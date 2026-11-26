@@ -244,7 +244,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     req.onActivity?.('Making files for this answer');
   }
   // "@Team do X" where Team runs itself: the lead takes over, the answer is its live board
-  const squad = !planning && !req.hands && !author ? squadFor(message) : null;
+  const squad = !planning && !req.hands && (!author || !!conv.project_id) ? squadFor(message) : null;
   if (squad) {
     const board = startSquad(conv.id, squad.id, message.replace(new RegExp('@' + squad.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i'), '').trim() || message, message);
     req.onDelta?.(board.content);

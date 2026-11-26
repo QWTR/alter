@@ -72,6 +72,8 @@ export interface Run {
   detail: string | null;
   /** What the agent was asked to do on this run (its task from the lead, or the user's). */
   task?: string | null;
+  /** Who wrote the task in the agent's chat (the owner or a workspace member); null for the team / schedule. */
+  author?: string | null;
   started_at: string;
   finished_at: string | null;
 }
@@ -343,7 +345,12 @@ export function stopAgent(id: string): boolean {
   return true;
 }
 
-export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'monitor' | 'team' = 'manual', context = '', task?: string, mcp?: { name: string; url: string }[]): Promise<Run> {
+/** Set by team.ts (no import cycle): gives an agent that is on a team the "alter_team" tool for this run. */
+type TeamHook = (agent: Agent, signal: AbortSignal) => { mcp: { name: string; url: string }; guide: string; close: () => void } | null;
+let teamHook: TeamHook | null = null;
+export const setTeamHook = (h: TeamHook) => { teamHook = h; };
+
+export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'monitor' | 'team' = 'manual', context = '', task?: string, mcp?: { name: string; url: string }[], author?: string): Promise<Run> {
   const agent = getAgent(id);
   if (!agent) throw new Error('Agent not found');
   if (running.has(id)) throw new Error(`${agent.name} is already running`);
@@ -353,19 +360,23 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
   setAgentStatus(id, 'working', task ? task.replace(/\s+/g, ' ') : trigger === 'monitor' ? 'checking an alert' : 'running its task');
 
   const runId = randomUUID();
-  run('INSERT INTO runs (id, agent_id, status, trigger, task, started_at) VALUES (?, ?, ?, ?, ?, ?)', runId, id, 'running', trigger, task ?? null, now());
+  run('INSERT INTO runs (id, agent_id, status, trigger, task, author, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)', runId, id, 'running', trigger, task ?? null, author ?? null, now());
   emit('run.started', { id: runId, agentId: id, agent_name: agent.name, agent_avatar: agent.avatar });
   const steps: string[] = [];
+  // an agent on a team gets the team tool: it can ask / hand work to its teammates and get their answers
+  const team = !mcp && teamHook ? teamHook(agent, ctrl.signal) : null;
 
   try {
     const provider = await resolveProvider(agent.provider, { avoidLimited: true });
     const project = getProject(agent.projectId);
     run('UPDATE runs SET provider = ? WHERE id = ?', provider.id, runId);
 
-    const previous = listRuns({ agentId: id, limit: 4 })
-      .filter((r) => r.status === 'done' && r.output)
-      .slice(0, 3)
-      .map((r) => `### ${new Date(r.started_at).toLocaleString()}\n${r.output!.slice(0, 1500)}`)
+    // the last few turns of its chat: who asked what, and what it answered (so it keeps the thread and knows who is who)
+    const previous = listRuns({ agentId: id, limit: 6 })
+      .filter((r) => r.id !== runId && r.status === 'done' && r.output)
+      .slice(0, 4)
+      .reverse()
+      .map((r) => `### ${new Date(r.started_at).toLocaleString()}${r.task ? ` — ${r.author ? `${r.author} wrote` : r.trigger === 'team' ? 'task from the team' : 'task'}: ${r.task.replace(/\s+/g, ' ').slice(0, 400)}` : ''}\n${r.output!.slice(0, 1500)}`)
       .join('\n\n');
     const skills = skillsText(agent.skills);
     const accessNote =
@@ -380,7 +391,7 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
       asTask: true,
       project,
       instructions: `You are "${agent.name}", an agent inside ALTTER. ${agent.description}${task ? `\nYour role: ${agent.instructions}` : ''}\n${accessNote}${skills ? `\n\n${skills}` : ''}`,
-      extra: [context, calendar, pluginsGuide(), RICH_GUIDE, previous ? `## Your previous runs (build on them, don't repeat them)\n${previous}` : ''].filter(Boolean).join('\n\n'),
+      extra: [context, team?.guide ?? '', calendar, pluginsGuide(), RICH_GUIDE, previous ? `## Your previous runs (build on them, don't repeat them)\n${previous}` : ''].filter(Boolean).join('\n\n'),
       activityHours: 36,
     });
 
@@ -393,7 +404,7 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
       tools: [...agent.tools, ...pluginTools()],
       cwd: project?.folder,
       fileDirs: projectDirs(project),
-      mcp: [...(mcp ?? []), ...pluginServers()],
+      mcp: [...(mcp ?? []), ...(team ? [team.mcp] : []), ...pluginServers()],
       timeoutMs: 0, // no time limit: long jobs (Unity, Blender) run to the end; Stop ends them
       signal: ctrl.signal,
       onActivity: (step) => {
@@ -407,7 +418,7 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
     logActivity('agent', `${agent.name} finished: ${text.replace(/\s+/g, ' ').slice(0, 140)}`, runId);
     if (trigger === 'monitor') postAlert(agent, { kind: 'report', message: text }).catch(() => {});
     else if (agent.notify && trigger === 'schedule')
-      notifyPhones({ title: agent.name, body: text.replace(/[#*`>_]/g, '').replace(/s+/g, ' ').trim().slice(0, 300), url: `/agents/${id}`, tag: `run-${id}` }).catch(() => {});
+      notifyPhones({ title: agent.name, body: text.replace(/[#*`>_]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300), url: `/agents/${id}`, tag: `run-${id}` }).catch(() => {});
     if (agent.learns) learnFrom(`Agent "${agent.name}" task: ${agent.instructions}\n\nResult:\n${text}`, `agent:${id}`, agent.projectId);
   } catch (err) {
     const msg = ctrl.signal.aborted ? 'Stopped' : err instanceof Error ? err.message : String(err);
@@ -415,6 +426,7 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
     logActivity('agent', `${agent.name} failed: ${msg.slice(0, 140)}`, runId);
     if (!ctrl.signal.aborted && (trigger === 'monitor' || agent.notify)) postAlert(agent, { kind: 'error', message: msg }).catch(() => {});
   } finally {
+    team?.close();
     running.delete(id);
     aborts.delete(id);
     setAgentStatus(id, 'idle', task ? task.replace(/\s+/g, ' ') : '');

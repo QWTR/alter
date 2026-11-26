@@ -511,6 +511,9 @@ route('GET', '/api/ws/agents', ({ auth, url }) => {
   });
 }, { guest: true });
 // everyone in the workspace manages its agents: open one (its tasks and answers), change it, give it a job, stop it, delete
+/** Tells the agent who is writing to it (the owner of this ALTTER or a workspace member), so it addresses the right person. */
+const whoNote = (name: string, owner: boolean) => `## Who is writing to you
+${name} wrote this message in your chat (${owner ? 'the owner of this ALTTER, who decides' : 'a member of the workspace, invited by the owner'}). Address them by name; when the owner and a member disagree, the owner decides.`;
 const wsAgent = (auth: Auth, url: URL, id: string) => {
   const a = getAgent(id);
   // a member may reach any agent of their workspaces (a team board in a chat doesn't know the ?project)
@@ -541,7 +544,9 @@ route('POST', '/api/ws/agents/:id/run', ({ auth, url, params, body }) => {
   const { p, a } = wsAgent(auth, url, params[0]);
   if (isRunning(a.id)) throw new HttpError(409, `${a.name} is already working`);
   const task = typeof body?.task === 'string' && body.task.trim() ? body.task.trim().slice(0, 8000) : undefined;
-  runAgent(a.id, 'manual', '', task).catch(() => {});
+  const who = wsActor(auth).name;
+  const owner = !(isGuest(auth) && auth.member);
+  runAgent(a.id, 'manual', whoNote(who, owner), task, undefined, who).catch(() => {});
   wsLog(p.id, wsActor(auth), 'agent.run', a.name, a.id);
   return { started: true };
 }, { guest: true });
@@ -1029,7 +1034,8 @@ route('POST', '/api/agents/:id/run', ({ params, body }) => {
   if (isRunning(params[0])) throw new HttpError(409, `${a!.name} is already working`);
   // a task written in the agent's chat ("now also do X"); without one it does its standing job
   const task = typeof body?.task === 'string' && body.task.trim() ? body.task.trim().slice(0, 8000) : undefined;
-  runAgent(params[0], 'manual', '', task).catch(() => {});
+  const who = ownerActor().name;
+  runAgent(params[0], 'manual', whoNote(who, true), task, undefined, who).catch(() => {});
   return { started: true };
 });
 route('POST', '/api/agents/:id/stop', ({ params }) => ({ stopped: stopAgent(params[0]) }));
