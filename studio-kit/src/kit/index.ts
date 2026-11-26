@@ -7,3 +7,4 @@ export * from './three';
 export * from './world';
 export * from './chaos';
 export { AbsoluteFill, Img, OffthreadVideo, Audio, Sequence, useCurrentFrame, useVideoConfig, interpolate, spring, staticFile } from 'remotion';
+export * from './styles';

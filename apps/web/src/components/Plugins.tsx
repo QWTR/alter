@@ -1,11 +1,12 @@
 // Settings → Plugins: a marketplace of MCP servers (Higgsfield, Figma, Blender, a real browser…) + your own.
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  AudioLines, BookOpen, Box, Briefcase, Bug, Calendar, Check, Clapperboard, CreditCard, Database, FileText, Flame, FolderOpen, GitBranch, Globe, HardDrive,
+  AudioLines, BookOpen, Box, Briefcase, Bug, Calendar, Check, Clapperboard, Film, CreditCard, Database, FileText, Flame, FolderOpen, GitBranch, Globe, HardDrive,
   Headphones, Kanban, KeyRound, LayoutGrid, Lightbulb, ListChecks, ListTree, LogIn, Mail, Megaphone, MessagesSquare, Mic, NotebookPen, Palette, PenTool,
   Plus, Presentation, Puzzle, Search, Server, Shapes, Sparkles, Store, Table, Trash2, Users, Video, Workflow, Zap, Receipt, Truck, ShoppingCart, MessageCircle, Send, UserCheck, FileCheck, Calculator, type LucideIcon,
 } from 'lucide-react';
 import { CalendarsCard } from './Calendars';
+import { ConnectKeyForm } from './ConnectKey';
 import { useEffect, useState } from 'react';
 import { api, invalidate, setCached, useData } from '../api';
 import { useT, type Key } from '../i18n';
@@ -14,13 +15,13 @@ import { Field, Modal, ModalHead, Switch, spring, stagger, toast } from './ui';
 
 interface CatalogEntry {
   id: string; title: string; category: string; icon: string; color: string; description: string; homepage: string;
-  transport: 'http' | 'stdio'; oauth?: boolean; login?: string[]; needs?: string; popular?: boolean;
+  transport: 'http' | 'stdio' | 'native'; oauth?: boolean; login?: string[]; needs?: string; popular?: boolean; keyUrl?: string; steps?: string[];
   keys?: { name: string; label: string; help?: string }[];
 }
-interface Installed { id: string; name: string; title: string; catalogId?: string; transport: 'http' | 'stdio'; url?: string; command?: string; args?: string[]; oauth?: boolean; enabled: boolean }
+interface Installed { id: string; name: string; title: string; catalogId?: string; transport: 'http' | 'stdio' | 'native'; url?: string; command?: string; args?: string[]; oauth?: boolean; enabled: boolean }
 
 const ICONS: Record<string, LucideIcon> = {
-  AudioLines, BookOpen, Box, Briefcase, Bug, Calendar, Clapperboard, CreditCard, Database, FileText, Flame, FolderOpen, GitBranch, Globe, HardDrive, Headphones,
+  AudioLines, BookOpen, Box, Briefcase, Bug, Calendar, Clapperboard, CreditCard, Database, FileText, Film, Flame, FolderOpen, GitBranch, Globe, HardDrive, Headphones,
   Kanban, LayoutGrid, ListChecks, ListTree, Mail, Megaphone, MessagesSquare, Mic, NotebookPen, Palette, PenTool, Presentation, Server, Shapes, Store, Table, Users, Video, Workflow, Zap,
   Receipt, Truck, ShoppingCart, MessageCircle, Send, UserCheck, FileCheck, Calculator,
 };
@@ -148,8 +149,9 @@ export function PluginsTab() {
                         <b>{p.title}</b>
                         <StatusChip s={status?.status[p.id]} />
                       </div>
-                      <div className="small faint truncate">{status?.status[p.id]?.detail && status.status[p.id].state !== 'ok' ? status.status[p.id].detail : p.transport === 'http' ? p.url : [p.command, ...(p.args ?? [])].join(' ')}</div>
+                      <div className="small faint truncate">{status?.status[p.id]?.detail && status.status[p.id].state !== 'ok' ? status.status[p.id].detail : p.transport === 'native' ? t('plugins.builtIn') : p.transport === 'http' ? p.url : [p.command, ...(p.args ?? [])].join(' ')}</div>
                     </div>
+                    {p.transport === 'native' && c && <button className="btn sm" onClick={() => setKeysFor(c)}><KeyRound size={14} />{t('plugins.changeKey')}</button>}
                     {(p.oauth || c?.login) && <button className={`btn sm${status?.status[p.id]?.state === 'login' ? ' primary' : ''}`} onClick={() => login(p)} title={t('plugins.loginTitle')}><LogIn size={14} />{t('plugins.login')}</button>}
                     <button className={`btn sm ghost${howOpen === p.id ? ' on' : ''}`} onClick={() => setHowOpen(howOpen === p.id ? null : p.id)}><Lightbulb size={14} />{t('plugins.howTo')}</button>
                     <Switch on={p.enabled} onChange={(v) => toggle(p, v)} label={p.title} />
@@ -189,7 +191,7 @@ export function PluginsTab() {
                       <b>{c.title}</b>
                       {c.popular && <span className="badge accent"><Sparkles size={11} />{t('plugins.popular')}</span>}
                     </div>
-                    <div className="small faint">{c.oauth || c.login ? t('plugins.viaLogin') : c.keys?.length ? t('plugins.viaKey') : c.transport === 'stdio' ? t('plugins.local') : t('plugins.online')}</div>
+                    <div className="small faint">{c.oauth || c.login ? t('plugins.viaLogin') : c.transport === 'native' ? t('plugins.viaKeyBuiltIn') : c.keys?.length ? t('plugins.viaKey') : c.transport === 'stdio' ? t('plugins.local') : t('plugins.online')}</div>
                   </div>
                 </div>
                 <p className="small muted plug-desc">{desc(c)}</p>
@@ -211,7 +213,7 @@ export function PluginsTab() {
         </div>
       </section>
 
-      <KeysModal entry={keysFor} busy={!!busy} onClose={() => setKeysFor(null)} onSave={(k) => keysFor && install(keysFor, k)} />
+      <KeysModal key={keysFor?.id ?? 'none'} entry={keysFor} busy={!!busy} onClose={() => setKeysFor(null)} onSave={(k) => keysFor && install(keysFor, k)} />
       <CustomModal open={custom} onClose={() => setCustom(false)} onDone={refresh} />
     </div>
   );
@@ -224,7 +226,8 @@ function KeysModal({ entry, busy, onClose, onSave }: { entry: CatalogEntry | nul
     <Modal open={!!entry} onClose={onClose}>
       {entry && (
         <>
-          <ModalHead icon={<KeyRound />} title={t('plugins.keysTitle', { name: entry.title })} text={t('plugins.keysText')} onClose={onClose} />
+          <ModalHead icon={<KeyRound />} title={t('plugins.keysTitle', { name: entry.title })} text={entry.steps ? t('plugins.keysLead') : t('plugins.keysText')} onClose={onClose} />
+          {entry.steps ? <ConnectKeyForm key={entry.id} entry={entry} onDone={onClose} /> : <>
           {entry.keys?.map((k) => (
             <Field key={k.name} label={k.label} hint={k.help}>
               <input className="input" type="password" autoComplete="off" value={vals[k.name] ?? ''} onChange={(e) => setVals((v) => ({ ...v, [k.name]: e.target.value }))} />
@@ -234,6 +237,7 @@ function KeysModal({ entry, busy, onClose, onSave }: { entry: CatalogEntry | nul
             <button className="btn" onClick={onClose}>{t('common.cancel')}</button>
             <button className="btn primary" disabled={busy || entry.keys?.some((k) => !vals[k.name]?.trim())} onClick={() => onSave(vals)}>{t('plugins.install')}</button>
           </div>
+          </>}
         </>
       )}
     </Modal>

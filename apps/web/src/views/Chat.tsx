@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
+import { ConnectCard } from '../components/ConnectKey';
 import { ArrowDown, ArrowUp, AudioLines, Mic, Crosshair, ListChecks, Undo2, WandSparkles, Eye, FileText, Film, FolderKanban, Menu, MessageCircle, MonitorPlay, Music, Paperclip, Plus, Search, Settings2, Square, Terminal, Trash2, Upload, Wrench, X, Clock, CornerDownRight, Copy, Check, RotateCcw, Pencil, ShieldCheck, Zap } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -831,6 +832,7 @@ export function ChatView() {
                 <Bubble key={m.id} m={m} userInitial={userInitial} agent={agent} onPreview={openPreview} conversationId={conv?.id}
                   onNeedsFull={host && asked && !busy && access !== 'full' ? async () => { setAccess('full'); await api(`/api/conversations/${routeId}/messages/from/${asked.id}`, { method: 'DELETE' }).catch(() => {}); void send(asked.content, undefined, { access: 'full', attachments: [] }); } : undefined}
                   onRetry={host && asked && !busy ? async () => { await api(`/api/conversations/${routeId}/messages/from/${asked.id}`, { method: 'DELETE' }).catch(() => {}); void send(asked.content); } : undefined}
+                  onSend={lastAnswer && host ? (text) => void send(text) : undefined}
                   onEdit={mine && !busy ? () => { setEditFrom(m.id); setInput(m.content); setTimeout(() => taRef.current?.focus(), 30); } : undefined} />
               );
             })}
@@ -1137,6 +1139,9 @@ function Attachments({ list }: { list: Attachment[] }) {
 
 const RANK: Record<Access, number> = { chat: 0, read: 1, full: 2 };
 const NEEDS_FULL = '[[altter:needs-full]]';
+/** [[altter:connect:elevenlabs]] = ALTTER asks to connect a built-in service; the card connects it in place. */
+const CONNECT_RE = /\[\[altter:connect:([a-z0-9-]+)\]\]/g;
+const stripMarkers = (s: string) => s.split(NEEDS_FULL).join('').replace(CONNECT_RE, '').trim();
 
 /** The AI needs tools this chat doesn't have: one click switches to Full control and asks again. */
 function NeedsFull({ onGo }: { onGo?: () => void }) {
@@ -1151,14 +1156,15 @@ function NeedsFull({ onGo }: { onGo?: () => void }) {
   );
 }
 
-function Bubble({ m, userInitial, animate, agent, onPreview, conversationId, onRetry, onEdit, onNeedsFull }: { m: Message; userInitial: string; animate?: boolean; agent?: Agent; onPreview?: (path: string) => void; conversationId?: string | null; onRetry?: () => void; onEdit?: () => void; onNeedsFull?: () => void }) {
+function Bubble({ m, userInitial, animate, agent, onPreview, conversationId, onRetry, onEdit, onNeedsFull, onSend }: { m: Message; userInitial: string; animate?: boolean; agent?: Agent; onPreview?: (path: string) => void; conversationId?: string | null; onRetry?: () => void; onEdit?: () => void; onNeedsFull?: () => void; onSend?: (text: string) => void }) {
   const t = useT();
   const pages = m.role === 'assistant' ? m.pages ?? [...new Set(m.content.match(PAGE_RE) ?? [])] : [];
   const files = m.attachments ?? [];
   // a placeholder text for file-only messages is not worth showing
   const onlyFiles = files.length > 0 && m.content === '(see the attached files)';
   const needsFull = m.role === 'assistant' && m.content.includes(NEEDS_FULL);
-  const shown = needsFull ? m.content.split(NEEDS_FULL).join('').trim() : m.content;
+  const connects = m.role === 'assistant' ? [...new Set([...m.content.matchAll(CONNECT_RE)].map((x) => x[1]))] : [];
+  const shown = needsFull || connects.length ? stripMarkers(m.content) : m.content;
   return (
     <motion.div className={`msg ${m.role}`} data-anchor={`m${m.id}`} initial={animate ? { opacity: 0, y: 8 } : false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease }}>
       {m.role === 'user' ? (
@@ -1172,6 +1178,7 @@ function Bubble({ m, userInitial, animate, agent, onPreview, conversationId, onR
         {files.length > 0 && <Attachments list={files} />}
         {m.role === 'user' ? !onlyFiles && <UserText content={m.content} /> : <AnswerWithProposals text={shown} m={m} conversationId={conversationId} />}
         {needsFull && <NeedsFull onGo={onNeedsFull} />}
+        {connects.map((id) => <ConnectCard key={id} id={id} onContinue={onSend} />)}
         {m.media && m.media.length > 0 && <MediaResults list={m.media} />}
         {onPreview && pages.length > 0 && (
           <div className="row" style={{ gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
@@ -1220,7 +1227,7 @@ function LiveAnswer({ text, followUps, onSendNow }: { text: string; followUps: {
     <>
       {parts.map((p, i) =>
         p.kind === 'text' ? (
-          <AnswerWithProposals key={i} text={p.text.split(NEEDS_FULL).join('')} />
+          <AnswerWithProposals key={i} text={stripMarkers(p.text)} />
         ) : (
           <motion.div key={i} className="followup-chip" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2 }}>
             <CornerDownRight size={14} />

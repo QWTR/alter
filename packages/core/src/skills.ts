@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { userSkillsDir } from './config.ts';
+import { HOME, userSkillsDir } from './config.ts';
 
 /**
  * Skills ("nakładki") are Markdown instruction packs an agent can wear:
@@ -19,6 +19,9 @@ export interface Skill {
 
 const builtInDir = process.env.ALTER_SKILLS_DIR ?? resolve(import.meta.dirname, '../../../skills');
 
+/** Paths a skill can name: {{SKILLS}} (the built-in skills folder, with tools/ and vendor/) and {{DATA}} (ALTTER's data folder). */
+const fill = (body: string) => body.replaceAll('{{SKILLS}}', builtInDir.replace(/\\/g, '/')).replaceAll('{{DATA}}', HOME.replace(/\\/g, '/'));
+
 function parse(id: string, raw: string, builtIn: boolean): Skill {
   const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   const meta: Record<string, string> = {};
@@ -28,7 +31,7 @@ function parse(id: string, raw: string, builtIn: boolean): Skill {
       if (kv) meta[kv[1]] = kv[2].trim();
     }
   }
-  return { id, name: meta.name ?? id, description: meta.description ?? '', body: (m ? m[2] : raw).trim(), builtIn, triggers: meta.triggers || undefined };
+  return { id, name: meta.name ?? id, description: meta.description ?? '', body: fill((m ? m[2] : raw).trim()), builtIn, triggers: meta.triggers || undefined };
 }
 
 export function listSkills(): Skill[] {

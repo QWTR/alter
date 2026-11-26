@@ -28,7 +28,7 @@ import { closeHands, HANDS_GUIDE, HANDS_NEEDS_FULL, handsEnabled, handsMcpUrl, o
 import { listeningPort } from './pairing.ts';
 import { TRAVEL_GUIDE, wantsTravel } from './travel.ts';
 import { isPlanApproval, PLAN_APPROVED_GUIDE, PLAN_GUIDE, wantsPlan } from './plans.ts';
-import { chaosEditGuide, CREATIVE_NEEDS_FULL, creativeEngine, ensureStudio, reelCoachGuide, renderProgress, storyReelGuide, studioDir, wantsChaosEdit, wantsCreative, wantsReelHowTo, wantsStoryReel } from './studio.ts';
+import { chaosEditGuide, CREATIVE_NEEDS_FULL, creativeEngine, ensureStudio, reelCoachGuide, renderProgress, storyReelGuide, studioDir, styleGuide, wantsChaosEdit, wantsCreative, wantsReelHowTo, wantsStoryReel, wantsStyles } from './studio.ts';
 import { describeAttachments, getUpload, uploadsDir, type Attachment } from './uploads.ts';
 import { inboxFor } from './followups.ts';
 import { FILES_GUIDE, RICH_GUIDE } from './rich.ts';
@@ -252,7 +252,8 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
   }
   const chaosEdit = wantsChaosEdit(message, history, files.some((f) => /^video\//.test(f.type) || /\.(mp4|mov|m4v|webm|mkv)$/i.test(f.name)));
   const storyReel = !chaosEdit && wantsStoryReel(message, history);
-  const creative = chaosEdit || storyReel || wantsCreative(message, history);
+  const styles = !planning && wantsStyles(message, history);
+  const creative = chaosEdit || storyReel || styles || wantsCreative(message, history);
   let studioReady = false;
   if (creative) shareMediaKeys();
   if (creative && conv.access === 'full' && !planning) {
@@ -280,6 +281,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     creative ? (studioReady ? creativeEngine() : conv.access === 'full' ? '' : CREATIVE_NEEDS_FULL) : '',
     storyReel ? storyReelGuide() : '',
     chaosEdit ? chaosEditGuide() : '',
+    styles && studioReady ? styleGuide() : '',
     !planning && wantsReelHowTo(message, history) ? reelCoachGuide() : '',
     !agent && wantsAutomation(message, history) ? AUTOMATION_GUIDE : '',
     wantsSetup(message, history) ? SETUP_GUIDE : '',

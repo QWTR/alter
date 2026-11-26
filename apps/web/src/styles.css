@@ -2087,3 +2087,14 @@ html, body, #root { overflow-x: clip; }
 .update-bar { height: 4px; border-radius: 4px; background: color-mix(in srgb, var(--text) 10%, transparent); margin-top: 10px; overflow: hidden; }
 .update-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .4s ease; }
 @media (prefers-reduced-motion: reduce) { .update-bar i { transition: none; } }
+
+/* ---------- connect a built-in service with a key (settings + chat card) ---------- */
+.connect-form { display: grid; gap: 10px; }
+.connect-form .btn[href] { justify-self: start; }
+.connect-steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13.5px; color: var(--text-2, var(--text)); }
+.connect-card { margin-top: 10px; padding: 12px 14px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.connect-card .connect-form { margin-top: 10px; }
+.connect-ic { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; flex: none; }
+.connect-card .ok-ic { color: var(--ok, #22c55e); }
+
+.connect-error { margin: 2px 0 0; color: var(--danger); background: var(--danger-soft); border-radius: 8px; padding: 8px 10px; line-height: 1.4; }

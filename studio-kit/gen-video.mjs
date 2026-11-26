@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // AI video clips for edits: animate a still (usually a frame from the user's video edited by gen-image --from).
 //   node gen-video.mjs "<what happens, the motion>" --from still.png [--last end.png] [--seconds 5] [--aspect 9:16] [--out assets/fx1.mp4]
-// Needs a video AI key (set in ALTTER → Media → Keys): Google Gemini (Omni Flash video) or fal.ai (Kling).
-// Without one it exits with NO_VIDEO_AI (code 3); a key whose project has no billing/credits → NO_VIDEO_BILLING.
+// Video AIs (first that is connected): Higgsfield API (Seedance 2.0 / Kling 3), fal.ai (Seedance 2.0, Kling 3, Veo 3.1),
+// Google Gemini key (Omni Flash). Keys: Settings → Plugins (Higgsfield, fal.ai) or Media → Keys (Gemini, fal).
+// --via higgsfield|seedance|kling|veo|gemini picks one; --model kling with --via higgsfield uses Kling 3.
+// Without any: NO_VIDEO_AI (code 3); an empty balance: NO_VIDEO_BILLING.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { request as httpsRequest } from 'node:https';
@@ -17,12 +19,13 @@ for (let i = 0; i < argv.length; i++) {
 const what = words.join(' ').trim();
 const from = typeof opt.from === 'string' ? resolve(opt.from) : null;
 if (!what || opt.help) {
-  console.log('Usage: node gen-video.mjs "<motion>" --from still.png [--seconds 5] [--aspect 9:16|16:9|1:1] [--via gemini|kling] [--out file.mp4]');
+  console.log('Usage: node gen-video.mjs "<motion>" --from still.png [--seconds 5] [--aspect 9:16|16:9|1:1] [--via higgsfield|seedance|kling|veo|gemini] [--model kling] [--out file.mp4]');
   process.exit(what ? 0 : 1);
 }
 if (from && !existsSync(from)) { console.error(`--from: file not found (${from})`); process.exit(2); }
-const aspect = ['9:16', '16:9', '1:1'].includes(opt.aspect) ? opt.aspect : '9:16';
-const seconds = Math.max(3, Math.min(10, Number(opt.seconds) || 5));
+const FORMAT_ASPECT = { reel: '9:16', story: '9:16', wide: '16:9', thumb: '16:9', square: '1:1', post: '1:1' };
+const aspect = ['9:16', '16:9', '1:1'].includes(opt.aspect) ? opt.aspect : FORMAT_ASPECT[opt.format] ?? '9:16';
+const seconds = Math.max(3, Math.min(15, Number(opt.seconds) || 5));
 const out = resolve(typeof opt.out === 'string' ? opt.out : `assets/clip-${Date.now()}.mp4`);
 const prompt = `${what}. Keep the same people, place and camera as the starting image; realistic physics and motion, cinematic VFX, no text.`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -88,39 +91,134 @@ async function omni() {
   throw new Error(`Gemini returned no video${said ? ` ("${said}")` : ' (maybe blocked by its safety filter — soften the prompt)'}`);
 }
 
-async function kling() {
-  const model = process.env.ALTER_KLING_MODEL || (img ? 'fal-ai/kling-video/v2.1/standard/image-to-video' : 'fal-ai/kling-video/v2.1/standard/text-to-video');
-  const auth = { authorization: `Key ${fal}`, 'content-type': 'application/json' };
-  const input = { prompt, duration: seconds > 7 ? '10' : '5', aspect_ratio: aspect };
-  if (img) input.image_url = `data:${img.mime};base64,${img.b64}`;
-  if (last) input.tail_image_url = `data:${last.mime};base64,${last.b64}`;
-  const sub = await (await fetch(`https://queue.fal.run/${model}`, { method: 'POST', headers: auth, body: JSON.stringify(input) })).json();
-  if (!sub.request_id) throw new Error(`fal: ${JSON.stringify(sub).slice(0, 200)}`);
-  const statusUrl = sub.status_url ?? `https://queue.fal.run/${model}/requests/${sub.request_id}/status`;
-  const resultUrl = sub.response_url ?? `https://queue.fal.run/${model}/requests/${sub.request_id}`;
-  const deadline = Date.now() + 12 * 60_000;
-  for (;;) {
-    await sleep(5000);
-    const st = await (await fetch(statusUrl, { headers: auth })).json();
-    if (st.status === 'COMPLETED') break;
-    if (st.status === 'FAILED' || st.error) throw new Error(`fal: ${st.error ?? 'failed'}`);
-    if (Date.now() > deadline) throw new Error('fal: still not done after 12 min');
-  }
-  const res = await (await fetch(resultUrl, { headers: auth })).json();
-  const url = res.video?.url;
-  if (!url) throw new Error('fal returned no video');
-  return save(Buffer.from(await (await fetch(url)).arrayBuffer()));
+// ---------- Higgsfield API (Settings → Plugins → Higgsfield: Key ID + Secret) ----------
+const higgs = process.env.ALTER_HIGGSFIELD_KEY; // "<id>:<secret>"
+const HF = 'https://api.higgsfield.ai';
+const hfAuth = () => ({ authorization: `Key ${higgs}`, 'content-type': 'application/json' });
+const billing = (msg) => /balance|credit|insufficient|payment|402|quota/i.test(msg);
+
+async function hfUpload(file, mime) {
+  const r = await fetch(`${HF}/files/generate-upload-url`, { method: 'POST', headers: hfAuth(), body: JSON.stringify({ content_type: mime }) });
+  if (!r.ok) throw new Error(`Higgsfield upload: HTTP ${r.status} ${(await r.text()).slice(0, 160)}`);
+  const u = await r.json();
+  const put = await fetch(u.upload_url, { method: 'PUT', headers: u.upload_headers ?? { 'content-type': mime }, body: readFileSync(file) });
+  if (!put.ok) throw new Error(`Higgsfield upload PUT: HTTP ${put.status}`);
+  return u.public_url;
 }
 
+async function higgsfield() {
+  const kling3 = /kling/i.test(String(opt.model ?? ''));
+  const dur = Math.max(kling3 ? 3 : 4, Math.min(15, Math.round(seconds)));
+  let path, input;
+  if (from) {
+    const url = await hfUpload(from, img.mime);
+    const end = lastPath && last ? await hfUpload(lastPath, last.mime) : undefined;
+    path = kling3 ? '/kling-video/v3.0/std/image-to-video' : '/bytedance/seedance-2.0/image-to-video';
+    input = kling3
+      ? { prompt, image_url: url, ...(end ? { last_image_url: end } : {}), duration: dur, sound: 'on' }
+      : { prompt, image_url: url, ...(end ? { end_image_url: end } : {}), duration: dur, resolution: '720p', generate_audio: true };
+  } else {
+    path = '/bytedance/seedance-2.0/text-to-video';
+    input = { prompt, duration: dur, resolution: '720p', aspect_ratio: aspect, generate_audio: true };
+  }
+  const sub = await fetch(`${HF}${path}`, { method: 'POST', headers: { ...hfAuth(), 'idempotency-key': `altter-${Date.now()}-${Math.random().toString(36).slice(2)}` }, body: JSON.stringify(input) });
+  const subText = await sub.text();
+  if (!sub.ok) {
+    if (sub.status === 402 || billing(subText)) throw new Error(`NO_VIDEO_BILLING: Higgsfield API balance is empty — add credits at console.higgsfield.ai (Billing). ${subText.slice(0, 160)}`);
+    throw new Error(`Higgsfield: HTTP ${sub.status} ${subText.slice(0, 200)}`);
+  }
+  const job = JSON.parse(subText);
+  const statusUrl = job.status_url ?? `${HF}/requests/${job.request_id}/status`;
+  const deadline = Date.now() + 15 * 60_000;
+  let wait = 2000;
+  for (;;) {
+    await sleep(wait + Math.random() * 500);
+    wait = Math.min(10_000, wait * 1.5);
+    const r = await fetch(statusUrl, { headers: hfAuth() });
+    if (r.status >= 500) continue;
+    const st = await r.json();
+    if (st.status === 'completed') {
+      const url = st.video?.url ?? st.output?.video?.url;
+      if (!url) throw new Error('Higgsfield returned no video');
+      return save(Buffer.from(await (await fetch(url)).arrayBuffer()));
+    }
+    if (st.status === 'nsfw') throw new Error('Higgsfield moderation refused this clip — soften the prompt (no injuries, weapons, real people in danger)');
+    if (st.status === 'failed' || st.status === 'canceled') throw new Error(`Higgsfield: ${st.error ?? st.status}`);
+    if (Date.now() > deadline) throw new Error('Higgsfield: still not done after 15 min');
+  }
+}
+
+// ---------- fal.ai models (Settings → Plugins → fal.ai, or Media → Keys) ----------
+async function falUpload(file, mime) {
+  try {
+    const r = await fetch('https://rest.alpha.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3', { method: 'POST', headers: { authorization: `Key ${fal}`, 'content-type': 'application/json' }, body: JSON.stringify({ content_type: mime, file_name: file.split(/[\\/]/).pop() }) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const u = await r.json();
+    const put = await fetch(u.upload_url, { method: 'PUT', headers: { 'content-type': mime }, body: readFileSync(file) });
+    if (!put.ok) throw new Error(`PUT ${put.status}`);
+    return u.file_url;
+  } catch {
+    return `data:${mime};base64,${readFileSync(file).toString('base64')}`; // most fal models accept data URIs too
+  }
+}
+
+const FAL_MODELS = {
+  seedance: { i2v: 'bytedance/seedance-2.0/image-to-video', t2v: 'bytedance/seedance-2.0/text-to-video', img: 'image_url', end: 'end_image_url', dur: (s) => String(Math.max(4, Math.min(15, Math.round(s)))), extra: () => ({ resolution: '720p', aspect_ratio: aspect, generate_audio: true }) },
+  kling: { i2v: 'fal-ai/kling-video/v3/pro/image-to-video', t2v: 'fal-ai/kling-video/v3/pro/text-to-video', img: 'start_image_url', end: 'end_image_url', dur: (s) => String(Math.max(3, Math.min(15, Math.round(s)))), extra: () => ({ generate_audio: true }) },
+  veo: { i2v: 'fal-ai/veo3.1/fast/image-to-video', t2v: 'fal-ai/veo3.1/fast', img: 'image_url', end: null, dur: (s) => (s <= 5 ? '4s' : s <= 7 ? '6s' : '8s'), extra: () => ({ aspect_ratio: aspect === '1:1' ? '9:16' : aspect, resolution: '720p', generate_audio: true }) },
+};
+
+function falModel(name) {
+  return async () => {
+    const m = FAL_MODELS[name];
+    const model = from ? m.i2v : m.t2v;
+    const auth = { authorization: `Key ${fal}`, 'content-type': 'application/json' };
+    const input = { prompt, duration: m.dur(seconds), ...m.extra() };
+    if (from) input[m.img] = await falUpload(from, img.mime);
+    if (from && last && m.end) input[m.end] = await falUpload(lastPath, last.mime);
+    const r = await fetch(`https://queue.fal.run/${model}`, { method: 'POST', headers: auth, body: JSON.stringify(input) });
+    const text = await r.text();
+    if (!r.ok) {
+      if (r.status === 402 || r.status === 403 || billing(text)) throw new Error(`NO_VIDEO_BILLING: fal.ai balance is empty — add credits at fal.ai/dashboard/billing. ${text.slice(0, 160)}`);
+      throw new Error(`fal ${name}: HTTP ${r.status} ${text.slice(0, 200)}`);
+    }
+    const sub = JSON.parse(text);
+    const statusUrl = sub.status_url ?? `https://queue.fal.run/${model}/requests/${sub.request_id}/status`;
+    const resultUrl = sub.response_url ?? `https://queue.fal.run/${model}/requests/${sub.request_id}`;
+    const deadline = Date.now() + 15 * 60_000;
+    for (;;) {
+      await sleep(5000);
+      const st = await (await fetch(statusUrl, { headers: auth })).json();
+      if (st.status === 'COMPLETED') { if (st.error) throw new Error(`fal ${name}: ${st.error}`); break; }
+      if (st.status === 'FAILED' || st.error) throw new Error(`fal ${name}: ${st.error ?? 'failed'}`);
+      if (Date.now() > deadline) throw new Error(`fal ${name}: still not done after 15 min`);
+    }
+    const res = await (await fetch(resultUrl, { headers: auth })).json();
+    const url = res.video?.url;
+    if (!url) throw new Error(`fal ${name} returned no video${res.detail ? `: ${JSON.stringify(res.detail).slice(0, 200)}` : ''}`);
+    return save(Buffer.from(await (await fetch(url)).arrayBuffer()));
+  };
+}
+
+// --via picks one; without it: Higgsfield → fal Seedance 2.0 → Gemini Omni → fal Kling
+const via = typeof opt.via === 'string' ? opt.via.toLowerCase() : '';
 const order = [];
-if (google && (!opt.via || /^(veo|omni|gemini|google)$/.test(opt.via))) order.push(['Gemini Omni', omni]);
-if (fal && (!opt.via || opt.via === 'kling')) order.push(['Kling', kling]);
+if (higgs && (!via || via === 'higgsfield')) order.push([`Higgsfield ${/kling/i.test(String(opt.model ?? '')) ? 'Kling 3' : 'Seedance 2.0'}`, higgsfield]);
+if (fal && (!via || via === 'seedance' || via === 'fal')) order.push(['Seedance 2.0 (fal)', falModel('seedance')]);
+if (google && (!via || /^(omni|gemini|google)$/.test(via))) order.push(['Gemini Omni', omni]);
+if (fal && (via === 'kling' || (!via && !order.length))) order.push(['Kling 3 (fal)', falModel('kling')]);
+if (fal && via === 'veo') order.push(['Veo 3.1 Fast (fal)', falModel('veo')]);
 if (!order.length) {
-  console.error('NO_VIDEO_AI: no video AI key yet. A Google Gemini key (Media → Keys; Google AI Pro/Ultra include monthly credits for it) or a fal.ai key makes the clips automatically. Never replace the clips with stills — follow the CHAOS EDIT fallback (Veo pack).');
+  console.error(via
+    ? `NO_VIDEO_AI: "${via}" needs its key — Higgsfield or fal.ai in Settings → Plugins (put [[altter:connect:${via === 'higgsfield' ? 'higgsfield' : 'fal'}]] in your answer), Gemini in Media → Keys.`
+    : 'NO_VIDEO_AI: no video AI connected. Options for the user: [[altter:connect:higgsfield]] (Seedance 2.0, Kling 3) or [[altter:connect:fal]] (Seedance 2.0, Kling 3, Veo 3.1) — or their own Gemini in the browser (CHAOS EDIT step 3A). Never replace the clips with stills.');
   process.exit(3);
 }
 console.log(`Animating ${from ? 'the still' : 'from text'} (${seconds} s, ${aspect}) with ${order[0][0]} — takes 1–5 min…`);
+// no process.exit after network calls: on Windows it can abort while sockets close (exit 127)
+let billingErr = null, done = false;
 for (const [name, fn] of order) {
-  try { console.log(`OUTPUT ${await fn()}  (${name})`); process.exit(0); } catch (e) { console.error(`  ${name}: ${e.message}`); }
+  try { console.log(`OUTPUT ${await fn()}  (${name})`); done = true; break; } catch (e) { console.error(`  ${name}: ${e.message}`); if (/NO_VIDEO_BILLING/.test(e.message)) billingErr = e.message; }
 }
-process.exit(1);
+if (!done && billingErr) console.error(billingErr.slice(0, 300));
+process.exitCode = done ? 0 : 1;

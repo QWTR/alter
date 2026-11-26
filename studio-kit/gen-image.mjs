@@ -30,6 +30,11 @@ const STYLES = {
   logo: 'simple flat vector logo mark, single centered symbol, solid colors, white background, minimal',
   sticker: 'die-cut sticker, thick white border, bold flat colors, cute, vector, centered',
 };
+// the style engine's animation styles (styles.json): --style clay|anime|pixel|comic|bricks…
+try {
+  const extra = JSON.parse(readFileSync(new URL('./styles.json', import.meta.url), 'utf8')).styles;
+  for (const x of extra) if (!STYLES[x.id] || ['3d', 'anime', 'flat', 'lowpoly'].includes(x.id)) STYLES[x.id] = x.image;
+} catch {}
 const FORMATS = { reel: [1080, 1920], story: [1080, 1920], square: [1080, 1080], post: [1080, 1350], wide: [1920, 1080], thumb: [1280, 720], banner: [1500, 500] };
 
 const argv = process.argv.slice(2);
@@ -55,7 +60,11 @@ const style = STYLES[opt.style];
 const refs = typeof opt.from === 'string' ? opt.from.split(',').map((p) => resolve(p.trim())).filter((p) => existsSync(p)) : [];
 if (typeof opt.from === 'string' && !refs.length) { console.error(`--from: file not found (${opt.from})`); process.exit(2); }
 const keep = 'Keep the same people (faces, bodies, clothes), the same place, the same camera angle, lens and lighting, so it looks like a frame from the same video; photorealistic. Change only this: ';
-const prompt = refs.length
+// --restyle: redraw the reference picture in the style (same scene, people, poses and framing; a new look)
+const restyle = refs.length && opt.restyle;
+const prompt = restyle
+  ? `Redraw this exact image as a new artwork: the same scene, the same people in the same poses and clothes, the same objects and the same camera framing and composition — only the visual style changes to: ${style ?? 'the requested style'}.${what ? ' ' + what : ''} Make it look like a frame from an animated film in that style. Composition: ${orient}. No text, letters or watermarks.`
+  : refs.length
   ? `${keep}${what}${style ? `. Style: ${style}` : ''}. Composition: ${orient}. No added text, letters or watermarks.`
   : `${what}${style ? `. Style: ${style}` : ''}. Composition: ${orient}. No text, letters, logos or watermarks in the image unless asked.`;
 const mimeOf = (p) => (/\.png$/i.test(p) ? 'image/png' : /\.webp$/i.test(p) ? 'image/webp' : 'image/jpeg');

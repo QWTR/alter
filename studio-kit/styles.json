@@ -1,0 +1,22 @@
+{
+  "_": "Animation styles for the style engine (style-preview.mjs, gen-image --style <id>, gen-video prompts). image = how a still looks; video = how it moves.",
+  "styles": [
+    { "id": "clay", "pl": "Plastelina (claymation)", "en": "Claymation", "image": "claymation stop-motion still, handmade plasticine characters with visible fingerprints and soft clay texture, miniature handcrafted set, warm practical lighting, shallow depth of field", "video": "stop-motion claymation animation, slightly jittery handmade motion, clay surfaces" },
+    { "id": "anime", "pl": "Anime", "en": "Anime", "image": "hand-painted Japanese anime film style, clean line art, soft cel shading, painterly detailed background, warm afternoon light", "video": "2D anime animation, smooth key-frame motion, cel shading, painted background" },
+    { "id": "pixel", "pl": "Pixel art", "en": "Pixel Art", "image": "16-bit pixel art, crisp square pixels, limited retro game palette, dithering, side-scroller game look", "video": "pixel art animation, sprite-like stepped motion, retro game" },
+    { "id": "flat", "pl": "Płaski wektor", "en": "Flat Vector", "image": "flat vector illustration, clean geometric shapes, limited soft palette, no gradients, modern explainer animation style", "video": "flat 2D motion graphics animation, smooth vector movement" },
+    { "id": "comic", "pl": "Komiks", "en": "Comic Book", "image": "comic book art, bold black ink outlines, halftone dots, cross-hatching, dramatic shadows, punchy pop colours", "video": "animated comic book, ink lines and halftone, dynamic panels feel" },
+    { "id": "3d", "pl": "Animacja 3D", "en": "3D Animation", "image": "3D animated feature film still, stylized expressive characters, soft global illumination, subsurface skin, cinematic lighting", "video": "3D animated feature film, smooth character animation, cinematic camera" },
+    { "id": "cartoon", "pl": "Kreskówka", "en": "Cartoon", "image": "2D TV cartoon, thick clean outlines, bright saturated flat colours, exaggerated simple shapes", "video": "2D cartoon animation, bouncy squash-and-stretch motion" },
+    { "id": "lowpoly", "pl": "Retro low-poly", "en": "Retro Low-Poly", "image": "retro low-poly 3D, faceted flat-shaded polygons, late-90s video game look, crisp edges, soft pastel light", "video": "low-poly 3D animation, retro game motion, flat-shaded" },
+    { "id": "storybook", "pl": "Ilustracja z bajki", "en": "Storybook", "image": "children's storybook illustration, soft watercolour and gouache, visible paper texture, gentle warm palette, whimsical", "video": "animated storybook illustration, gentle painterly motion" },
+    { "id": "bricks", "pl": "Klocki", "en": "Toy Bricks", "image": "plastic toy-brick world, minifigure-style character with blocky hands, glossy plastic, studs on every surface, macro toy photography", "video": "toy-brick stop-motion animation, plastic minifigure moves in small steps" },
+    { "id": "watercolor", "pl": "Akwarela", "en": "Watercolour", "image": "loose watercolour painting, soft washes bleeding into each other, white paper showing through", "video": "animated watercolour, paint washes flowing" },
+    { "id": "papercut", "pl": "Wycinanka", "en": "Paper Cut-out", "image": "layered paper cut-out craft, visible paper edges and soft drop shadows between layers, handmade diorama", "video": "paper cut-out stop-motion, layers sliding with parallax" },
+    { "id": "noir", "pl": "Noir", "en": "Film Noir", "image": "black-and-white film noir, hard side light, venetian-blind shadows, high contrast, 1940s cinema", "video": "black-and-white noir film, slow dramatic camera" },
+    { "id": "real", "pl": "Filmowy realizm", "en": "Cinematic Live Action", "image": "cinematic live-action film still, natural light, shallow depth of field, 35mm film look", "video": "cinematic live-action footage, realistic motion, handheld camera" }
+  ],
+  "sets": {
+    "viral10": ["clay", "anime", "pixel", "flat", "comic", "3d", "cartoon", "lowpoly", "storybook", "bricks"]
+  }
+}

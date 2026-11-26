@@ -9,6 +9,7 @@ import { basename, extname, isAbsolute, join, normalize, resolve, sep } from 'no
 import { HOME, loadConfig, saveConfig, workspaceDir, generatedDir } from './config.ts';
 import { emit } from './events.ts';
 import { getUpload, sendFileRange } from './uploads.ts';
+import { nativeKey } from './plugins.ts';
 
 export const studioDir = () => join(HOME, 'studio');
 const kitDir = () => process.env.ALTER_STUDIO_KIT_DIR ?? resolve(import.meta.dirname, '../../../studio-kit');
@@ -198,6 +199,7 @@ Components:
 - Scene3D {preset: orbs|card|cube|rings|blob|tunnel, image (card/cube), color, speed, scale, at} (abstract 3D only)
 - WORLD (a real animated 3D world: people, cars, houses, roads — see the story reel method) World {sky, cam | follow, shake, tint} > Ground, Road, Trees, Tree, House, Block, Car, Person, Bird, Clouds, Sign, Prop, Flame, Puffs · overlays Tag, Badge, Speedo, Notify, Shout
 - Bars {data [{label,value}], suffix, at} · Ring {value 0..1, label, at}
+- STYLES (see STYLE ENGINE): StyleGrid {items [{name, src}], title, sub, cols} (a still: numbered style cards) · StyleShowcase {items [{name, src (image or clip), from}], title, sub, per=2.2, outro=3.5, cta, handle} (the viral "N animation styles" reel; meta.seconds = showcaseLength(n, per, outro))
 - EDITS of the user's footage: Footage {src, keep [[from,to]], words, hits [{at, dur, src (an AI video clip), from, volume}], punch [times], captions} (all in source time) · Punch {at, to} · Shake {at, dur, amount}. Inserts are AI VIDEO clips (see CHAOS EDIT), never stills, emoji or synthetic sound effects.
 - Music {src, volume, fadeIn, fadeOut, from} · Sfx {src, at, volume}
 - Custom bits: useTime(), useTheme(), useFormat() → {w,h,u(px),portrait}, ramp(t,a,b,ease), ease.out|back|inOut, mix, rand, media(path) + anything from 'remotion'.
@@ -206,8 +208,72 @@ Style: one idea per scene, 2–4 s each, big type, one accent colour, motion on 
 Effects stay SUBTLE (users hate noisy FX): no film grain/noise, no glitches, flashes, RGB split, lens flares, confetti/particle storms, heavy shake or whoosh/boom/riser sound effects — unless the user asks for them. Allowed: soft fades and cuts, gentle camera moves, a small punch-in, at most a light shake (≤ 0.15) on one real impact, quiet background music under a voice. Match words to the user's language (Polish diacritics work).
 Video editing: \`node "${dir}/ff.mjs" probe <file>\` (duration, size, fps) first. Cut/join/scale/crop/rotate/compress/extract audio/loudnorm/GIF: \`node "${dir}/ff.mjs" <ffmpeg args>\` (-y added; its filters may be limited — if one is missing, do it in the kit). Speed, colour, titles, captions, overlays, reframing to 9:16: a kit video with Clip (rate, look, focus) as the background — always works. Results go in ./renders/.
 Graphics & photos: a still (meta.still = true, format post|square|thumb|banner|story) rendered with --format png; photo fixes (light, colour, crop, resize, collage) = a still with Photo {look, focus, zoom, fit}, --format jpg. 
-AI images (photos, illustrations, backgrounds, 3D renders, product shots, logo ideas): \`node "${dir}/gen-image.mjs" "<what, in English, concrete>" --style photo|cinematic|product|food|portrait|3d|lowpoly|isometric|flat|anime|watercolor|neon|minimal|poster|background|logo|sticker --format post|square|reel|wide|thumb|banner [--n 2] --out assets/<name>.png\` (prints OUTPUT <path>). You (Claude) cannot draw; this script hands the picture to ChatGPT (the user's account, ~40 s each, up to 3 at once) or Gemini. If it exits with NO_IMAGE_AI, tell the user in one line to sign in to ChatGPT/Codex in ALTTER — never fake it with stock-looking pictures (--free is a last resort the user must ask for). Never put text in the prompt. Then use it: as the deliverable itself, or as Photo/Bg in a kit graphic or video where you add the real text, logo and brand colours. Brand graphics set (post, story, banner, thumbnail) = one still per format with the same layout.
+AI images (photos, illustrations, backgrounds, 3D renders, product shots, logo ideas): \`node "${dir}/gen-image.mjs" "<what, in English, concrete>" --style photo|cinematic|product|food|portrait|isometric|neon|minimal|poster|background|logo|sticker or an animation style (clay|anime|pixel|flat|comic|3d|cartoon|lowpoly|storybook|bricks|watercolor|papercut|noir|real; add --from <img> --restyle to redraw a picture in it) --format post|square|reel|wide|thumb|banner [--n 2] --out assets/<name>.png\` (prints OUTPUT <path>). You (Claude) cannot draw; this script hands the picture to ChatGPT (the user's account, ~40 s each, up to 3 at once) or Gemini. If it exits with NO_IMAGE_AI, tell the user in one line to sign in to ChatGPT/Codex in ALTTER — never fake it with stock-looking pictures (--free is a last resort the user must ask for). Never put text in the prompt. Then use it: as the deliverable itself, or as Photo/Bg in a kit graphic or video where you add the real text, logo and brand colours. Brand graphics set (post, story, banner, thumbnail) = one still per format with the same layout.
 Fonts: display/body take any Google Fonts family by name (e.g. "Montserrat", "Lobster", "Archivo Black") or a font file path (.ttf/.otf/.woff2) — the renderer loads it.${brand}`;
+}
+
+// ---------- connected AI services (Settings → Plugins: ElevenLabs, Higgsfield, fal) ----------
+
+const hasVoice = () => !!(process.env.ALTER_ELEVENLABS_KEY || nativeKey('elevenlabs', 'ELEVENLABS_API_KEY'));
+function videoAIs(): string[] {
+  const out: string[] = [];
+  if (process.env.ALTER_HIGGSFIELD_KEY || (nativeKey('higgsfield', 'HF_API_KEY_ID') && nativeKey('higgsfield', 'HF_API_KEY_SECRET'))) out.push('Higgsfield (Seedance 2.0, Kling 3: --via higgsfield [--model kling])');
+  if (process.env.ALTER_FAL_KEY || nativeKey('fal', 'FAL_KEY')) out.push('fal.ai (Seedance 2.0 --via seedance, Kling 3 --via kling, Veo 3.1 --via veo)');
+  if (process.env.ALTER_GOOGLE_KEY) out.push('Gemini Omni (--via gemini)');
+  return out;
+}
+
+/** How to make a voice-over: by ALTTER with the user's ElevenLabs, or by hand. */
+function voiceGuide(): string {
+  const dir = studioDir().replace(/\\/g, '/');
+  return hasVoice()
+    ? 'VOICE-OVER: ElevenLabs is CONNECTED — record it yourself, the user does nothing: write the script (one sentence per line; "…" = pause; hard words spelled as they sound) to assets/<reel>/voice.txt, then `node "' + dir + '/voice.mjs" --text-file assets/<reel>/voice.txt --out assets/<reel>/voice.mp3 [--voice "<name or id>"] [--speed 0.95]` → OUTPUT <mp3> and TIMES <mp3>.json {duration, lines, words} (exact timings, use them instead of voice-times). `--list` shows the account\'s voices (calm deep narrator = deadpan; pick by the mood). NO_VOICE_CREDITS = the month\'s characters are used up: say so and offer the manual way. NO_VOICE_KEY = the key stopped working: put [[altter:connect:elevenlabs]] on its own line.'
+    : 'VOICE-OVER: ElevenLabs is NOT connected. Offer it once (one line + the card): with their ElevenLabs key ALTTER records the voice itself and times every word — put [[altter:connect:elevenlabs]] on its own line (ALTTER shows a card with the steps and a key field; when they save it, continue). Meanwhile the manual way below still works. When connected: `node "' + dir + '/voice.mjs" --text-file assets/<reel>/voice.txt --out assets/<reel>/voice.mp3` → OUTPUT + TIMES json.';
+}
+
+/** Which video AI to use for clips (gen-video.mjs). */
+function videoGuide(): string {
+  const dir = studioDir().replace(/\\/g, '/');
+  const ais = videoAIs();
+  return (ais.length ? 'VIDEO AI connected: ' + ais.join(' · ') + '.' : 'No video AI key connected yet (Higgsfield or fal.ai in Settings → Plugins).') +
+    ' Clips: `node "' + dir + '/gen-video.mjs" "<motion, camera, what happens, in English>" --from <start frame> [--last <end frame>] --seconds 4-10 --format reel --out assets/<name>/v<N>.mp4 [--via higgsfield|seedance|kling|veo|gemini]` (prints OUTPUT; 1–5 min; run up to 3 at once in the background). Without --via it takes the first connected one. NO_VIDEO_AI → put the connect cards it names on their own lines ([[altter:connect:higgsfield]] / [[altter:connect:fal]]) and explain in one line what each gives (Higgsfield: Seedance 2.0 + Kling 3 with a Higgsfield API balance; fal.ai: Seedance 2.0, Kling 3, Veo 3.1, pay per clip). NO_VIDEO_BILLING → the key works but its balance is empty: say where to top up.';
+}
+
+// ---------- the style engine: one scene in many animation styles ----------
+
+const STYLE_WORDS = /(styl|style|claymation|plastelin|anime|pixel ?art|low-?poly|komiks|comic|storybook|bajkow|klock|lego|kresk[óo]wk|cartoon|akwarel|watercolou?r|wycinank|paper ?cut|noir|wygl[ąa]da[ćł]? (film|animac)|look of)/i;
+const STYLE_FOR = /(film|wideo|video|animac|animat|rolk|reel|scen|klip|clip|postaci|character|obraz|zdj[ęe]ci|image|picture|podgl[ąa]d|preview)/i;
+/** "show me how it looks in different styles", "10 animation styles", "make it claymation" (or a follow-up). */
+export function wantsStyles(message: string, history: { content: string }[] = []): boolean {
+  if (/\b\d{1,2}\s*(styl|style|animation styles)/i.test(message)) return true;
+  if (STYLE_WORDS.test(message) && STYLE_FOR.test(message)) return true;
+  return history.slice(-4).some((m) => /style-preview\.mjs|STYLE ENGINE|StyleShowcase|StyleGrid/.test(m.content));
+}
+
+export function styleGuide(): string {
+  const dir = studioDir().replace(/\\/g, '/');
+  let list = 'clay — Claymation · anime · pixel — Pixel Art · flat — Flat Vector · comic · 3d · cartoon · lowpoly · storybook · bricks — Toy Bricks · watercolor · papercut · noir · real';
+  try {
+    const lib = JSON.parse(readFileSync(join(studioDir(), 'styles.json'), 'utf8'));
+    list = lib.styles.map((x: { id: string; en: string; pl: string }) => x.id + ' — ' + x.en + ' / ' + x.pl).join(' · ') + '. Sets: ' + Object.keys(lib.sets ?? {}).join(', ') + ' (viral10 = the 10 from the popular "animation styles" reels).';
+  } catch { /* the kit is not installed yet */ }
+  return String.raw`## STYLE ENGINE (show how the film will look in different animation styles, then make it in the chosen one)
+Styles (id — name): ${list}
+1. PREVIEW FIRST whenever the user wants a film/animation/reel "in a style", asks which style fits, or asks to see styles: \`node "${dir}/style-preview.mjs" "<the scene in English: who, where, doing what, the camera>" --styles viral10|all|clay,anime,… --lang <the user's language: pl|en> --out assets/<name>/styles [--from <frame.jpg>]\` → one line per style "STYLE <id> <path>" and "OUTPUT <sheet.jpg>" (a numbered sheet of all of them). ChatGPT draws them (~45 s per 3). With the user's own photo or video use --from (for a video first take a frame: \`node "${dir}/ff.mjs" -ss <sec> -i <video> -frames:v 1 -q:v 2 assets/<name>/frame.jpg\`) — every style then redraws the same people, poses and framing. Answer with the sheet path (ALTTER shows it), the numbered names, and one question: "Which one? (number)". If the user already named a style, preview just that one (and 2 close alternatives).
+2. THE FILM IN THE CHOSEN STYLE (shots of 3–6 s, one idea each; the same character description in every prompt):
+   a) start frame per shot: \`node "${dir}/gen-image.mjs" "<the shot>" --style <id> --format reel --out assets/<name>/s<N>.png\` (for the user's own footage: --from <their frame> --restyle);
+   b) animate each frame with a video AI (below), adding the style's motion words to every prompt (styles.json "video", e.g. "stop-motion claymation animation, slightly jittery handmade motion") so all clips stay in one style;
+   c) put it together in the kit: Timeline of Scenes with Clip {src} (+ voice and Captions for a story), render, look at frames, final render.
+   No video AI connected → show the connect cards (below) and say plainly that stills with a zoom are not animation; offer the kit's own animated 3D world (World) meanwhile.
+3. THE VIRAL "N ANIMATION STYLES" REEL (a numbered list on the left fills in, each style plays on the right, then all of them + "comment for the prompts"): make the previews (step 1) → animate every style's still (step 2b, --seconds 4, the same motion prompt for all) — without a video AI use the stills (they get a slow push-in) → then
+\`\`\`tsx
+import { StyleShowcase, showcaseLength } from 'alter-kit';
+const ITEMS = [{ name: 'Claymation', src: 'assets/<name>/styles/clay.mp4' }, { name: 'Anime', src: 'assets/<name>/styles/anime.mp4' }]; // plain string paths (the renderer copies only literal paths)
+export const meta = { format: 'reel', seconds: showcaseLength(ITEMS.length, 2.2, 3.5), theme: 'midnight' };
+export default () => <StyleShowcase title="10 animation styles" sub="(which one is yours?)" items={ITEMS} per={2.2} cta="Comment STYLE for the prompts" handle="@…" />;
+\`\`\`
+   Titles and names in the user's language. Optional quiet music. After the render give the REEL HAND-OFF and, as promised by the CTA, the exact prompt of every style (a code block each) — the user can post them as the reply to comments.
+${videoGuide()}`;
 }
 
 // ---------- reel preferences (Studio → Brand): what reels are for, swearing, audience ----------
@@ -230,7 +296,7 @@ ${missing.length && mode === 'soft' ? `Not set: ${missing.join('; ')}. Do NOT st
 
 // ---------- after a reel: the scenario, the script and how to make one like it ----------
 
-const ELEVEN_STEPS = `ElevenLabs (the voice-over; the free plan is enough to start):
+const ELEVEN_STEPS = `ElevenLabs (the voice-over; the free plan is enough to start). Easiest: connect it once in ALTTER (Settings → Plugins → ElevenLabs, paste the API key from elevenlabs.io/app/developers/api-keys) — then ALTTER records the voice itself. By hand:
    1. elevenlabs.io → sign up / log in → "Text to Speech" (in the app: Create → Text to Speech).
    2. Voice: Voices → Voice Library → search "narrator" / "documentary" (calm, deep, deadpan works best for absurd stories) → Add → pick it. For Polish choose the model "Eleven Multilingual v2" (or the newest multilingual one).
    3. Settings: Stability ~35–45%, Similarity ~75%, Style ~30–40%, Speaker boost on, Speed 1.0 (0.9 for a slower, drier read).
@@ -296,11 +362,11 @@ Length: what they asked; otherwise 30–45 s; never more than 50 s. Short senten
 - One-line pitch (title, format, length).
 - "Voice-over" code block: the exact text to paste into ElevenLabs, one sentence per line. Story shape: a hook in the first second (an impossible image), escalation every 3–5 s (each beat weirder but logical inside its own world), one real twist near the end, a dry last line, then the CTA/product line. Deadpan narration of absurd events is what makes it funny. Make it genuinely surprising — if the user wants it "crazy", avoid the first idea that comes to mind.
 - A shot list (time · what we see in the 3D world: characters, camera, action · overlay: tag/badge/notification), same order as the lines. Only things the World kit can show (people, cars, houses, blocks of flats, roads, trees, birds, signs, boxes as props, flames, smoke, any colours/skies) — exaggerate with scale, colour, camera and overlays rather than needing new models.
-- The voice is made in ElevenLabs — walk the user through it step by step (short, numbered):
-  ${ELEVEN_STEPS}
-- End: "Send the MP3 — or say go and I'll build the 3D now and fit it to your voice later."
+- ${hasVoice() ? 'The voice: ElevenLabs is connected — say you will record it yourself with their ElevenLabs (name the voice you will use) when they say go; no steps needed.' : 'The voice is made in ElevenLabs — offer the one-minute connection first ([[altter:connect:elevenlabs]] on its own line: then ALTTER records it itself), or walk them through doing it by hand (short, numbered):\n  ' + ELEVEN_STEPS}
+- End: ${hasVoice() ? '"Say go and I will record the voice and build it."' : '"Send the MP3 — or say go and I\'ll build the 3D now and fit it to your voice later."'}
 ### 2. Build (full access; when the user says go or sends the MP3)
-a) Timings: with the MP3 run \`node "${dir}/voice-times.mjs" "<mp3>" --text "<the voice-over lines>"\` → JSON {duration, lines[{text,start,end}], words[{text,start,end}]}. Without an MP3 use ~0.38 s per word. If it runs over 50 s, tell the user (or speed it up with ff.mjs atempo, max 1.15).
+a) ${voiceGuide()}
+   Timings of an MP3 the user sent: run \`node "${dir}/voice-times.mjs" "<mp3>" --text "<the voice-over lines>"\` → JSON {duration, lines[{text,start,end}], words[{text,start,end}]}. Without an MP3 use ~0.38 s per word. If it runs over 50 s, tell the user (or speed it up with ff.mjs atempo, max 1.15).
 b) videos/<reel>.tsx — one Scene per line, each a World shot. Keep the same characters (same colours) and the same car (same colour + plate) across shots. Example of two shots:
 \`\`\`tsx
 import { Timeline, Scene, World, Ground, Road, Trees, House, Block, Car, Person, Bird, Clouds, Sign, Prop, Tag, Badge, Speedo, Notify, Shout, Captions, Music } from 'alter-kit';
@@ -511,7 +577,7 @@ The format (viral on Instagram/TikTok): someone calmly explains an ordinary thin
 HARD RULES: the inserts are VIDEOS made by a video AI from the real frame. Never use still pictures as inserts (no Ken Burns, no zooming photos), never add emoji / flying icons / particles / glitches / flashes on top, never add synthesised sound effects — the AI clip's own sound (Gemini/Kling make it) is the sound. Clean hard cuts only.
 1. Look: \`node "${dir}/ff.mjs" probe <video>\` and \`node "${dir}/voice-times.mjs" <video>\` (words + lines with times; any language). Read the transcript.
 2. Plan (4–8 short lines to the user, then go on): what to KEEP (cut long pauses, false starts, fumbling — usually 30–55 s stays) and 3–6 HITS — source times where the person names or touches the object. Each hit is a visual punchline in MOTION that ESCALATES (weird → bigger → biggest) and takes what they say literally or to the extreme ("rozłączamy odkurzacz" → it bursts apart into a hundred flying parts; "zbiornik na kurz" → the bin opens into a black hole and the room gets sucked in). Physical, cinematic, real-looking: fire, rockets, explosions, transformation, giant scale, the room turning into space/ocean.
-3. Which video AI — in this order:
+3. Which video AI — ${videoAIs().length ? 'a video AI key IS connected (' + videoAIs().join(' · ') + '): use (B) gen-video first — it is automatic and the most reliable; (A) only if it fails' : 'in this order'}:
    (A) THE USER'S OWN GEMINI IN THEIR BROWSER (default; their Google AI subscription, no keys). You have the Claude in Chrome tools (mcp__claude-in-chrome__*) — they work in the user's own signed-in browser (Chrome / Brave / Edge). Load them with ToolSearch first (one call: "select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__find,mcp__claude-in-chrome__file_upload,mcp__claude-in-chrome__tabs_close_mcp"). Never type into or read their other tabs or chats. Per hit, in its OWN new tab (tabs_context_mcp {createIfEmpty:true} once, then tabs_create_mcp; run up to 3 hits at the same time, the rest after):
      i. navigate the tab to https://gemini.google.com/app , then javascript_tool SETUP (opens the tools menu, picks "Create video", adds a hidden file input):
         const sleep=(ms)=>new Promise(r=>setTimeout(r,ms)); const lab=(e)=>(e.getAttribute('aria-label')||e.innerText||'').trim(); for(let i=0;i<30&&!document.querySelector('[contenteditable=true]');i++) await sleep(500); [...document.querySelectorAll('button')].find(b=>/narzędzi|Dodaj pliki|upload|tools/i.test(lab(b)))?.click(); await sleep(900); const it=[...document.querySelectorAll('button,[role=menuitem],[role=menuitemcheckbox],[role=option]')].find(e=>/^(Utwórz film|Create video|Create videos|Video|Wideo)$/i.test((e.innerText||'').trim())); it?.click(); await sleep(900); let f=document.getElementById('alter-file'); if(!f){f=document.createElement('input');f.type='file';f.id='alter-file';f.setAttribute('aria-label','ALTTER frame input');f.style.cssText='position:fixed;left:0;top:0;width:10px;height:10px;opacity:0.01;z-index:99999';document.body.appendChild(f);} ({video: !!it, signedIn: !/^(Zaloguj się|Sign in)$/im.test(document.body.innerText)})
@@ -524,7 +590,7 @@ HARD RULES: the inserts are VIDEOS made by a video AI from the real frame. Never
      v. javascript_tool DOWNLOAD: const v=document.querySelector('video'); const r=await fetch(v.currentSrc||v.src,{credentials:'include'}); const b=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='alter-<reel>-v<N>.mp4'; document.body.appendChild(a); a.click(); a.remove(); b.size
         then \`node "${dir}/grab-download.mjs" <that size> assets/<reel>/v<N>.mp4\` (finds it in Downloads by size, even under a temporary name). Close the tab when the clip is saved.
      Gemini's clips are 8–10 s with their own sound; the payoff is usually in the first 3–5 s — use dur 3–4.5 in the hit and cut right after the payoff.
-   (B) only if (A) is impossible (no Claude in Chrome tools, or the browser's Gemini has no video): the Higgsfield plugin if listed in "Plugins you can use"; else \`node "${dir}/gen-video.mjs" "<motion>" --from <frame> --seconds 5 --out assets/<reel>/v<N>.mp4\` (Google Gemini key → Gemini Omni Flash, or fal.ai key → Kling, from Media → Keys; NO_VIDEO_BILLING = the key's project has no billing/credits yet). If NEITHER is available (gen-video prints NO_VIDEO_AI and there is no Higgsfield plugin), use the user's OWN subscription by hand — never fall back to stills: (C) make a "Veo pack": extract the frame of every hit (step 4a) into assets/<reel>/, then answer with, per hit: the frame file path (ALTTER shows it, they can download it) and a ready English prompt in a code block. Tell them in 3 lines: open Google Flow (labs.google/flow — included in Google AI Pro/Ultra) or the Gemini app → Video → "Frames to video" / add the image, paste the prompt, 9:16, generate, download, and send all the clips back here in this chat (any order — say which is which by name v1, v2…). Also one line: for fully automatic inserts paste a Gemini API key in Media → Keys (aistudio.google.com/apikey; Google AI Pro/Ultra include monthly credits for it at developers.google.com/profile) — then ALTTER makes the clips itself. When the clips arrive (attachments in a later message), check each one and continue from step 5 with them as the hits.
+   (B) a connected video AI key, or if (A) is impossible: \`node "${dir}/gen-video.mjs" "<motion>" --from <frame> --seconds 5 --format reel --out assets/<reel>/v<N>.mp4\` — Higgsfield / fal.ai (Settings → Plugins: Seedance 2.0, Kling 3, Veo 3.1) or a Gemini key (Media → Keys). NO_VIDEO_BILLING = the key has no balance/credits yet. If gen-video prints NO_VIDEO_AI, put [[altter:connect:higgsfield]] and [[altter:connect:fal]] on their own lines once (the user may connect one and say continue). If NEITHER is available (gen-video prints NO_VIDEO_AI and there is no Higgsfield plugin), use the user's OWN subscription by hand — never fall back to stills: (C) make a "Veo pack": extract the frame of every hit (step 4a) into assets/<reel>/, then answer with, per hit: the frame file path (ALTTER shows it, they can download it) and a ready English prompt in a code block. Tell them in 3 lines: open Google Flow (labs.google/flow — included in Google AI Pro/Ultra) or the Gemini app → Video → "Frames to video" / add the image, paste the prompt, 9:16, generate, download, and send all the clips back here in this chat (any order — say which is which by name v1, v2…). Also one line: for fully automatic inserts paste a Gemini API key in Media → Keys (aistudio.google.com/apikey; Google AI Pro/Ultra include monthly credits for it at developers.google.com/profile) — then ALTTER makes the clips itself. When the clips arrive (attachments in a later message), check each one and continue from step 5 with them as the hits.
 4. For every hit (start them all at once in the background, then wait):
    a) the real frame at the hit: \`node "${dir}/ff.mjs" -ss <at> -i <video> -frames:v 1 -q:v 2 assets/<reel>/f<N>.jpg\`
    b) the clip FROM THAT FRAME (start image = the real frame, so the cut is invisible). Prompt in English, concrete motion and camera: "Handheld phone video. The man keeps holding the vacuum; after half a second it violently transforms into a roaring jet turbine, sucking towels, magnets and a chair into it, the fridge door rips off and flies in, camera shakes. Realistic, same kitchen and lighting." 5 s, 9:16.

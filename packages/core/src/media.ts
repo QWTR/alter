@@ -7,6 +7,7 @@
 //   fal          — your own fal.ai key (Flux, Kling, Veo…)  image + video
 // Files land in <ALTER_HOME>/generated, so a chat answer that names one shows it as a picture / player.
 import { spawn, spawnSync } from 'node:child_process';
+import { nativeKey } from './plugins.ts';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -463,7 +464,11 @@ export const mediaFileExists = (id: string) => {
 export function shareMediaKeys() {
   const k = keys();
   const set = (name: string, v?: string) => { if (v) process.env[name] = v; else delete process.env[name]; };
-  set('ALTER_FAL_KEY', k.fal);
+  // built-in plugins (Settings → Plugins): ElevenLabs voice-overs, Higgsfield and fal video
+  const hf = [nativeKey('higgsfield', 'HF_API_KEY_ID'), nativeKey('higgsfield', 'HF_API_KEY_SECRET')];
+  set('ALTER_FAL_KEY', k.fal || nativeKey('fal', 'FAL_KEY'));
+  set('ALTER_ELEVENLABS_KEY', nativeKey('elevenlabs', 'ELEVENLABS_API_KEY'));
+  set('ALTER_HIGGSFIELD_KEY', hf[0] && hf[1] ? hf.join(':') : undefined);
   set('ALTER_GOOGLE_KEY', k.google);
   set('ALTER_OPENAI_KEY', k.openai);
 }

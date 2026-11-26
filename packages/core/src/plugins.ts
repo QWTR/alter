@@ -21,7 +21,8 @@ export interface Plugin {
   name: string;
   title: string;
   catalogId?: string;
-  transport: 'http' | 'stdio';
+  /** native = built into ALTTER (the user only pastes a key; ALTTER's own tools call the service) */
+  transport: 'http' | 'stdio' | 'native';
   url?: string;
   headers?: Record<string, string>;
   command?: string;
@@ -42,7 +43,12 @@ export interface CatalogEntry {
   /** Short, in English; the UI shows a translated line when it has one. */
   description: string;
   homepage: string;
-  transport: 'http' | 'stdio';
+  /** native = built into ALTTER: no server to run, only a key (checked when saved) */
+  transport: 'http' | 'stdio' | 'native';
+  /** Where to get the key, step by step (English; the UI has translations) */
+  steps?: string[];
+  /** Opens the page where the key is made */
+  keyUrl?: string;
   url?: string;
   command?: string;
   args?: string[];
@@ -120,7 +126,9 @@ export const CATALOG: CatalogEntry[] = [
   { id: 'sentry', title: 'Sentry', category: 'dev', icon: 'Bug', color: '#7553ff', description: 'Errors, issues and performance from Sentry.', homepage: 'https://docs.sentry.io/product/sentry-mcp/', transport: 'http', url: 'https://mcp.sentry.dev/sse', oauth: true },
   { id: 'vercel', title: 'Vercel', category: 'dev', icon: 'Server', color: '#ededed', description: 'Deployments, logs and projects on Vercel.', homepage: 'https://vercel.com/docs/mcp', transport: 'http', url: 'https://mcp.vercel.com', oauth: true },
   { id: 'neon', title: 'Neon Postgres', category: 'data', icon: 'Database', color: '#00e599', description: 'Neon Postgres projects, branches and SQL.', homepage: 'https://neon.tech/docs/ai/neon-mcp-server', transport: 'http', url: 'https://mcp.neon.tech/mcp', oauth: true },
-  { id: 'higgsfield', title: 'Higgsfield', category: 'create', icon: 'Clapperboard', color: '#c6ff3d', description: 'Cinematic AI video and images (Higgsfield models, Kling, Veo, Seedance…) right from the chat. Uses your Higgsfield credits.', homepage: 'https://higgsfield.ai/mcp', transport: 'http', url: 'https://mcp.higgsfield.ai/mcp', oauth: true, popular: true },
+  { id: 'higgsfield', title: 'Higgsfield', category: 'create', icon: 'Clapperboard', color: '#c6ff3d', description: 'AI video and images through the Higgsfield API: Seedance 2.0, Kling 3, Soul. ALTTER makes the clips for your reels by itself. Paid per clip from your Higgsfield API balance.', homepage: 'https://docs.higgsfield.ai', transport: 'native', keyUrl: 'https://console.higgsfield.ai', steps: ['Open console.higgsfield.ai and sign in (the same account as higgsfield.ai).', 'Add credits to the API balance (Billing; the API has its own balance, separate from a higgsfield.ai plan).', 'API keys → Create key → copy the Key ID and the Secret (the secret is shown only once).', 'Paste both here.'], keys: [{ name: 'HF_API_KEY_ID', label: 'Key ID' }, { name: 'HF_API_KEY_SECRET', label: 'Secret' }], guide: 'Built in: `node gen-video.mjs … --via higgsfield` (Seedance 2.0; --model kling for Kling 3).', popular: true },
+  { id: 'higgsfield-mcp', title: 'Higgsfield (account sign-in)', category: 'create', icon: 'Clapperboard', color: '#9fdc2a', description: 'Higgsfield through its MCP server with your higgsfield.ai account and plan credits (sign in in the browser).', homepage: 'https://higgsfield.ai/mcp', transport: 'http', url: 'https://mcp.higgsfield.ai/mcp', oauth: true },
+  { id: 'fal', title: 'fal.ai video models', category: 'create', icon: 'Film', color: '#a78bfa', description: 'One key for many video models: Seedance 2.0, Kling 3, Veo 3.1, Sora 2. ALTTER picks the model per clip. Paid per second from your fal balance.', homepage: 'https://fal.ai/models', transport: 'native', keyUrl: 'https://fal.ai/dashboard/keys', steps: ['Open fal.ai and sign in (GitHub or Google).', 'Billing → add credits (a 5 s Seedance 2.0 clip costs about $1.50, Kling about $0.60).', 'Dashboard → Keys → Add key → copy it.', 'Paste it here.'], keys: [{ name: 'FAL_KEY', label: 'fal.ai key' }], guide: 'Built in: `node gen-video.mjs … --via seedance|kling|veo`.', popular: true },
   { id: 'figma', title: 'Figma', category: 'design', icon: 'PenTool', color: '#a259ff', description: 'Your Figma files: paste a link to a frame and the AI reads the design (layout, styles, variables, a screenshot) to build it pixel-perfect, or draws in FigJam. Sign in with your Figma account; no desktop app needed.', homepage: 'https://help.figma.com/hc/en-us/articles/35281350665623', transport: 'http', url: 'https://mcp.figma.com/mcp', oauth: true, popular: true, guide: 'It works on Figma links: if the user did not give one, ask for the link to the frame (figma.com/design/…?node-id=…). Then use get_design_context and get_screenshot on it.' },
   { id: 'figma-desktop', title: 'Figma (desktop app)', category: 'design', icon: 'PenTool', color: '#a259ff', description: 'Reads the frame selected in the Figma desktop app. Figma must be open with the MCP server turned on.', homepage: 'https://help.figma.com/hc/en-us/articles/32132100833559', transport: 'http', url: 'http://127.0.0.1:3845/mcp', needs: 'Figma desktop app open → Preferences → Enable Dev Mode MCP server', guide: 'It reads what is selected in the Figma desktop app right now.' },
   { id: 'blender', title: 'Blender', category: 'create', icon: 'Box', color: '#ff7a1a', description: 'Builds and edits 3D scenes in Blender: objects, materials, Poly Haven assets, renders.', homepage: 'https://github.com/ahujasid/blender-mcp', transport: 'stdio', command: 'uvx', args: ['blender-mcp'], needs: 'Blender + the blender-mcp add-on (addon.py) turned on, and uv installed', popular: true },
@@ -129,7 +137,7 @@ export const CATALOG: CatalogEntry[] = [
   { id: 'context7', title: 'Context7 docs', category: 'dev', icon: 'BookOpen', color: '#10b981', description: 'Up-to-date docs and code examples for any library, so code uses today\'s APIs.', homepage: 'https://github.com/upstash/context7', transport: 'stdio', command: 'npx', args: ['-y', '@upstash/context7-mcp@latest'], popular: true },
   { id: 'github', title: 'GitHub', category: 'dev', icon: 'GitBranch', color: '#e6edf3', description: 'Repos, issues, pull requests, actions and code search on your GitHub.', homepage: 'https://github.com/github/github-mcp-server', transport: 'http', url: 'https://api.githubcopilot.com/mcp/', keys: [{ name: 'GITHUB_TOKEN', label: 'GitHub token', help: 'github.com/settings/personal-access-tokens', header: 'Authorization', prefix: 'Bearer ' }] },
   { id: 'firecrawl', title: 'Firecrawl', category: 'web', icon: 'Flame', color: '#ff6b2b', description: 'Scrape and crawl whole websites into clean Markdown / data, with search.', homepage: 'https://github.com/firecrawl/firecrawl-mcp-server', transport: 'stdio', command: 'npx', args: ['-y', 'firecrawl-mcp'], keys: [{ name: 'FIRECRAWL_API_KEY', label: 'Firecrawl API key', help: 'firecrawl.dev/app/api-keys' }] },
-  { id: 'elevenlabs', title: 'ElevenLabs', category: 'create', icon: 'AudioLines', color: '#f5f5f5', description: 'Voice-overs, cloned voices, sound effects and transcription.', homepage: 'https://github.com/elevenlabs/elevenlabs-mcp', transport: 'stdio', command: 'uvx', args: ['elevenlabs-mcp'], keys: [{ name: 'ELEVENLABS_API_KEY', label: 'ElevenLabs API key', help: 'elevenlabs.io/app/settings/api-keys' }], needs: 'uv installed' },
+  { id: 'elevenlabs', title: 'ElevenLabs', category: 'create', icon: 'AudioLines', color: '#f5f5f5', description: 'Voice-overs for your reels in any voice and language: ALTTER writes the script, ElevenLabs reads it, ALTTER fits the video to it. The free plan is enough to start.', homepage: 'https://elevenlabs.io', transport: 'native', keyUrl: 'https://elevenlabs.io/app/developers/api-keys', steps: ['Open elevenlabs.io and sign in (the free plan works).', 'Bottom-left menu → Developers → API Keys (or open the link).', 'Create API key → name it ALTTER → leave "Text to Speech" and "Voices" allowed → Create.', 'Copy the key (starts with sk_) and paste it here.'], keys: [{ name: 'ELEVENLABS_API_KEY', label: 'ElevenLabs API key' }], guide: 'Built in: `node voice.mjs` makes the voice-over MP3.', popular: true },
   { id: 'supabase', title: 'Supabase', category: 'data', icon: 'Database', color: '#3ecf8e', description: 'Your Supabase projects: tables, SQL, migrations, edge functions, logs.', homepage: 'https://github.com/supabase-community/supabase-mcp', transport: 'stdio', command: 'npx', args: ['-y', '@supabase/mcp-server-supabase@latest'], keys: [{ name: 'SUPABASE_ACCESS_TOKEN', label: 'Supabase access token', help: 'supabase.com/dashboard/account/tokens' }] },
   { id: 'sequential-thinking', title: 'Sequential thinking', category: 'dev', icon: 'ListTree', color: '#8b74ff', description: 'Helps the AI break big problems into steps and revise its plan.', homepage: 'https://github.com/modelcontextprotocol/servers', transport: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'] },
   // business: invoicing, shops, couriers, support, HR, messaging, data
@@ -170,6 +178,8 @@ export function listPlugins(): Plugin[] {
     // 0.15: "Figma" was the desktop app's local server, which only works while Figma is open with Dev Mode MCP on.
     // It is now Figma's online server (sign in once); the local one stays available as "Figma (desktop app)".
     for (const p of list) {
+      if (p.catalogId === 'higgsfield' && p.oauth) { p.catalogId = 'higgsfield-mcp'; saveConfig(); }
+      if (p.catalogId === 'elevenlabs' && p.transport === 'stdio') { p.transport = 'native'; delete p.command; delete p.args; saveConfig(); }
       if (p.catalogId === 'figma' && p.url?.includes('127.0.0.1:3845')) {
         p.url = 'https://mcp.figma.com/mcp';
         p.oauth = true;
@@ -225,6 +235,16 @@ export async function installFromCatalog(id: string, keys: Record<string, string
     if (k.header) headers[k.header] = (k.prefix ?? '') + v;
     else env[k.name] = v;
   }
+  if (c.transport === 'native') {
+    await checkNativeKey(c.id, env);
+    const had = list.find((x) => x.catalogId === c.id);
+    if (had) {
+      had.env = env;
+      had.enabled = true;
+      save(list);
+      return had;
+    }
+  }
   const p: Plugin = {
     id: randomUUID(),
     name: uniqueName(c.id, list),
@@ -244,6 +264,34 @@ export async function installFromCatalog(id: string, keys: Record<string, string
   await registerOauth(p);
   warmUp(p);
   return p;
+}
+
+/** Is the pasted key real? Asks the service once (a bad key gets a clear message instead of failing mid-reel). */
+async function checkNativeKey(id: string, env: Record<string, string>) {
+  const bad = (what: string) => new Error(`${what} was not accepted — check that you copied the whole key`);
+  const ask = async (url: string, headers: Record<string, string>) => {
+    try { return (await fetch(url, { headers, signal: AbortSignal.timeout(15_000) })).status; } catch { return 0; } // offline: save it anyway
+  };
+  if (id === 'elevenlabs') {
+    // a key limited to some permissions answers 401 "missing_permissions" — that one is still a real key
+    let st = 0, body = '';
+    try { const r = await fetch('https://api.elevenlabs.io/v1/voices?page_size=1', { headers: { 'xi-api-key': env.ELEVENLABS_API_KEY }, signal: AbortSignal.timeout(15_000) }); st = r.status; body = await r.text(); } catch {}
+    if (st === 401 && !/missing_permissions/i.test(body)) throw bad('The ElevenLabs key');
+  }
+  if (id === 'higgsfield') {
+    const st = await ask('https://api.higgsfield.ai/requests/00000000-0000-0000-0000-000000000000/status', { authorization: `Key ${env.HF_API_KEY_ID}:${env.HF_API_KEY_SECRET}` });
+    if (st === 401 || st === 403) throw bad('The Higgsfield Key ID / Secret');
+  }
+  if (id === 'fal') {
+    const st = await ask('https://queue.fal.run/fal-ai/fast-sdxl/requests/00000000-0000-0000-0000-000000000000/status', { authorization: `Key ${env.FAL_KEY}` });
+    if (st === 401 || st === 403) throw bad('The fal.ai key');
+  }
+}
+
+/** A built-in (native) plugin's key, when it is connected and on. */
+export function nativeKey(catalogId: string, name: string): string | undefined {
+  const p = listPlugins().find((x) => x.catalogId === catalogId && x.transport === 'native' && x.enabled);
+  return p?.env?.[name] || undefined;
 }
 
 /**
@@ -358,6 +406,7 @@ export async function pluginStatus(fresh = false): Promise<Record<string, Plugin
   await Promise.all(list.map(async (p) => {
     const c = CATALOG.find((x) => x.id === p.catalogId);
     if (!p.enabled) { out[p.id] = { state: 'off' }; return; }
+    if (p.transport === 'native') { out[p.id] = { state: 'ok' }; return; }
     if (p.oauth) {
       if (!states) { out[p.id] = { state: 'unknown' }; return; }
       const st = states[p.name];
@@ -381,11 +430,11 @@ export const forgetPluginStatus = () => { statusCache = null; };
 /** The servers handed to each AI run (sign-in ones are already registered with the AI apps). */
 export function pluginServers(): McpServer[] {
   return listPlugins()
-    .filter((p) => p.enabled && !p.oauth)
+    .filter((p) => p.enabled && !p.oauth && p.transport !== 'native')
     .map((p) => (p.transport === 'http' ? { name: p.name, url: p.url, headers: p.headers } : { name: p.name, command: p.command, args: p.args ?? [], env: p.env }));
 }
 /** Tool names for the allow-list (incl. sign-in plugins, which aren't in pluginServers()). */
-export const pluginTools = () => listPlugins().filter((p) => p.enabled).map((p) => `mcp__${p.name}__*`);
+export const pluginTools = () => listPlugins().filter((p) => p.enabled && p.transport !== 'native').map((p) => `mcp__${p.name}__*`);
 
 /** A short line in the prompt so the AI knows what it can use. */
 export function pluginsGuide(): string {
@@ -393,6 +442,7 @@ export function pluginsGuide(): string {
   if (!on.length) return '';
   return `## Plugins you can use (MCP tools)\n${on.map((p) => {
     const c = CATALOG.find((x) => x.id === p.catalogId);
+    if (p.transport === 'native') return `- ${p.title} — connected (built into ALTTER, no MCP tools): ${c?.guide ?? ''}`;
     return `- ${p.title} (tools mcp__${p.name}__…)${c ? `: ${c.description}${c.guide ? ' ' + c.guide : ''}` : ''}`;
   }).join('\n')}\nUse them when they fit the task; if one is not connected or fails, say so in one line and continue.`;
 }

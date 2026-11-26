@@ -1,0 +1,5 @@
+instagram-agent-skill by Jake Schincariol — MIT License (see LICENSE).
+Source: https://github.com/Jakeschincariol/instagram-agent-skill
+Bundled in ALTTER unchanged (skills/, templates/, README.md, LICENSE).
+The Python tools are also available as a Node port in skills/tools/ig.mjs (same checks; Polish words added),
+so they run without Python. The .claude-plugin folder is not included.
