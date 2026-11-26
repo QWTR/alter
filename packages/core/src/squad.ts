@@ -220,7 +220,7 @@ async function orchestrate(state: { board: Board; messageId: number; conversatio
     const started = now();
     const provider = await resolveProvider(lead.provider, { avoidLimited: true });
     try {
-      const { text } = await provider.run({ prompt: `You are "${lead.name}", the lead of the team "${b.team}". ${lead.instructions}\n\n${prompt}`, access: 'chat', timeoutMs: 15 * 60_000 });
+      const { text } = await provider.run({ prompt: `You are "${lead.name}", the lead of the team "${b.team}". ${lead.instructions}\n\n${prompt}`, access: project?.folder ? 'read' : 'chat', cwd: project?.folder, timeoutMs: 15 * 60_000 });
       // kept in the lead's history: clicking the lead shows what it was asked and what it told the others
       logRun(lead.id, 'team', `${step}\n\n${prompt}`.slice(0, 8000), text, 'done', started);
       set(lead.id, { status: 'done' });
@@ -235,6 +235,7 @@ async function orchestrate(state: { board: Board; messageId: number; conversatio
   // 1. plan
   const planText = await leadThink(
     `Team goal (from the user): ${userText}\n${project?.folder ? `Shared folder: ${project.folder}\n` : ''}Departments:\n${roster}\n\n` +
+      (project?.folder ? 'First read the brief, spec and rules in the shared folder. They outrank the goal text: where they disagree, follow them and say so in the summary. Repeat in every task the facts that department needs (platform, camera, style, who approves). ' : '') +
       'Split the goal into concrete tasks for the departments (1-3 tasks each, only who is needed; tasks of one department run in order, departments run in parallel). Each task must say exactly what to produce and where. ' +
       'If a department needs another one\'s result first (e.g. docs describe the finished page), list that department in "after" — otherwise leave it empty so they work at the same time. ' +
       'Answer ONLY with JSON: {"summary":"one line in the user\'s language","tasks":[{"member":"<id from the list>","task":"…","after":["<id>"]}]}',
