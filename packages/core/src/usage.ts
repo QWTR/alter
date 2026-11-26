@@ -106,6 +106,14 @@ export function instrument(p: Provider): Provider {
         return res;
       } catch (err) {
         const msg = (err as Error).message ?? '';
+        if (p.id !== 'demo' && isSignedOut(msg)) {
+          // the CLI's login expired: show the AI as not connected, so Connect signs in again
+          const cfg = loadConfig();
+          cfg.providerHealth[p.id] = { ok: false, checkedAt: new Date().toISOString(), error: 'not-signed-in' };
+          saveConfig();
+          emit('provider.tested', { id: p.id, ok: false, error: 'not-signed-in' });
+          throw new Error(`${p.name} is signed out: its login expired (${msg.trim().slice(0, 120)}). On the Home screen click Connect on the ${p.name} card and sign in again in the browser, then send the message again.`);
+        }
         if (p.id !== 'demo' && isLimitError(msg)) {
           const l: Limit = { provider: p.id, message: msg.slice(0, 300), until: parseReset(msg), at: new Date().toISOString() };
           limits.set(p.id, l);
@@ -117,6 +125,9 @@ export function instrument(p: Provider): Provider {
     },
   };
 }
+
+/** The AI's own login expired or is missing (not a usage limit). */
+export const isSignedOut = (msg: string) => /OAuth session expired|could not be refreshed|Failed to authenticate|Please run .login|Invalid API key|not logged in|authentication_error|re-?authenticate|sign in again/i.test(msg);
 
 export class LimitError extends Error {
   provider: string;

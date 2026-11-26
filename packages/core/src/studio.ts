@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { basename, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { HOME, loadConfig, saveConfig, workspaceDir, generatedDir } from './config.ts';
 import { emit } from './events.ts';
 import { getUpload, sendFileRange } from './uploads.ts';
@@ -520,6 +520,30 @@ export function mediaMadeDuring(dirs: string[], since: number, text: string, lim
     .sort((a, b) => score(b) - score(a) || b.mtime - a.mtime)
     .slice(0, limit)
     .map((f) => f.file);
+}
+
+/** Pictures / videos the answer points to by their full path ("D:\Gierka\shots\01_menu.png"), even when they were made earlier:
+ * the user asked to see them, so they are shown in the chat instead of a bare list of paths. */
+const loose = (n: string) => n.toLowerCase().replace(/[×✕]/g, 'x').replace(/[\s_-]+/g, '');
+function lookalike(file: string): string | null {
+  try {
+    const want = loose(basename(file));
+    const name = readdirSync(dirname(file)).find((n) => loose(n) === want);
+    return name ? join(dirname(file), name) : null;
+  } catch { return null; }
+}
+export function mediaNamedIn(text: string, limit = 24): string[] {
+  const exts = Object.keys(MEDIA_EXT).map((e) => e.slice(1)).join('|');
+  const re = new RegExp(String.raw`(?:(?<![\w\\/])[A-Za-z]:[\\/]|\\\\)[^\n\r"'<>|*?\`\]\[]*?\.(?:${exts})(?![\w])`, 'gi');
+  const out: string[] = [];
+  for (const m of text.matchAll(re)) {
+    const f = normalize(m[0].trim());
+    // the AI may retype a name a little differently (× for x, other case): match it in that folder
+    const hit = existsSync(f) ? f : lookalike(f);
+    if (hit && !out.includes(hit) && mediaItem(hit)) out.push(hit);
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 /** Media for files stored with a message (only ones that still exist). */

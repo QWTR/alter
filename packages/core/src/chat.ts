@@ -34,7 +34,7 @@ import { describeAttachments, getUpload, uploadsDir, type Attachment } from './u
 import { inboxFor } from './followups.ts';
 import { FILES_GUIDE, RICH_GUIDE } from './rich.ts';
 import { calendarContext } from './calendar.ts';
-import { mediaMadeDuring } from './studio.ts';
+import { mediaMadeDuring, mediaNamedIn } from './studio.ts';
 import { generatedDir } from './config.ts';
 import type { FollowUp } from './providers/types.ts';
 
@@ -353,7 +353,7 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
   const mcp = mcpList.length ? mcpList : undefined;
   if (agent) setAgentStatus(agent.id, 'working', `chat: ${message.replace(/\s+/g, ' ')}`);
   const startedAt = Date.now();
-  const runOn = (p: typeof provider) => p.run({ browser: chaosEdit || undefined, inbox: p.steerable ? inboxFor(conv!.id) : undefined, mcp, prompt, onDraft, files: files.map((f) => f.file), fileDirs: dirs.length ? dirs : undefined, model: p.id === picked ? model || undefined : undefined, effort: p.id === picked ? effort || undefined : undefined, onDelta: req.onDelta, onActivity, access: planning ? (conv!.access === 'chat' ? 'chat' : 'read') : conv!.access, tools: [...(agent?.tools ?? []), ...(planning ? [] : pluginTools())], cwd: project?.folder ?? (studioReady ? cwd : undefined), signal: handsSession ? handsAbort.signal : req.signal, blockTools: handsSession ? ['Task', 'Agent'] : undefined, timeoutMs: handsSession ? 120 * 60_000 : conv!.access === 'full' || studioReady ? 60 * 60_000 : 20 * 60_000 });
+  const runOn = (p: typeof provider) => p.run({ browser: chaosEdit || undefined, inbox: p.steerable ? inboxFor(conv!.id) : undefined, mcp, prompt, onDraft, files: files.map((f) => f.file), fileDirs: dirs.length ? dirs : undefined, model: p.id === picked ? model || undefined : undefined, effort: p.id === picked ? effort || undefined : undefined, onDelta: req.onDelta, onActivity, access: planning ? (conv!.access === 'chat' ? 'chat' : 'read') : conv!.access, tools: [...(agent?.tools ?? []), ...(planning ? [] : pluginTools())], cwd: project?.folder ?? (studioReady ? cwd : undefined), signal: handsSession ? handsAbort.signal : req.signal, blockTools: handsSession ? ['Task', 'Agent'] : undefined, timeoutMs: 0 }); // no time limit: long builds (Unity, Blender bakes) run to the end; the stop button ends them
   let text: string;
   let followUps: FollowUp[] | undefined;
   try {
@@ -378,7 +378,8 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
   if (poll) req.onProgress?.(null);
 
   // images / videos made while answering → shown in the chat with the answer
-  const made = conv.access === 'chat' ? [] : mediaMadeDuring([cwd, ...projectDirs(project), generatedDir(), ...(studioReady ? [studioDir()] : [])], startedAt, text);
+  // plus pictures the answer names by full path ("show me the screenshots" → the pictures, not a list of paths)
+  const made = conv.access === 'chat' ? [] : [...new Set([...mediaNamedIn(text), ...mediaMadeDuring([cwd, ...projectDirs(project), generatedDir(), ...(studioReady ? [studioDir()] : [])], startedAt, text)])].slice(0, 24);
   // follow-ups sent mid-answer sit where they arrived: answer part, follow-up, rest of the answer
   const parts: { role: 'user' | 'assistant'; content: string }[] = [];
   let cut = 0;

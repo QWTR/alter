@@ -57,6 +57,8 @@ function describeTool(name: string, input: any): string {
 }
 
 /** Claude Pro / Max subscription through the official Claude Code CLI (`claude -p`). */
+const SIGNED_OUT = /OAuth session expired|could not be refreshed|Failed to authenticate|Please run .login|Invalid API key|not logged in|authentication_error/i;
+
 export const claude: Provider = {
   id: 'claude',
   name: 'Claude',
@@ -191,6 +193,8 @@ export const claude: Provider = {
     const text = streamed.trim() || final.trim();
     // stopped by the user (stop button, "stop all agents" on the screen): say so instead of a cryptic exit code
     if (!text && signal?.aborted) throw new Error('Stopped.');
+    // signed out (the login expired): an error, not an answer, so ALTTER can show "sign in again"
+    if ((error && SIGNED_OUT.test(error)) || (!final && text.length < 400 && SIGNED_OUT.test(text))) throw new Error(error || text);
     if (!text) throw new Error(error || r.stderr.trim() || `Claude stopped unexpectedly (exit code ${r.code}). Write "continue" to try again.`);
     if (!streamed && final) onDelta?.(final);
     return { text, usage, followUps: followUps.length && streamed.trim() ? followUps : undefined };

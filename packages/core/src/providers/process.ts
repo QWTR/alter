@@ -20,6 +20,7 @@ function killTree(pid: number | undefined): void {
 export interface ProcessOptions {
   input?: string;
   cwd?: string;
+  /** 0 = no time limit (stopped only by the user or when the process ends). */
   timeoutMs?: number;
   signal?: AbortSignal;
   onLine?: (line: string) => void;
@@ -60,7 +61,7 @@ export function runProcess(cmd: string, args: string[], opts: ProcessOptions = {
     let stderr = '';
     let pending = '';
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; killTree(child.pid); }, opts.timeoutMs ?? 10 * 60_000);
+    const timer = opts.timeoutMs === 0 ? undefined : setTimeout(() => { timedOut = true; killTree(child.pid); }, opts.timeoutMs ?? 10 * 60_000);
     const onAbort = () => killTree(child.pid);
     opts.signal?.addEventListener('abort', onAbort, { once: true });
 

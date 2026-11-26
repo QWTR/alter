@@ -132,6 +132,7 @@ async function download(url: string, file: string, size: number, mode: UpdatePro
 const HELPER = `
 const fs = require('fs'), path = require('path'), { spawn, spawnSync } = require('child_process');
 const [pid, appDir, mode, src] = process.argv.slice(2);
+// mode: quick (swap the app files) · quick-admin (same, folder needs admin rights) · full / full-admin (run the installer)
 const exe = path.join(appDir, 'ALTTER.exe');
 const alive = () => { try { process.kill(Number(pid), 0); return true; } catch { return false; } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -140,9 +141,21 @@ const start = () => spawn(exe, [], { detached: true, stdio: 'ignore', windowsHid
 (async () => {
   for (let i = 0; i < 200 && alive(); i++) await sleep(300);
   await sleep(1200);
-  if (mode === 'full') {
+  if (mode === 'full' || mode === 'full-admin') {
     log('installer ' + src);
-    spawnSync(src, ['/S', '--updated', '--force-run', '/D=' + appDir], { windowsHide: true, stdio: 'ignore' });
+    // installed for all users (Program Files): the installer asks Windows for admin rights itself and starts ALTTER as the user
+    spawnSync(src, ['/S', ...(mode === 'full-admin' ? ['/allusers'] : []), '--updated', '--force-run', '/D=' + appDir], { windowsHide: true, stdio: 'ignore' });
+    return;
+  }
+  if (mode === 'quick-admin') {
+    // the app folder needs admin rights (Program Files): one Windows prompt copies the new app files in, ALTTER starts as the user
+    const q = (p) => "'" + '"' + p.replace(/'/g, "''") + '"' + "'";
+    const cmd = "$p = Start-Process -FilePath robocopy.exe -ArgumentList @(" + q(src) + "," + q(path.join(appDir, 'resources')) + ",'/MIR','/IS','/IT','/R:5','/W:1','/NFL','/NDL','/NJH','/NJS') -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode";
+    const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', cmd], { windowsHide: true, encoding: 'utf8' });
+    log('admin copy exit ' + r.status + ' ' + String(r.stderr || '').trim().slice(0, 300));
+    start();
+    await sleep(3000);
+    try { fs.rmSync(src, { recursive: true, force: true }); } catch {}
     return;
   }
   const res = path.join(appDir, 'resources'), old = path.join(appDir, 'resources.old');
@@ -160,6 +173,12 @@ const start = () => spawn(exe, [], { detached: true, stdio: 'ignore', windowsHid
 })().catch((e) => { log(e.stack); start(); });
 `;
 
+/** Can this process write into the app folder? Not when ALTTER is installed for all users in Program Files. */
+function writable(dir: string): boolean {
+  const probe = join(dir, `.altter-write-${process.pid}`);
+  try { mkdirSync(probe); rmSync(probe, { recursive: true, force: true }); return true; } catch { return false; }
+}
+
 /** Desktop app: download the update, close ALTTER, put the new version in place and start it again. */
 export async function installUpdate(): Promise<void> {
   if (!inDesktopApp()) throw new Error('Download the new version from ' + PAGE);
@@ -169,6 +188,7 @@ export async function installUpdate(): Promise<void> {
   const appDir = dirname(process.execPath);
   const quick = assets.quick;
   const mode: UpdateProgress['mode'] = quick ? 'quick' : 'full';
+  const admin = !writable(appDir);
   info = { ...info, installing: true, progress: undefined };
   try {
     const work = join(tmpdir(), `altter-update-${info.latest}`);
@@ -179,8 +199,9 @@ export async function installUpdate(): Promise<void> {
       const zip = join(work, APP_ZIP);
       await download(quick.url, zip, quick.size, mode);
       progress({ stage: 'unpack', mode, done: 0, total: 1 });
-      // the new app files go next to the current ones (same drive → the swap is a rename)
-      src = join(appDir, 'resources.new');
+      // the new app files go next to the current ones (same drive → the swap is a rename);
+      // a Program Files install can't be written without admin rights, so they wait in the temp folder for an admin copy
+      src = admin ? join(work, 'resources.new') : join(appDir, 'resources.new');
       rmSync(src, { recursive: true, force: true });
       mkdirSync(src, { recursive: true });
       const tar = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
@@ -195,7 +216,7 @@ export async function installUpdate(): Promise<void> {
     progress({ stage: 'restart', mode, done: 1, total: 1 });
     const helper = join(work, 'altter-update.cjs');
     writeFileSync(helper, HELPER);
-    spawn(process.execPath, [helper, String(process.pid), appDir, mode, src], {
+    spawn(process.execPath, [helper, String(process.pid), appDir, admin ? `${mode}-admin` : mode, src], {
       detached: true, stdio: 'ignore', windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     }).unref();
     // let the UI show "restarting" for a moment, then close (the helper waits for this process to end)

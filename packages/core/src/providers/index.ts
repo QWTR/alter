@@ -159,7 +159,9 @@ export async function connectProvider(id: string): Promise<{ started: true }> {
         detectCache.delete(p.id);
       }
       progress('checking');
-      if ((await p.authStatus?.()) === true) {
+      // after an expired login the CLI may still say "logged in" (the token can't be refreshed): sign in for real
+      const expired = loadConfig().providerHealth[id]?.error === 'not-signed-in';
+      if (!expired && (await p.authStatus?.()) === true) {
         markConnected(id);
         progress('done');
         return;
