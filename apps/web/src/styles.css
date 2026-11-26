@@ -2098,3 +2098,37 @@ html, body, #root { overflow-x: clip; }
 .connect-card .ok-ic { color: var(--ok, #22c55e); }
 
 .connect-error { margin: 2px 0 0; color: var(--danger); background: var(--danger-soft); border-radius: 8px; padding: 8px 10px; line-height: 1.4; }
+
+/* an agent's own chat (team board / workspace / agents page) */
+.ac { display: flex; flex-direction: column; min-height: calc(100% - 4px); }
+.ac-head { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; padding-right: 44px; }
+.ac-instr { margin-bottom: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); padding: 8px 12px; }
+.ac-instr > summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
+.ac-instr-body { display: grid; gap: 6px; margin-top: 8px; font-size: 14px; }
+.ac-instr-body > .btn { justify-self: start; }
+.ac-label { font-weight: 600; margin-bottom: 8px; }
+.ac-log { flex: 1; display: grid; gap: 14px; align-content: start; padding-bottom: 12px; }
+.ac-turn { display: grid; gap: 8px; }
+.ac-msg { border-radius: 14px; padding: 10px 12px; font-size: 14px; line-height: 1.5; min-width: 0; overflow-wrap: anywhere; }
+.ac-msg .md { font-size: 14px; }
+.ac-in { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); margin-left: 28px; }
+.ac-out { background: var(--surface-2); border: 1px solid var(--border); margin-right: 28px; }
+.ac-out.st-error { border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.ac-who { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.ac-working { display: flex; align-items: center; gap: 8px; color: var(--muted); min-width: 0; }
+.ac-more { display: inline-flex; align-items: center; gap: 3px; margin-top: 4px; border: 0; background: none; padding: 0; color: var(--accent-strong); font-size: 12.5px; cursor: pointer; }
+.ac-steps { margin-top: 6px; }
+.ac-steps > summary { cursor: pointer; }
+.ac-compose { position: sticky; bottom: -26px; display: flex; gap: 8px; align-items: flex-end; padding: 12px 0 16px; background: var(--surface); border-top: 1px solid var(--border); }
+.ac-compose .textarea { flex: 1; resize: none; min-height: 44px; max-height: 160px; }
+.ac-embedded { min-height: 0; }
+.ac-embedded .ac-compose { bottom: -26px; }
+.team-member.clickable { cursor: pointer; }
+.team-member.clickable:hover { border-color: var(--border-strong); box-shadow: 0 0 0 1px var(--accent-soft); }
+.team-board-tools { display: flex; gap: 6px; align-items: center; }
+.ws-agents-tools { display: flex; gap: 6px; }
+.ws-agents-tools .btn { flex: 1; }
+.ws-team-head { display: flex; align-items: center; gap: 6px; margin: 12px 2px 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.ws-team-head .grow { min-width: 0; }
+.ws-row .ws-row-act { opacity: .55; }
+.ws-row:hover .ws-row-act { opacity: 1; }

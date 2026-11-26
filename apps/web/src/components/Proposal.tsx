@@ -60,7 +60,7 @@ export function AnswerWithProposals({ text, m, conversationId }: { text: string;
   if (text.includes('```alter-teamrun'))
     return (
       <>
-        {splitFence<BoardData>(text, 'alter-teamrun', validBoard).map((piece, i) => (piece.kind === 'card' ? <TeamBoard key={'b' + i} board={piece.card} /> : <AnswerWithProposals key={i} text={piece.text} m={m} conversationId={conversationId} />))}
+        {splitFence<BoardData>(text, 'alter-teamrun', validBoard).map((piece, i) => (piece.kind === 'card' ? <TeamBoard key={'b' + i} board={piece.card} conversationId={conversationId} /> : <AnswerWithProposals key={i} text={piece.text} m={m} conversationId={conversationId} />))}
       </>
     );
   if (/```alter-team\s/.test(text))

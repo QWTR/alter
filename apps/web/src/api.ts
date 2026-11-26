@@ -46,11 +46,13 @@ export interface Agent {
   model?: string; effort?: string;
   skills: string[]; tools: string[]; access: Access; projectId: string | null; monitor: MonitorSpec | null; monitorState: MonitorState | null;
   enabled: boolean; learns: boolean; templateId: string | null; nextRunAt: string | null; lastRunAt: string | null; running?: boolean;
+  /** in a workspace list: the team it belongs to */
+  team?: { id: string; name: string; lead: boolean } | null;
 }
 export interface Template extends Partial<Agent> { templateId: string; category: 'daily' | 'work' | 'creative' | 'automation'; name: string; instructions: string }
 export interface Run {
   id: string; agent_id: string; status: 'running' | 'done' | 'error'; trigger: string; provider: string | null; output: string | null;
-  error: string | null; detail: string | null; started_at: string; finished_at: string | null; agent_name?: string; agent_avatar?: Avatar;
+  error: string | null; detail: string | null; task?: string | null; started_at: string; finished_at: string | null; agent_name?: string; agent_avatar?: Avatar;
 }
 export interface Memory { id: string; kind: string; content: string; importance: number; source: string | null; projectId: string | null; updatedAt: string }
 export interface Skill { id: string; name: string; description: string }

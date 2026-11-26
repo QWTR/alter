@@ -5,7 +5,7 @@
 // Afterwards "@Team do Y" starts the same loop again. Progress is a live ```alter-teamrun board in the chat.
 import { randomUUID } from 'node:crypto';
 import { logActivity } from './activity.ts';
-import { createAgent, getAgent, isRunning, runAgent, stopAgent, type Agent } from './agents.ts';
+import { createAgent, deleteAgent, getAgent, isRunning, listAgents, logRun, runAgent, stopAgent, type Agent } from './agents.ts';
 import { getConversation, updateConversation, type Message } from './chat.ts';
 import { loadConfig, saveConfig } from './config.ts';
 import { all, get, now, run } from './db.ts';
@@ -13,7 +13,7 @@ import { emit } from './events.ts';
 import { createProject, getProject } from './projects.ts';
 import { resolveProvider } from './providers/index.ts';
 import { notifyPhones } from './push.ts';
-import { listGroups, mentionsIn, saveGroup, type AgentGroup } from './team.ts';
+import { deleteGroup, listGroups, mentionsIn, saveGroup, type AgentGroup } from './team.ts';
 
 export const TEAM_FENCE = 'alter-team';
 export const RUN_FENCE = 'alter-teamrun';
@@ -174,6 +174,12 @@ export function recoverSquads() {
     if (!m) continue;
     try {
       const b = JSON.parse(m[1]) as Board;
+      // runs from before tasks were stored: give them the task the board shows (so the agent's chat shows what it got)
+      for (const x of b.members) {
+        if (!x.task || x.kind === 'lead') continue;
+        const old = get<{ id: string }>(`SELECT id FROM runs WHERE agent_id = ? AND trigger = 'team' AND task IS NULL AND started_at >= ? ORDER BY started_at LIMIT 1`, x.id, b.startedAt);
+        if (old) run('UPDATE runs SET task = ? WHERE id = ?', x.task, old.id);
+      }
       if (['done', 'stopped', 'error'].includes(b.phase)) continue;
       b.phase = 'stopped';
       b.finishedAt = new Date().toISOString();
@@ -209,12 +215,21 @@ async function orchestrate(state: { board: Board; messageId: number; conversatio
     `Team:\n${b.members.map((m) => `- ${m.name} (${m.kind === 'lead' ? 'lead' : m.kind === 'tester' ? 'tester' : m.role})`).join('\n')}\n` +
     (results.length ? `\nWork already done by the team (latest last):\n${results.slice(-8).map((r) => `### ${r.name}: ${r.task.slice(0, 200)}\n${r.output.slice(0, 1200)}`).join('\n\n')}` : '');
 
-  const leadThink = async (prompt: string): Promise<string> => {
-    set(lead.id, { status: 'working' });
+  const leadThink = async (prompt: string, step: string): Promise<string> => {
+    set(lead.id, { status: 'working', task: step });
+    const started = now();
     const provider = await resolveProvider(lead.provider, { avoidLimited: true });
-    const { text } = await provider.run({ prompt: `You are "${lead.name}", the lead of the team "${b.team}". ${lead.instructions}\n\n${prompt}`, access: 'chat', timeoutMs: 8 * 60_000 });
-    set(lead.id, { status: 'done' });
-    return text;
+    try {
+      const { text } = await provider.run({ prompt: `You are "${lead.name}", the lead of the team "${b.team}". ${lead.instructions}\n\n${prompt}`, access: 'chat', timeoutMs: 15 * 60_000 });
+      // kept in the lead's history: clicking the lead shows what it was asked and what it told the others
+      logRun(lead.id, 'team', `${step}\n\n${prompt}`.slice(0, 8000), text, 'done', started);
+      set(lead.id, { status: 'done' });
+      return text;
+    } catch (e) {
+      logRun(lead.id, 'team', `${step}\n\n${prompt}`.slice(0, 8000), (e as Error).message, 'error', started);
+      set(lead.id, { status: 'error', note: (e as Error).message });
+      throw e;
+    }
   };
 
   // 1. plan
@@ -223,6 +238,7 @@ async function orchestrate(state: { board: Board; messageId: number; conversatio
       'Split the goal into concrete tasks for the departments (1-3 tasks each, only who is needed; tasks of one department run in order, departments run in parallel). Each task must say exactly what to produce and where. ' +
       'If a department needs another one\'s result first (e.g. docs describe the finished page), list that department in "after" — otherwise leave it empty so they work at the same time. ' +
       'Answer ONLY with JSON: {"summary":"one line in the user\'s language","tasks":[{"member":"<id from the list>","task":"…","after":["<id>"]}]}',
+    'Plan',
   );
   if (stopped()) return finish('stopped');
   const plan = firstJson(planText);
@@ -301,7 +317,7 @@ async function orchestrate(state: { board: Board; messageId: number; conversatio
         set(tester.id, { status: 'error', note: (e as Error).message });
       }
     } else {
-      verdict = firstJson(await leadThink(`${brief()}\n\nReview the work. ${checkPrompt}`));
+      verdict = firstJson(await leadThink(`${brief()}\n\nReview the work. ${checkPrompt}`, 'Review'));
     }
     if (stopped()) return finish('stopped');
     const issues = (verdict?.issues ?? []).filter((i) => i && i.problem).slice(0, 12);
@@ -323,6 +339,7 @@ async function orchestrate(state: { board: Board; messageId: number; conversatio
   b.report = await leadThink(
     `${brief()}\n\nOpen problems after the last test: ${b.issues.length ? b.issues.map((i) => `${i.member}: ${i.problem}`).join('; ') : 'none'}.\n` +
       `Write the final report for the user in the language of the goal: what was made (with file paths / how to open it), how it was checked, and what is left (if anything). Short, concrete, Markdown.`,
+    'Report',
   );
   return finish('done');
 
@@ -337,3 +354,38 @@ async function orchestrate(state: { board: Board; messageId: number; conversatio
       notifyPhones({ title: `${b.team} ✓`, body: (b.report ?? '').replace(/[#*`>_]/g, '').replace(/\s+/g, ' ').trim().slice(0, 240), url: `/chat/${state.conversationId}`, tag: `team-${b.runId}` }).catch(() => {});
   }
 }
+
+// ---------- removing agents ----------
+/** The project of a running team (workspace members of that project may stop it). */
+export function squadProject(runId: string): string | null {
+  const r = live.get(runId);
+  return r ? squadOf(r.board.groupId)?.projectId ?? null : null;
+}
+
+/** Stops and deletes these agents; they leave their teams, and a team with nobody left is removed too. */
+export function removeAgents(ids: string[]): number {
+  const gone = new Set(ids);
+  for (const r of live.values()) if (r.board.members.some((m) => gone.has(m.id))) stopSquad(r.board.runId);
+  let n = 0;
+  for (const id of ids) {
+    stopAgent(id);
+    if (deleteAgent(id)) n++;
+  }
+  for (const g of listGroups()) {
+    if (!g.members.some((m) => gone.has(m))) continue;
+    const left = g.members.filter((m) => !gone.has(m) && getAgent(m));
+    if (left.length) saveGroup({ ...g, members: left, lead: g.lead && left.includes(g.lead) ? g.lead : left[0] });
+    else {
+      deleteGroup(g.id);
+      delete squads()[g.id];
+      saveConfig();
+    }
+  }
+  return n;
+}
+
+/** Every agent of a project: the workspace's "delete all agents". */
+export const removeProjectAgents = (projectId: string) => removeAgents(listAgents(projectId).filter((a) => !a.monitor).map((a) => a.id));
+
+/** A team: its agents and the team itself. */
+export const removeTeam = (groupId: string) => removeAgents(listGroups().find((x) => x.id === groupId)?.members ?? []);

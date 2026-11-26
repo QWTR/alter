@@ -32,7 +32,7 @@ import { bus, emit, type AlterEvent } from './events.ts';
 import { addMemory, deleteMemory, listMemories, updateMemory } from './memory.ts';
 import { runCheck } from './monitor.ts';
 import { serverPackageReady, serverSetupScript } from './serverPkg.ts';
-import { applyTeam, stopSquad } from './squad.ts';
+import { applyTeam, removeAgents, removeProjectAgents, removeTeam, squadProject, startSquad, stopSquad } from './squad.ts';
 import { CATALOG, forgetPluginStatus, installCustom, installFromCatalog, pluginStatus, publicPlugins, removePlugin, setPluginEnabled } from './plugins.ts';
 import { detectCli } from './providers/process.ts';
 import { domainFor, ensureRelayKey, vpsSetupScript, publicRemoteSettings, publicUrl, RELAY_HEADER, setRemoteSettings, startTunnel, stopTunnel, tunnelStatus } from './remote.ts';
@@ -504,7 +504,69 @@ route('POST', '/api/ws/chats', ({ auth, url, body }) => {
 }, { guest: true });
 route('GET', '/api/ws/agents', ({ auth, url }) => {
   const p = wsProject(auth, url);
-  return listAgents(p.id).filter((a) => !a.monitor);
+  const groups = listGroups();
+  return listAgents(p.id).filter((a) => !a.monitor).map((a) => {
+    const g = groups.find((x) => x.members.includes(a.id));
+    return { ...a, running: isRunning(a.id), team: g ? { id: g.id, name: g.name, lead: g.lead === a.id } : null };
+  });
+}, { guest: true });
+// everyone in the workspace manages its agents: open one (its tasks and answers), change it, give it a job, stop it, delete
+const wsAgent = (auth: Auth, url: URL, id: string) => {
+  const a = getAgent(id);
+  // a member may reach any agent of their workspaces (a team board in a chat doesn't know the ?project)
+  if (a?.projectId && isGuest(auth) && auth.member?.projectIds.includes(a.projectId) && !url.searchParams.get('project')) {
+    const p = getProject(a.projectId);
+    if (p) return { p, a };
+  }
+  const p = wsProject(auth, url);
+  if (!a || a.projectId !== p.id) throw new HttpError(404, 'Agent not found');
+  return { p, a };
+};
+route('GET', '/api/ws/agents/:id/runs', ({ auth, url, params }) => {
+  wsAgent(auth, url, params[0]);
+  return listRuns({ agentId: params[0], limit: 30 });
+}, { guest: true });
+route('PUT', '/api/ws/agents/:id', ({ auth, url, params, body }) => {
+  const { p, a } = wsAgent(auth, url, params[0]);
+  const patch: Record<string, unknown> = {};
+  if (typeof body?.name === 'string' && body.name.trim()) patch.name = body.name.trim().slice(0, 60);
+  if (typeof body?.description === 'string') patch.description = body.description.slice(0, 200);
+  if (typeof body?.instructions === 'string' && body.instructions.trim()) patch.instructions = body.instructions.trim().slice(0, 8000);
+  const out = updateAgent(a.id, patch);
+  emit('workspace.changed', { projectId: p.id });
+  wsLog(p.id, wsActor(auth), 'agent.edit', out?.name ?? a.name, a.id);
+  return out;
+}, { guest: true });
+route('POST', '/api/ws/agents/:id/run', ({ auth, url, params, body }) => {
+  const { p, a } = wsAgent(auth, url, params[0]);
+  if (isRunning(a.id)) throw new HttpError(409, `${a.name} is already working`);
+  const task = typeof body?.task === 'string' && body.task.trim() ? body.task.trim().slice(0, 8000) : undefined;
+  runAgent(a.id, 'manual', '', task).catch(() => {});
+  wsLog(p.id, wsActor(auth), 'agent.run', a.name, a.id);
+  return { started: true };
+}, { guest: true });
+route('POST', '/api/ws/agents/:id/stop', ({ auth, url, params }) => {
+  const { p, a } = wsAgent(auth, url, params[0]);
+  wsLog(p.id, wsActor(auth), 'agent.stop', a.name, a.id);
+  return { stopped: stopAgent(a.id) };
+}, { guest: true });
+route('DELETE', '/api/ws/agents/:id', ({ auth, url, params }) => {
+  const { p, a } = wsAgent(auth, url, params[0]);
+  const n = removeAgents([a.id]);
+  emit('workspace.changed', { projectId: p.id });
+  wsLog(p.id, wsActor(auth), 'agent.delete', a.name, a.id);
+  return { deleted: n };
+}, { guest: true });
+/** ?team=<groupId> deletes one team; without it every agent of the workspace. */
+route('DELETE', '/api/ws/agents', ({ auth, url }) => {
+  const p = wsProject(auth, url);
+  const team = url.searchParams.get('team');
+  const g = team ? listGroups().find((x) => x.id === team) : undefined;
+  if (team && (!g || !g.members.some((id) => getAgent(id)?.projectId === p.id))) throw new HttpError(404, 'Team not found');
+  const n = g ? removeTeam(g.id) : removeProjectAgents(p.id);
+  emit('workspace.changed', { projectId: p.id });
+  wsLog(p.id, wsActor(auth), 'agent.delete', g ? `@${g.name}` : `${n}`, p.id);
+  return { deleted: n };
 }, { guest: true });
 route('POST', '/api/ws/agents', ({ auth, url, body }) => {
   const p = wsProject(auth, url);
@@ -908,8 +970,21 @@ route('POST', '/api/conversations/:id/messages/:mid/team/:n', ({ auth, params, b
     throw new HttpError(400, (e as Error).message);
   }
 });
+/** Start a team's job again (a stopped board's "Start again"); workspace members may do it in their workspace. */
+route('POST', '/api/squads/start', ({ auth, body }) => {
+  const groupId = String(body?.groupId ?? '');
+  const conversationId = String(body?.conversationId ?? '');
+  const goal = String(body?.goal ?? '').trim().slice(0, 4000);
+  const g = listGroups().find((x) => x.id === groupId);
+  const pid = g ? getAgent(g.members[0])?.projectId ?? null : null;
+  if (!(isGuest(auth) && auth.member && pid && auth.member.projectIds.includes(pid))) ownerOnly(auth, 'start teams');
+  if (!g || !goal || !getConversation(conversationId)) throw new HttpError(400, 'Team, chat and goal are needed');
+  try { return startSquad(conversationId, g.id, goal); } catch (e) { throw new HttpError(409, (e as Error).message); }
+});
 route('POST', '/api/squads/:runId/stop', ({ auth, params }) => {
-  ownerOnly(auth, 'stop teams');
+  // workspace members may stop a team working in their workspace
+  const pid = squadProject(params[0]);
+  if (!(isGuest(auth) && auth.member && pid && auth.member.projectIds.includes(pid))) ownerOnly(auth, 'stop teams');
   return { stopped: stopSquad(params[0]) };
 });
 route('DELETE', '/api/tunnel', ({ auth }) => {
@@ -940,10 +1015,19 @@ route('POST', '/api/agents', ({ body }) => {
 });
 route('GET', '/api/agents/:id', ({ params }) => getAgent(params[0]) ?? notFound());
 route('PUT', '/api/agents/:id', ({ params, body }) => updateAgent(params[0], body) ?? notFound());
-route('DELETE', '/api/agents/:id', ({ params }) => ({ ok: deleteAgent(params[0]) }));
-route('POST', '/api/agents/:id/run', ({ params }) => {
-  if (!getAgent(params[0])) notFound();
-  runAgent(params[0], 'manual').catch(() => {});
+route('DELETE', '/api/agents/:id', ({ params }) => ({ ok: removeAgents([params[0]]) > 0 }));
+/** Delete every agent (automations / monitors stay). */
+route('DELETE', '/api/agents', ({ auth }) => {
+  ownerOnly(auth, 'delete all agents');
+  return { deleted: removeAgents(listAgents().filter((a) => !a.monitor).map((a) => a.id)) };
+});
+route('POST', '/api/agents/:id/run', ({ params, body }) => {
+  const a = getAgent(params[0]);
+  if (!a) notFound();
+  if (isRunning(params[0])) throw new HttpError(409, `${a!.name} is already working`);
+  // a task written in the agent's chat ("now also do X"); without one it does its standing job
+  const task = typeof body?.task === 'string' && body.task.trim() ? body.task.trim().slice(0, 8000) : undefined;
+  runAgent(params[0], 'manual', '', task).catch(() => {});
   return { started: true };
 });
 route('POST', '/api/agents/:id/stop', ({ params }) => ({ stopped: stopAgent(params[0]) }));

@@ -70,6 +70,8 @@ export interface Run {
   output: string | null;
   error: string | null;
   detail: string | null;
+  /** What the agent was asked to do on this run (its task from the lead, or the user's). */
+  task?: string | null;
   started_at: string;
   finished_at: string | null;
 }
@@ -297,6 +299,14 @@ export function updateAgent(id: string, patch: Partial<AgentInput>): Agent | und
   return cur ? persist(normalize(patch, cur)) : undefined;
 }
 
+/** A finished step that did not go through runAgent (e.g. a team lead planning): kept in the agent's history. */
+export function logRun(agentId: string, trigger: string, task: string, output: string, status: 'done' | 'error' = 'done', startedAt = now()) {
+  const id = randomUUID();
+  run('INSERT INTO runs (id, agent_id, status, trigger, task, output, error, started_at, finished_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', id, agentId, status, trigger, task, status === 'done' ? output : null, status === 'error' ? output : null, startedAt, now());
+  emit('run.finished', { id, agentId });
+  return id;
+}
+
 export function deleteAgent(id: string): boolean {
   run('DELETE FROM runs WHERE agent_id = ?', id);
   const ok = Number(run('DELETE FROM agents WHERE id = ?', id).changes) > 0;
@@ -343,7 +353,7 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
   setAgentStatus(id, 'working', task ? task.replace(/\s+/g, ' ') : trigger === 'monitor' ? 'checking an alert' : 'running its task');
 
   const runId = randomUUID();
-  run('INSERT INTO runs (id, agent_id, status, trigger, started_at) VALUES (?, ?, ?, ?, ?)', runId, id, 'running', trigger, now());
+  run('INSERT INTO runs (id, agent_id, status, trigger, task, started_at) VALUES (?, ?, ?, ?, ?, ?)', runId, id, 'running', trigger, task ?? null, now());
   emit('run.started', { id: runId, agentId: id, agent_name: agent.name, agent_avatar: agent.avatar });
   const steps: string[] = [];
 
@@ -384,7 +394,7 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
       cwd: project?.folder,
       fileDirs: projectDirs(project),
       mcp: [...(mcp ?? []), ...pluginServers()],
-      timeoutMs: 60 * 60_000,
+      timeoutMs: 0, // no time limit: long jobs (Unity, Blender) run to the end; Stop ends them
       signal: ctrl.signal,
       onActivity: (step) => {
         if (ctrl.signal.aborted) return;

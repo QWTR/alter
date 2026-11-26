@@ -6,6 +6,7 @@ import { api, invalidate, setCached, useData, type Access, type Agent, type Proj
 import { ago, formatTime, useT, type Key } from '../i18n';
 import { Markdown } from './Markdown';
 import { AgentCreator } from './AgentCreator';
+import { AgentChat } from './AgentChat';
 import { navigate } from '../router';
 import { useDescribeSchedule, ScheduleEditor } from './schedule';
 import { Drawer, Field, ICON_KEYS, ICONS, Modal, ModalHead, Orb, PALETTE_KEYS, PALETTES, Segmented, Switch, Tabs, spring, stagger, toast } from './ui';
@@ -199,10 +200,10 @@ function AgentDetail({ id, onClose }: { id: string; onClose: () => void }) {
         <span className="grow" />
         <button className="btn ghost icon danger" onClick={remove} title={t('common.delete')}><Trash2 /></button>
       </div>
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: 'history', label: t('agents.history') }, { value: 'edit', label: t('common.edit'), icon: Pencil }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: 'history', label: t('ac.history') }, { value: 'edit', label: t('common.edit'), icon: Pencil }]} />
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-          {tab === 'history' ? <RunHistory agentId={a.id} /> : <AgentEditor agent={a} onSaved={() => setTab('history')} />}
+          {tab === 'history' ? <AgentChat id={a.id} onClose={onClose} embedded /> : <AgentEditor agent={a} onSaved={() => setTab('history')} />}
         </motion.div>
       </AnimatePresence>
     </div>

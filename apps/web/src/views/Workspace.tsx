@@ -20,6 +20,9 @@ import { ago, setLang, useT } from '../i18n';
 import { isNativeApp } from '../native';
 import { navigate, useRoute } from '../router';
 import { ChatView } from './Chat';
+import { AgentChatDrawer, type AgentChatOpen } from '../components/AgentChat';
+import { Orb } from '../components/ui';
+import { Crown, Loader2 } from 'lucide-react';
 
 interface WsPerson { id: string; name: string; color: string; joined: boolean; online: boolean; lastSeen: string | null; token?: string }
 interface WsMe {
@@ -92,6 +95,16 @@ function OpenInApp({ wsKey }: { wsKey: string }) {
 }
 
 /** The workspace itself — for a member (memberKey) or the owner (projectId from the route). */
+/** Agents by team (teams first, lead on top), then the ones on their own. */
+function agentGroups(list: Agent[]): [Agent['team'] | null, Agent[]][] {
+  const teams = new Map<string, Agent[]>();
+  const solo: Agent[] = [];
+  for (const a of list) a.team ? teams.set(a.team.id, [...(teams.get(a.team.id) ?? []), a]) : solo.push(a);
+  const out: [Agent['team'] | null, Agent[]][] = [...teams.values()].map((l) => [l[0].team!, [...l].sort((x, y) => Number(!!y.team?.lead) - Number(!!x.team?.lead))]);
+  if (solo.length) out.push([null, solo]);
+  return out;
+}
+
 export function WorkspaceView({ memberKey }: { memberKey?: string }) {
   const t = useT();
   const route = useRoute();
@@ -104,7 +117,9 @@ export function WorkspaceView({ memberKey }: { memberKey?: string }) {
   const [wsMenu, setWsMenu] = useState(false);
   const { data: me } = useData<WsMe>(`/api/ws/me${q}`, 20_000);
   const { data: chats } = useData<Conversation[]>(`/api/ws/chats${q}`, 8000);
-  const { data: agents } = useData<Agent[]>(`/api/ws/agents${q}`, 20_000);
+  const { data: agents } = useData<Agent[]>(`/api/ws/agents${q}`, 6000);
+  const [agentChat, setAgentChat] = useState<AgentChatOpen | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const { data: status } = useData<Status>(member ? null : '/api/status');
   // members: which chat is open is local; the owner's lives in the URL (back button, links)
   const [memberChat, setMemberChat] = useState<string | null>(null);
@@ -119,7 +134,7 @@ export function WorkspaceView({ memberKey }: { memberKey?: string }) {
 
   // presence + new chats from the others: refresh now and then
   useEffect(() => {
-    const id = setInterval(() => { invalidate(`/api/ws/me${q}`); invalidate(`/api/ws/chats${q}`); }, 15_000);
+    const id = setInterval(() => { invalidate(`/api/ws/me${q}`); invalidate(`/api/ws/chats${q}`); invalidate(`/api/ws/agents${q}`); }, 15_000);
     return () => clearInterval(id);
   }, [q]);
 
@@ -135,6 +150,17 @@ export function WorkspaceView({ memberKey }: { memberKey?: string }) {
       setTab('chats');
       open(c.id);
     } catch (e) { toast((e as Error).message, 'error'); }
+  };
+
+  const removeAgents = async (team?: { id: string; name: string }) => {
+    const n = team ? (agents ?? []).filter((a) => a.team?.id === team.id).length : agents?.length ?? 0;
+    if (!confirm(team ? t('ac.delTeamQ', { name: team.name }) : t('ac.delAllQ', { n }))) return;
+    setDeleting(true);
+    try {
+      const r = await api<{ deleted: number }>(`/api/ws/agents${q}${team ? `${q ? '&' : '?'}team=${team.id}` : ''}`, { method: 'DELETE' });
+      toast(t('ac.deleted', { n: r.deleted }), 'ok');
+      invalidate(`/api/ws/agents${q}`, '/api/agents', '/api/projects');
+    } catch (e) { toast((e as Error).message, 'error'); } finally { setDeleting(false); }
   };
 
   // the member's chat pane runs the shared chat view in "member" mode for the chat they picked
@@ -221,13 +247,32 @@ export function WorkspaceView({ memberKey }: { memberKey?: string }) {
 
           {tab === 'agents' && (
             <div className="ws-list">
-              <button className="btn" style={{ width: '100%' }} onClick={() => setNewAgent(true)}><Plus size={16} />{t('ws.newAgent')}</button>
+              <div className="ws-agents-tools">
+                <button className="btn" onClick={() => setNewAgent(true)}><Plus size={16} />{t('ws.newAgent')}</button>
+                {!!agents?.length && <button className="btn ghost icon danger" title={t('ac.delAll')} disabled={deleting} onClick={() => removeAgents()}>{deleting ? <Loader2 className="spin" size={15} /> : <Trash2 size={15} />}</button>}
+              </div>
               {agents?.length === 0 && <p className="small faint" style={{ textAlign: 'center', margin: '18px 0' }}>{t('ws.noAgents')}</p>}
-              {agents?.map((a) => (
-                <button key={a.id} className="ws-row" onClick={() => newChat(a.id)} title={t('ws.talkTo', { name: a.name })}>
-                  <Bot size={15} className="faint" />
-                  <span className="grow" style={{ minWidth: 0 }}><span className="truncate" style={{ display: 'block' }}>{a.name}</span><span className="small faint truncate" style={{ display: 'block' }}>{a.description || a.instructions.slice(0, 80)}</span></span>
-                </button>
+              {agentGroups(agents ?? []).map(([team, list]) => (
+                <div key={team?.id ?? 'solo'}>
+                  {team && (
+                    <div className="ws-team-head">
+                      <Users size={13} /><span className="grow truncate">@{team.name}</span>
+                      <button className="btn ghost icon sm danger" title={t('ac.delTeam')} disabled={deleting} onClick={() => removeAgents(team)}><Trash2 size={13} /></button>
+                    </div>
+                  )}
+                  {list.map((a) => (
+                    <div key={a.id} className="ws-row" role="button" tabIndex={0} title={t('ac.history')}
+                      onClick={() => setAgentChat({ id: a.id, name: a.name, avatar: a.avatar, ws: q })}
+                      onKeyDown={(e) => { if (e.key === 'Enter') setAgentChat({ id: a.id, name: a.name, avatar: a.avatar, ws: q }); }}>
+                      <Orb avatar={a.avatar} size={26} running={a.running} />
+                      <span className="grow" style={{ minWidth: 0 }}>
+                        <span className="truncate row" style={{ gap: 4 }}>{a.team?.lead && <Crown size={11} style={{ color: 'var(--warn)', flex: 'none' }} />}{a.name}{a.running && <span className="small" style={{ color: 'var(--warn)' }}> · {t('ac.working')}</span>}</span>
+                        <span className="small faint truncate" style={{ display: 'block' }}>{(a.description || a.instructions.slice(0, 80)).replace(/^[^:]{1,40}:\s*/, '')}</span>
+                      </span>
+                      <button className="btn ghost icon sm ws-row-act" title={t('ws.talkTo', { name: a.name })} onClick={(e) => { e.stopPropagation(); newChat(a.id); }}><MessageSquare size={14} /></button>
+                    </div>
+                  ))}
+                </div>
               ))}
             </div>
           )}
@@ -270,6 +315,7 @@ export function WorkspaceView({ memberKey }: { memberKey?: string }) {
 
       {me.isOwner && <InviteModal open={invite} onClose={() => setInvite(false)} projectId={p.id} projectName={p.name} lanUrls={status?.lanUrls ?? []} />}
       <NewAgentModal open={newAgent} onClose={() => setNewAgent(false)} q={q} />
+      <AgentChatDrawer open={agentChat} onClose={() => setAgentChat(null)} />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 // Self-running teams: the ```alter-team card (who's on the team → "Create team and start") and the
 // ```alter-teamrun live board (plan → work → test → fixes → report, every agent's status live).
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, Check, CheckCircle2, ClipboardList, Crown, FlaskConical, Hammer, Loader2, Rocket, ShieldCheck, Square, Users, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ClipboardList, Crown, FlaskConical, Hammer, Loader2, RotateCcw, Rocket, ShieldCheck, Square, Users, Wrench, X } from 'lucide-react';
 import { useState } from 'react';
 import { api, guest, invalidate, type Avatar } from '../api';
 import { useT, type Key } from '../i18n';
@@ -9,6 +9,7 @@ import { navigate } from '../router';
 import { useAgentStatuses, statusLine } from './agentStatus';
 import { Markdown } from './Markdown';
 import { Orb, spring, toast } from './ui';
+import { AgentChatDrawer, type AgentChatOpen } from './AgentChat';
 
 export interface TeamCardData {
   name: string; goal: string; lead: { name: string; instructions: string };
@@ -106,10 +107,12 @@ const STEPS = [
 ] as const;
 const ORDER: Record<string, number> = { plan: 0, work: 1, test: 2, fix: 3, report: 4, done: 5 };
 
-export function TeamBoard({ board }: { board: BoardData | null }) {
+export function TeamBoard({ board, conversationId }: { board: BoardData | null; conversationId?: string | null }) {
   const t = useT();
   const live = useAgentStatuses();
   const [stopping, setStopping] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [chat, setChat] = useState<AgentChatOpen | null>(null);
   if (!board) return null;
   const running = !['done', 'stopped', 'error'].includes(board.phase);
   const at = ORDER[board.phase] ?? 5;
@@ -122,6 +125,20 @@ export function TeamBoard({ board }: { board: BoardData | null }) {
       toast((e as Error).message, 'error');
     }
   };
+  // a stopped / finished job can be started again (owner and workspace members)
+  const again = async () => {
+    if (!conversationId) return;
+    setStarting(true);
+    try {
+      await api('/api/squads/start', { method: 'POST', body: { groupId: board.groupId, conversationId, goal: board.goal } });
+      invalidate(`/api/conversations/${conversationId}`);
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setStarting(false);
+    }
+  };
+  const canAct = !guest || !!guest.member;
   const ordered = [...board.members].sort((a, b) => (a.kind === 'lead' ? -1 : b.kind === 'lead' ? 1 : a.kind === 'tester' ? 1 : b.kind === 'tester' ? -1 : 0));
 
   return (
@@ -130,11 +147,14 @@ export function TeamBoard({ board }: { board: BoardData | null }) {
         <div className="team-board-title"><Users size={15} /><b>@{board.team}</b>
           {board.rounds > 1 && <span className="badge">{t('team.round', { n: board.round, of: board.rounds })}</span>}
         </div>
-        {running && !guest && (
+        {running && canAct && (
           <button className="btn danger-soft sm" onClick={stop} disabled={stopping}>{stopping ? <Loader2 className="spin" size={13} /> : <Square size={11} fill="currentColor" />}{t('agents.stop')}</button>
         )}
         {board.phase === 'done' && <span className="badge ok"><Check size={12} />{t('team.phase.done')}</span>}
         {board.phase === 'stopped' && <span className="badge">{t('agents.stopped')}</span>}
+        {!running && canAct && conversationId && board.groupId && (
+          <button className="btn sm" onClick={again} disabled={starting} title={board.goal}>{starting ? <Loader2 className="spin" size={13} /> : <RotateCcw size={13} />}{t('ac.again')}</button>
+        )}
         {board.phase === 'error' && <span className="badge danger"><AlertTriangle size={12} />{t('team.phase.error')}</span>}
       </div>
 
@@ -157,7 +177,10 @@ export function TeamBoard({ board }: { board: BoardData | null }) {
             const now = live[m.id];
             const line = m.status === 'working' ? statusLine(now) || m.task : m.note || m.task;
             return (
-              <motion.div key={m.id} className={`team-member st-${m.status} k-${m.kind}`} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+              <motion.div key={m.id} className={`team-member clickable st-${m.status} k-${m.kind}`} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                role="button" tabIndex={0} title={t('ac.history')}
+                onClick={() => setChat({ id: m.id, name: m.name, avatar: m.avatar, ws: guest ? '' : undefined })}
+                onKeyDown={(e) => { if (e.key === 'Enter') setChat({ id: m.id, name: m.name, avatar: m.avatar, ws: guest ? '' : undefined }); }}>
                 <div className="team-member-orb">
                   <Orb avatar={m.avatar} size={34} running={m.status === 'working'} />
                   {m.kind === 'lead' && <span className="team-crown"><Crown size={10} /></span>}
@@ -184,6 +207,7 @@ export function TeamBoard({ board }: { board: BoardData | null }) {
       )}
       {board.error && <div className="small danger-text">{board.error}</div>}
       {board.report && <div className="team-report"><Markdown text={board.report} /></div>}
+      <AgentChatDrawer open={chat} onClose={() => setChat(null)} />
     </motion.div>
   );
 }

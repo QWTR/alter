@@ -1,9 +1,9 @@
 import { motion } from 'motion/react';
-import { Bot, Plus } from 'lucide-react';
+import { Bot, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useData, type Agent } from '../api';
+import { api, invalidate, useData, type Agent } from '../api';
 import { AgentCard, AgentDrawer, Gallery } from '../components/agentKit';
-import { Empty, PageHead, stagger } from '../components/ui';
+import { Empty, PageHead, stagger, toast } from '../components/ui';
 import { useT } from '../i18n';
 import { navigate, useRoute } from '../router';
 import { ChatView } from './Chat';
@@ -21,6 +21,14 @@ function Team() {
   const [gallery, setGallery] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const team = (agents ?? []).filter((a) => !a.monitor);
+  const removeAll = async () => {
+    if (!confirm(t('ac.delAllQ', { n: team.length }))) return;
+    try {
+      const r = await api<{ deleted: number }>('/api/agents', { method: 'DELETE' });
+      toast(t('ac.deleted', { n: r.deleted }), 'ok');
+      invalidate('/api/agents', '/api/projects');
+    } catch (e) { toast((e as Error).message, 'error'); }
+  };
   // "+" in the sidebar opens the gallery here
   useEffect(() => {
     if (route.query.get('new')) {
@@ -31,7 +39,7 @@ function Team() {
 
   return (
     <div className="page">
-      <PageHead title={t('agents.title')} lead={t('agents.lead')} actions={<button className="btn primary" onClick={() => setGallery(true)}><Plus />{t('agents.add')}</button>} />
+      <PageHead title={t('agents.title')} lead={t('agents.lead')} actions={<>{team.length > 1 && <button className="btn ghost" onClick={removeAll}><Trash2 />{t('ac.delAll')}</button>}<button className="btn primary" onClick={() => setGallery(true)}><Plus />{t('agents.add')}</button></>} />
       {agents && !team.length ? (
         <Empty icon={Bot} title={t('agents.empty.title')} text={t('agents.empty.lead')} action={<button className="btn primary" onClick={() => setGallery(true)}><Plus />{t('agents.add')}</button>} />
       ) : (
