@@ -10,7 +10,7 @@ import { handleCouncilMcp } from './council.ts';
 import { agentStatuses } from './status.ts';
 import { ensureVoice, transcribe, voiceStatus } from './voice.ts';
 import { sendFollowUp } from './followups.ts';
-import { deleteRender, ensureStudio, publicBrand, listRenders, mediaForFiles, mediaIn, serveMedia, setBrand, studioStatus } from './studio.ts';
+import { deleteRender, ensureStudio, publicBrand, listRenders, mediaForFiles, mediaIn, mediaNamedIn, serveMedia, setBrand, studioStatus } from './studio.ts';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
@@ -46,7 +46,7 @@ import { previewFor, resolvePreview } from './preview.ts';
 import { PREVIEW_KIT } from './previewKit.ts';
 import { listSkills } from './skills.ts';
 import { VERSION } from './version.ts';
-import { MAX_UPLOAD, saveUpload, serveUpload } from './uploads.ts';
+import { MAX_UPLOAD, getUpload, saveUpload, serveUpload, type Attachment } from './uploads.ts';
 import { addCalendar, publicCalendars, removeCalendar, upcoming } from './calendar.ts';
 import { convertSale, deleteSale, draftSale, getSale, KINDS, listSales, salesStats, saveSale, sellerProfile, setSellerProfile } from './sales.ts';
 import { checkUpdate, installUpdate, startUpdateChecks, updateInfo } from './updates.ts';
@@ -514,6 +514,22 @@ route('GET', '/api/ws/agents', ({ auth, url }) => {
 /** Tells the agent who is writing to it (the owner of this ALTTER or a workspace member), so it addresses the right person. */
 const whoNote = (name: string, owner: boolean) => `## Who is writing to you
 ${name} wrote this message in your chat (${owner ? 'the owner of this ALTTER, who decides' : 'a member of the workspace, invited by the owner'}). Address them by name; when the owner and a member disagree, the owner decides.`;
+/** An agent's runs for its chat: pictures / videos the answers name are shown, files sent with a task come back as attachments. */
+const agentRuns = (agentId: string, limit: number) => {
+  const cwd = getProject(getAgent(agentId)?.projectId)?.folder ?? workspaceDir();
+  return listRuns({ agentId, limit }).map(({ attachments, ...r }) => {
+    const seen = new Set<string>();
+    const text = r.output ?? '';
+    const media = r.status === 'running' || !text ? [] : [...mediaForFiles(mediaNamedIn(text)), ...mediaIn(text, cwd)].filter((x) => !seen.has(x.url.split('?')[0]) && !!seen.add(x.url.split('?')[0])).slice(0, 24);
+    let files: Attachment[] = [];
+    try { files = attachments ? JSON.parse(attachments) : []; } catch {}
+    return { ...r, media: media.map(({ file, ...x }) => x), attachments: files };
+  });
+};
+/** Uploaded files named in a "run" request (ids from /api/uploads). */
+const runFiles = (body: any) => (Array.isArray(body?.attachments) ? body.attachments : []).slice(0, 20).map((id: unknown) => getUpload(String(id))).filter((a: unknown): a is Attachment & { file: string } => !!a);
+const taskOf = (body: any, files: unknown[]) => (typeof body?.task === 'string' && body.task.trim() ? body.task.trim().slice(0, 8000) : files.length ? '(see the attached files)' : undefined);
+
 const wsAgent = (auth: Auth, url: URL, id: string) => {
   const a = getAgent(id);
   // a member may reach any agent of their workspaces (a team board in a chat doesn't know the ?project)
@@ -527,7 +543,7 @@ const wsAgent = (auth: Auth, url: URL, id: string) => {
 };
 route('GET', '/api/ws/agents/:id/runs', ({ auth, url, params }) => {
   wsAgent(auth, url, params[0]);
-  return listRuns({ agentId: params[0], limit: 30 });
+  return agentRuns(params[0], 30);
 }, { guest: true });
 route('PUT', '/api/ws/agents/:id', ({ auth, url, params, body }) => {
   const { p, a } = wsAgent(auth, url, params[0]);
@@ -543,10 +559,11 @@ route('PUT', '/api/ws/agents/:id', ({ auth, url, params, body }) => {
 route('POST', '/api/ws/agents/:id/run', ({ auth, url, params, body }) => {
   const { p, a } = wsAgent(auth, url, params[0]);
   if (isRunning(a.id)) throw new HttpError(409, `${a.name} is already working`);
-  const task = typeof body?.task === 'string' && body.task.trim() ? body.task.trim().slice(0, 8000) : undefined;
+  const files = runFiles(body);
+  const task = taskOf(body, files);
   const who = wsActor(auth).name;
   const owner = !(isGuest(auth) && auth.member);
-  runAgent(a.id, 'manual', whoNote(who, owner), task, undefined, who).catch(() => {});
+  runAgent(a.id, 'manual', whoNote(who, owner), task, undefined, who, files).catch(() => {});
   wsLog(p.id, wsActor(auth), 'agent.run', a.name, a.id);
   return { started: true };
 }, { guest: true });
@@ -1033,9 +1050,10 @@ route('POST', '/api/agents/:id/run', ({ params, body }) => {
   if (!a) notFound();
   if (isRunning(params[0])) throw new HttpError(409, `${a!.name} is already working`);
   // a task written in the agent's chat ("now also do X"); without one it does its standing job
-  const task = typeof body?.task === 'string' && body.task.trim() ? body.task.trim().slice(0, 8000) : undefined;
+  const files = runFiles(body);
+  const task = taskOf(body, files);
   const who = ownerActor().name;
-  runAgent(params[0], 'manual', whoNote(who, true), task, undefined, who).catch(() => {});
+  runAgent(params[0], 'manual', whoNote(who, true), task, undefined, who, files).catch(() => {});
   return { started: true };
 });
 route('POST', '/api/agents/:id/stop', ({ params }) => ({ stopped: stopAgent(params[0]) }));
@@ -1051,9 +1069,10 @@ route('DELETE', '/api/groups/:id', ({ auth, params }) => {
   return { ok: deleteGroup(params[0]) };
 });
 route('POST', '/api/monitor/test', ({ body }) => runCheck({ type: body.type, target: String(body.target ?? '') }));
-route('GET', '/api/runs', ({ url }) =>
-  listRuns({ agentId: url.searchParams.get('agentId') ?? undefined, projectId: url.searchParams.get('projectId') ?? undefined }),
-);
+route('GET', '/api/runs', ({ url }) => {
+  const agentId = url.searchParams.get('agentId');
+  return agentId ? agentRuns(agentId, 60) : listRuns({ projectId: url.searchParams.get('projectId') ?? undefined });
+});
 route('GET', '/api/skills', () => listSkills().map(({ body, ...s }) => ({ ...s, preview: body.slice(0, 200) })));
 route('GET', '/api/activity', () => recentActivity(72, 200).reverse());
 

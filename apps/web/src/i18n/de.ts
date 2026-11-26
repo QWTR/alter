@@ -835,6 +835,8 @@ const de: Dict = {
   'ac.all': 'Alles zeigen',
   'ac.less': 'Weniger',
   'ac.sent': 'Gesendet an {name}',
+  'ac.attach': "Bild oder Datei anhängen",
+  'ac.attachErr': "Datei konnte nicht hinzugefügt werden",
   'ac.lead': 'Vom Teamleiter',
   'ac.delAll': 'Alle Agenten löschen',
   'ac.delAllQ': 'Alle {n} Agenten löschen? Ihr Verlauf wird mitgelöscht. Das lässt sich nicht rückgängig machen.',

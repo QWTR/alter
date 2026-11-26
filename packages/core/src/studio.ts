@@ -537,7 +537,10 @@ export function mediaNamedIn(text: string, limit = 24): string[] {
   const re = new RegExp(String.raw`(?:(?<![\w\\/])[A-Za-z]:[\\/]|\\\\)[^\n\r"'<>|*?\`\]\[]*?\.(?:${exts})(?![\w])`, 'gi');
   const out: string[] = [];
   for (const m of text.matchAll(re)) {
-    const f = normalize(m[0].trim());
+    let raw = m[0].trim();
+    // markdown image links escape spaces ("My%20project")
+    if (raw.includes('%')) { try { raw = decodeURIComponent(raw); } catch {} }
+    const f = normalize(raw);
     // the AI may retype a name a little differently (× for x, other case): match it in that folder
     const hit = existsSync(f) ? f : lookalike(f);
     if (hit && !out.includes(hit) && mediaItem(hit)) out.push(hit);

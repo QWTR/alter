@@ -835,6 +835,8 @@ const fr: Dict = {
   'ac.all': 'Tout afficher',
   'ac.less': 'Réduire',
   'ac.sent': 'Envoyé à {name}',
+  'ac.attach': "Joindre une image ou un fichier",
+  'ac.attachErr': "Impossible d’ajouter le fichier",
   'ac.lead': 'Du chef d’équipe',
   'ac.delAll': 'Supprimer tous les agents',
   'ac.delAllQ': 'Supprimer les {n} agents ? Leur historique part aussi. Action irréversible.',

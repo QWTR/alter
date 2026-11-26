@@ -850,6 +850,8 @@ const en = {
   'ac.all': 'Show all',
   'ac.less': 'Show less',
   'ac.sent': 'Sent to {name}',
+  'ac.attach': "Attach a picture or file",
+  'ac.attachErr': "Could not add the file",
   'ac.lead': 'From the lead',
   'ac.delAll': 'Delete all agents',
   'ac.delAllQ': 'Delete all {n} agents? Their history goes too. This cannot be undone.',

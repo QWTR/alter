@@ -2,13 +2,14 @@
 // live while it works — and a box to give it the next job. Opened by clicking an agent on a team board,
 // in a workspace's Agents tab or on the Agents page. Workspace members use the /api/ws endpoints.
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowUp, ChevronDown, Crown, Loader2, MessageCircle, Pencil, Square, Trash2, User } from 'lucide-react';
+import { ArrowUp, ChevronDown, Crown, FileText, Loader2, MessageCircle, Paperclip, Pencil, Square, Trash2, User, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { api, guest, invalidate, useData, type Agent, type Avatar, type Run } from '../api';
+import { api, guest, invalidate, uploadFile, useData, type Agent, type Attachment, type Avatar, type Run } from '../api';
 import { formatTime, useT, type Key } from '../i18n';
 import { navigate } from '../router';
 import { useAgentStatuses, statusLine } from './agentStatus';
 import { Markdown } from './Markdown';
+import { MediaResults } from './Media';
 import { Drawer, Orb, toast } from './ui';
 
 /** ws: '?project=…' (or '' for a member's own workspace) → workspace endpoints; undefined → the owner's own. */
@@ -16,6 +17,33 @@ export interface AgentChatOpen { id: string; ws?: string; name?: string; avatar?
 
 export function AgentChatDrawer({ open, onClose }: { open: AgentChatOpen | null; onClose: () => void }) {
   return <Drawer open={!!open} onClose={onClose}>{open && <AgentChat key={open.id} {...open} onClose={onClose} />}</Drawer>;
+}
+
+/** Files a person sent with a task. */
+function Sent({ list, onBig }: { list: Attachment[]; onBig: (a: Attachment) => void }) {
+  return (
+    <div className="ac-sent">
+      {list.map((a) => a.type.startsWith('image/')
+        ? <img key={a.id} src={a.url} alt={a.name} title={a.name} loading="lazy" onClick={() => onBig(a)} />
+        : <a key={a.id} href={a.url} target="_blank" rel="noreferrer"><FileText size={14} />{a.name}</a>)}
+    </div>
+  );
+}
+
+/** The pictures are shown under the answer, so lines that are only their path (or a markdown image of it) are dropped. */
+function withoutShown(text: string, names: string[]): string {
+  const shown = new Set(names.map((n) => n.toLowerCase()));
+  const fileOf = (s: string) => decodeURIComponent(s.trim().replace(/^file:\/+/i, '').replace(/[`*]/g, '')).split(/[\\/]/).pop()?.toLowerCase() ?? '';
+  return text
+    .split('\n')
+    .map((line) => line.replace(/!\[[^\]]*\]\(([^)]*\([^)]*\)[^)]*|[^)]*)\)/g, (all, src: string) => { try { return shown.has(fileOf(src)) ? '' : all; } catch { return all; } }))
+    .filter((line, i, arr) => {
+      const bare = line.trim().replace(/^[-*]\s+/, '').replace(/^`|`$/g, '');
+      if (!bare) return !(i > 0 && !arr[i - 1].trim()); // no runs of blank lines where pictures were
+      return !(/^(?:[A-Za-z]:[\\/]|\/|file:)/.test(bare) && shown.has(fileOf(bare)));
+    })
+    .join('\n')
+    .trim();
 }
 
 function Long({ text, limit = 700 }: { text: string; limit?: number }) {
@@ -44,6 +72,10 @@ export function AgentChat({ id, ws, name, avatar, onClose, embedded }: AgentChat
   const a = agents?.find((x) => x.id === id);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [files, setFiles] = useState<Attachment[]>([]);
+  const [adding, setAdding] = useState(0);
+  const [big, setBig] = useState<Attachment | null>(null);
+  const pick = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(false);
   const [instr, setInstr] = useState('');
   const end = useRef<HTMLDivElement>(null);
@@ -56,14 +88,23 @@ export function AgentChat({ id, ws, name, avatar, onClose, embedded }: AgentChat
   const refresh = () => invalidate(runsUrl, listUrl);
   const send = async () => {
     const task = text.trim();
-    if (!task || busy) return;
+    if ((!task && !files.length) || busy || adding) return;
     setBusy(true);
     try {
-      await api(`${base}/run${wsMode ? q : ''}`, { method: 'POST', body: { task } });
+      await api(`${base}/run${wsMode ? q : ''}`, { method: 'POST', body: { task, attachments: files.map((f) => f.id) } });
       setText('');
+      setFiles([]);
       toast(t('ac.sent', { name: shown }), 'ok');
       setTimeout(refresh, 600);
     } catch (e) { toast((e as Error).message, 'error'); } finally { setBusy(false); }
+  };
+  const add = async (list: File[]) => {
+    for (const file of list.slice(0, 20)) {
+      setAdding((n) => n + 1);
+      try { const a = await uploadFile(file); setFiles((cur) => [...cur, a]); }
+      catch (e) { toast(`${t('ac.attachErr')}: ${(e as Error).message}`, 'error'); }
+      finally { setAdding((n) => n - 1); }
+    }
   };
   const stop = async () => {
     try { await api(`${base}/stop${wsMode ? q : ''}`, { method: 'POST' }); toast(t('agents.stopped'), 'info'); refresh(); } catch (e) { toast((e as Error).message, 'error'); }
@@ -129,7 +170,8 @@ export function AgentChat({ id, ws, name, avatar, onClose, embedded }: AgentChat
                 {r.task && (
                   <div className="ac-msg ac-in">
                     <div className="ac-who small faint">{r.author ? <><User size={11} />{r.author}</> : fromLead ? <><Crown size={11} />{t('ac.lead')}</> : <><User size={11} />{r.trigger === 'manual' ? t('ac.you') : t(`activity.trigger.${r.trigger}` as Key)}</>} · {formatTime(r.started_at)}</div>
-                    <Long text={r.task} />
+                    {!!r.attachments?.length && <Sent list={r.attachments} onBig={setBig} />}
+                    {r.task !== '(see the attached files)' && <Long text={r.task} />}
                   </div>
                 )}
                 <div className={`ac-msg ac-out st-${r.status}`}>
@@ -139,7 +181,7 @@ export function AgentChat({ id, ws, name, avatar, onClose, embedded }: AgentChat
                       <Loader2 className="spin" size={14} />
                       <span className="truncate">{statusLine(live[id]) || steps[steps.length - 1] || t('ac.working')}</span>
                     </div>
-                  ) : r.output ? <Long text={r.output} limit={1500} /> : <span className="danger-text small">{r.error ?? t('common.error')}</span>}
+                  ) : r.output ? <><Long text={r.media?.length ? withoutShown(r.output, r.media.map((m) => m.name)) : r.output} limit={1500} />{!!r.media?.length && <MediaResults list={r.media} />}</> : <span className="danger-text small">{r.error ?? t('common.error')}</span>}
                   {r.status !== 'running' && steps.length > 0 && (
                     <details className="ac-steps"><summary className="small faint">{t('activity.steps', { n: steps.length })}</summary>{steps.slice(-30).map((s, k) => <div key={k} className="small faint truncate">{s}</div>)}</details>
                   )}
@@ -150,16 +192,31 @@ export function AgentChat({ id, ws, name, avatar, onClose, embedded }: AgentChat
         </AnimatePresence>
         <div ref={end} />
       </div>
+      {big && <div className="lightbox" onClick={() => setBig(null)}><img src={big.url} alt={big.name} /><span className="lightbox-name">{big.name}</span></div>}
 
-      <div className="ac-compose">
+      {(files.length > 0 || adding > 0) && (
+        <div className="ac-files">
+          {files.map((f) => (
+            <span key={f.id} className={`ac-file${f.type.startsWith('image/') ? ' img' : ''}`} title={f.name}>
+              {f.type.startsWith('image/') ? <img src={f.url} alt={f.name} onClick={() => setBig(f)} /> : <><FileText size={14} /><span className="truncate">{f.name}</span></>}
+              <button type="button" onClick={() => setFiles((cur) => cur.filter((x) => x.id !== f.id))} title={t('common.delete')}><X size={11} /></button>
+            </span>
+          ))}
+          {adding > 0 && <span className="ac-file"><Loader2 className="spin" size={14} /></span>}
+        </div>
+      )}
+      <div className="ac-compose" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); add([...e.dataTransfer.files]); }}>
+        <input ref={pick} type="file" multiple hidden onChange={(e) => { add([...(e.target.files ?? [])]); e.target.value = ''; }} />
+        <button className="btn ghost icon" type="button" onClick={() => pick.current?.click()} title={t('ac.attach')} disabled={working}><Paperclip size={17} /></button>
         <textarea
           className="textarea" rows={2} value={text} placeholder={t('ac.ph', { name: shown })} disabled={busy}
           onChange={(e) => setText(e.target.value)}
+          onPaste={(e) => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); add(fs); } }}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!working) send(); } }}
         />
         {working
           ? <button className="btn danger-soft" onClick={stop} title={t('agents.stop')}><Square size={12} fill="currentColor" />{t('agents.stop')}</button>
-          : <button className="btn primary icon" onClick={send} disabled={!text.trim() || busy} title={t('common.send' as Key)}>{busy ? <Loader2 className="spin" size={16} /> : <ArrowUp size={17} />}</button>}
+          : <button className="btn primary icon" onClick={send} disabled={(!text.trim() && !files.length) || busy || adding > 0} title={t('common.send' as Key)}>{busy ? <Loader2 className="spin" size={16} /> : <ArrowUp size={17} />}</button>}
       </div>
     </div>
   );

@@ -835,6 +835,8 @@ const es: Dict = {
   'ac.all': 'Ver todo',
   'ac.less': 'Ver menos',
   'ac.sent': 'Enviado a {name}',
+  'ac.attach': "Adjuntar imagen o archivo",
+  'ac.attachErr': "No se pudo añadir el archivo",
   'ac.lead': 'Del líder',
   'ac.delAll': 'Eliminar todos los agentes',
   'ac.delAllQ': '¿Eliminar los {n} agentes? Su historial también se borra. No se puede deshacer.',

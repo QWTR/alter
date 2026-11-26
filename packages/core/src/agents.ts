@@ -16,6 +16,7 @@ import { projectDirs } from './links.ts';
 import { setAgentStatus } from './status.ts';
 import { pluginServers, pluginsGuide, pluginTools } from './plugins.ts';
 import { notifyPhones } from './push.ts';
+import { uploadsDir, type Attachment } from './uploads.ts';
 
 export interface Avatar {
   /** robot face (see apps/web/src/components/Robot.tsx) */
@@ -74,6 +75,8 @@ export interface Run {
   task?: string | null;
   /** Who wrote the task in the agent's chat (the owner or a workspace member); null for the team / schedule. */
   author?: string | null;
+  /** Files sent with the task (JSON list of attachments). */
+  attachments?: string | null;
   started_at: string;
   finished_at: string | null;
 }
@@ -350,7 +353,10 @@ type TeamHook = (agent: Agent, signal: AbortSignal) => { mcp: { name: string; ur
 let teamHook: TeamHook | null = null;
 export const setTeamHook = (h: TeamHook) => { teamHook = h; };
 
-export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'monitor' | 'team' = 'manual', context = '', task?: string, mcp?: { name: string; url: string }[], author?: string): Promise<Run> {
+/** The agent's chat shows pictures, video and sound by itself when the answer names the file. */
+const SHOW_GUIDE = '## Showing files\nYour chat displays images, videos and sound inline. When asked to show something (a mockup, render, screenshot), or when you made such a file, put its full absolute path on its own line in your answer: the chat turns it into the picture. Do not tell the reader to open a folder, and do not describe a picture instead of showing it.';
+
+export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'monitor' | 'team' = 'manual', context = '', task?: string, mcp?: { name: string; url: string }[], author?: string, files: (Attachment & { file: string })[] = []): Promise<Run> {
   const agent = getAgent(id);
   if (!agent) throw new Error('Agent not found');
   if (running.has(id)) throw new Error(`${agent.name} is already running`);
@@ -360,7 +366,7 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
   setAgentStatus(id, 'working', task ? task.replace(/\s+/g, ' ') : trigger === 'monitor' ? 'checking an alert' : 'running its task');
 
   const runId = randomUUID();
-  run('INSERT INTO runs (id, agent_id, status, trigger, task, author, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)', runId, id, 'running', trigger, task ?? null, author ?? null, now());
+  run('INSERT INTO runs (id, agent_id, status, trigger, task, author, attachments, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', runId, id, 'running', trigger, task ?? null, author ?? null, files.length ? JSON.stringify(files.map(({ file, ...a }) => a)) : null, now());
   emit('run.started', { id: runId, agentId: id, agent_name: agent.name, agent_avatar: agent.avatar });
   const steps: string[] = [];
   // an agent on a team gets the team tool: it can ask / hand work to its teammates and get their answers
@@ -387,11 +393,12 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
           : '';
     const calendar = await calendarContext(`${task ?? ''} ${agent.instructions}`).catch(() => '');
     const prompt = buildPrompt({
-      query: task ?? agent.instructions,
+      query: (task ?? agent.instructions) + (files.length ? `
+(attached files, open them: ${files.map((f) => `${f.name} → ${f.file}`).join(', ')})` : ''),
       asTask: true,
       project,
       instructions: `You are "${agent.name}", an agent inside ALTTER. ${agent.description}${task ? `\nYour role: ${agent.instructions}` : ''}\n${accessNote}${skills ? `\n\n${skills}` : ''}`,
-      extra: [context, team?.guide ?? '', calendar, pluginsGuide(), RICH_GUIDE, previous ? `## Your previous runs (build on them, don't repeat them)\n${previous}` : ''].filter(Boolean).join('\n\n'),
+      extra: [context, team?.guide ?? '', SHOW_GUIDE, calendar, pluginsGuide(), RICH_GUIDE, previous ? `## Your previous runs (build on them, don't repeat them)\n${previous}` : ''].filter(Boolean).join('\n\n'),
       activityHours: 36,
     });
 
@@ -403,7 +410,8 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
       access: agent.access,
       tools: [...agent.tools, ...pluginTools()],
       cwd: project?.folder,
-      fileDirs: projectDirs(project),
+      fileDirs: [...(files.length ? [uploadsDir()] : []), ...projectDirs(project)],
+      files: files.map((f) => f.file),
       mcp: [...(mcp ?? []), ...(team ? [team.mcp] : []), ...pluginServers()],
       timeoutMs: 0, // no time limit: long jobs (Unity, Blender) run to the end; Stop ends them
       signal: ctrl.signal,

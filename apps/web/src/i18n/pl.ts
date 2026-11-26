@@ -835,6 +835,8 @@ const pl: Dict = {
   'ac.all': 'Pokaż całość',
   'ac.less': 'Zwiń',
   'ac.sent': 'Wysłano do: {name}',
+  'ac.attach': "Dodaj zdjęcie lub plik",
+  'ac.attachErr': "Nie udało się dodać pliku",
   'ac.lead': 'Od szefa zespołu',
   'ac.delAll': 'Usuń wszystkich agentów',
   'ac.delAllQ': 'Usunąć wszystkich agentów ({n})? Ich historia też zniknie. Tego nie da się cofnąć.',
