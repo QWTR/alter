@@ -178,6 +178,7 @@ export function creativeEngine(): string {
     : '';
   return `## ALTTER Studio (videos, motion graphics, 3D, edits, graphics)
 A ready kit is installed: Remotion + three.js + ffmpeg. Never create a new Remotion project, never npm install, never write long custom animation code — compose the kit's components. Keep files short.
+Other chats may be working in this same folder right now: give this job its own short unique name (the topic + 3 random letters) and use it for every file (videos/<name>.tsx, assets/<name>/…, renders). Never open, reuse, render or show a video file, frame or asset that you did not create in THIS chat, even if it sits in the folder.
 1. Write \`videos/<name>.tsx\` in the working folder:
 \`\`\`tsx
 import { Timeline, Scene, Bg, Title, Text } from 'alter-kit';
@@ -503,12 +504,39 @@ export function mediaIn(text: string, cwd: string): MediaItem[] {
 const SKIP_DIRS = new Set(['node_modules', '.git', '.next', '.nuxt', '.venv', 'venv', '__pycache__', '.cache', '.turbo', '.gradle', 'ext', '.svelte-kit', 'coverage']);
 const OUTPUT_DIR = /(^|[\\/])(output|outputs|out|renders?|exports?|generated|final|dist[\\/]media)([\\/]|$)/i;
 
+// ---------- answers running at the same time (two chats in one folder must not get each other's files) ----------
+
+interface Turn { from: number; to: number; dirs: string[] }
+const turns = new Map<number, Turn>();
+let turnSeq = 0;
+const under = (a: string, b: string) => { const x = normalize(a).toLowerCase(), y = normalize(b).toLowerCase(); return x === y || x.startsWith(y + sep) || y.startsWith(x + sep); };
+/** An answer starts working in these folders. */
+export function beginTurn(dirs: string[]): number {
+  const now = Date.now();
+  for (const [id, t] of turns) if ((t.to !== Infinity && now - t.to > 3 * 3600_000) || now - t.from > 12 * 3600_000) turns.delete(id);
+  turns.set(++turnSeq, { from: now, to: Infinity, dirs: [...new Set(dirs.map((d) => normalize(d)))] });
+  return turnSeq;
+}
+/** The answer is done (also when it failed). */
+export function endTurn(id: number) {
+  const t = turns.get(id);
+  if (t && t.to === Infinity) t.to = Date.now();
+}
+/** Did another answer work in one of the same folders while this one ran? Then new files there may be the other chat's. */
+export function turnShared(id: number): boolean {
+  const me = turns.get(id);
+  if (!me) return false;
+  const end = me.to === Infinity ? Date.now() : me.to;
+  for (const [oid, o] of turns) if (oid !== id && o.from <= end && o.to > me.from && o.dirs.some((d) => me.dirs.some((m) => under(d, m)))) return true;
+  return false;
+}
+
 /**
  * Images, videos and audio the AI made or changed during an answer (files modified since `since`), so they show
  * in the chat even when the answer only names a folder. Frame dumps (many new files in one folder) are skipped
  * unless the answer names them; files the answer names and files in output-like folders come first.
  */
-export function mediaMadeDuring(dirs: string[], since: number, text: string, limit = 8): string[] {
+export function mediaMadeDuring(dirs: string[], since: number, text: string, limit = 8, namedOnly = false): string[] {
   const named = new Set((text.match(/[\w.-]{3,}/g) ?? []).map((s) => s.toLowerCase()));
   const found: { file: string; mtime: number; dir: string }[] = [];
   let visited = 0;
@@ -538,7 +566,8 @@ export function mediaMadeDuring(dirs: string[], since: number, text: string, lim
   };
   const score = (f: { file: string; dir: string }) => (isNamed(f.file) ? 4 : 0) + (OUTPUT_DIR.test(f.dir) ? 2 : 0);
   return found
-    .filter((f) => isNamed(f.file) || (perDir.get(f.dir) ?? 0) <= 12)
+    // another chat worked in the same folder at the same time: only files this answer names are surely its own
+    .filter((f) => isNamed(f.file) || (!namedOnly && (perDir.get(f.dir) ?? 0) <= 12))
     .sort((a, b) => score(b) - score(a) || b.mtime - a.mtime)
     .slice(0, limit)
     .map((f) => f.file);
