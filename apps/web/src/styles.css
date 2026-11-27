@@ -1300,6 +1300,15 @@ html.has-titlebar .sidebar { padding-top: 12px; }
 .media-aspects button.on { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent-strong) 50%, transparent); background: var(--accent-soft); }
 .media-model { flex: 1 1 220px; min-width: 0; height: 36px; padding: 0 10px; }
 .media-maker-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.media-studios { display: flex; gap: 6px; flex-wrap: wrap; }
+.media-studios .btn.on { color: var(--accent); }
+.media-panel { display: flex; gap: 8px 10px; flex-wrap: wrap; align-items: flex-end; padding: 10px; border-radius: 12px; background: rgba(127,127,127,.08); }
+.media-panel .grow { flex: 1 1 200px; min-width: 0; }
+.media-panel-field { display: grid; gap: 4px; flex: 1 1 150px; min-width: 0; }
+.media-panel-field .input { height: 34px; padding: 0 8px; }
+.media-progress { height: 6px; border-radius: 3px; background: rgba(127,127,127,.2); overflow: hidden; margin: 4px 0; }
+.media-progress i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+.media-error-text { color: var(--danger, #e5484d); }
 .media-maker-foot .grow { flex: 1 1 220px; min-width: 0; }
 .media-gallery-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 2px 12px; flex-wrap: wrap; }
 .media-gallery-head h2 { font-size: 17px; margin: 0; }

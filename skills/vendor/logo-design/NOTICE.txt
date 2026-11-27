@@ -1,0 +1,4 @@
+logo-design
+Source: https://github.com/kaankiziltug/logo-design-skill
+License: MIT (see LICENSE).
+Bundled in ALTTER unchanged (only the skill folder; plugin manifests and repo docs/images left out).

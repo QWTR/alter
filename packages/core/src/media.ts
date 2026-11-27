@@ -2,6 +2,7 @@
 // Our own implementation; the providers are plain HTTP APIs:
 //   chatgpt      — the user's ChatGPT account, through the Codex app (no key)  image  ← default when signed in
 //   pollinations — free, no key (Flux and friends)          image
+//   local        — free, offline, this computer's GPU (stable-diffusion.cpp, see localgen.ts)  image
 //   openai       — your own API key (gpt-image-1)           image
 //   google       — your own Gemini API key                  image
 //   fal          — your own fal.ai key (Flux, Kling, Veo…)  image + video
@@ -17,6 +18,7 @@ import { all, get, getDb, now, run } from './db.ts';
 import { generatedDir, loadConfig, saveConfig } from './config.ts';
 import { emit } from './events.ts';
 import { mediaFor } from './studio.ts';
+import { LOCAL_MODELS, anyLocalModel, makeLocal, modelInstalled } from './localgen.ts';
 
 export type MediaKind = 'image' | 'video';
 export type Aspect = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
@@ -27,6 +29,7 @@ export interface ProviderInfo { id: string; label: string; free: boolean; needsK
 
 const MODELS: Record<string, ModelInfo[]> = {
   chatgpt: [{ id: 'gpt-image', label: 'ChatGPT (your account)', kind: 'image' }],
+  local: LOCAL_MODELS.map((m) => ({ id: m.id, label: `${m.label} (offline)`, kind: 'image' as const, note: m.note })),
   pollinations: [
     { id: 'flux', label: 'Flux (free)', kind: 'image' },
     { id: 'turbo', label: 'Turbo (free, fastest)', kind: 'image' },
@@ -82,16 +85,32 @@ export function chatgptReady(): boolean {
 
 export function mediaOptions(): { providers: ProviderInfo[]; aspects: Aspect[] } {
   const k = keys();
-  const providers = (['chatgpt', 'pollinations', 'fal', 'openai', 'google'] as const).map((id) => ({
+  const providers = (['chatgpt', 'local', 'pollinations', 'fal', 'openai', 'google'] as const).map((id) => ({
     id,
-    label: { chatgpt: 'ChatGPT', pollinations: 'Pollinations', fal: 'fal.ai', openai: 'OpenAI', google: 'Google Gemini' }[id],
-    free: id === 'pollinations',
-    needsKey: id !== 'pollinations' && id !== 'chatgpt',
-    hasKey: id === 'chatgpt' ? chatgptReady() : !!k[id],
+    label: { chatgpt: 'ChatGPT', local: 'On this computer', pollinations: 'Pollinations', fal: 'fal.ai', openai: 'OpenAI', google: 'Google Gemini' }[id],
+    free: id === 'pollinations' || id === 'local',
+    needsKey: id !== 'pollinations' && id !== 'chatgpt' && id !== 'local',
+    hasKey: id === 'chatgpt' ? chatgptReady() : id === 'local' ? !!anyLocalModel() : !!k[id as keyof Keys],
     keyUrl: KEY_URL[id],
     models: MODELS[id],
   }));
   return { providers, aspects: ASPECTS };
+}
+
+// ---------- characters: one look kept across many pictures (Media → Character) ----------
+export interface MediaCharacter { id: string; name: string; look: string }
+export function listCharacters(): MediaCharacter[] {
+  return ((loadConfig() as any).mediaCharacters ?? []) as MediaCharacter[];
+}
+export function saveCharacters(list: MediaCharacter[]): MediaCharacter[] {
+  const clean = (Array.isArray(list) ? list : [])
+    .map((x) => ({ id: String(x?.id || randomBytes(5).toString('hex')).slice(0, 20), name: String(x?.name ?? '').trim().slice(0, 60), look: String(x?.look ?? '').trim().slice(0, 1200) }))
+    .filter((x) => x.name && x.look)
+    .slice(0, 50);
+  (loadConfig() as any).mediaCharacters = clean;
+  saveConfig();
+  emit('media.updated', { characters: true });
+  return clean;
 }
 
 // ---------- store ----------
@@ -145,6 +164,12 @@ function pick(kind: MediaKind, provider?: string, model?: string): { provider: s
   const k = keys();
   if (provider && MODELS[provider]) {
     if (provider === 'chatgpt' && !chatgptReady()) throw new Error('ChatGPT is not signed in on this computer (the Codex app). Sign in, or pick another provider.');
+    if (provider === 'local') {
+      if (kind === 'video') throw new Error('The local engine makes images only.');
+      const m = model && MODELS.local.some((x) => x.id === model) ? model : anyLocalModel();
+      if (!m || !modelInstalled(m)) throw new Error('No local model installed yet — Media → On this computer (one click, free, offline).');
+      return { provider, model: m };
+    }
     if (provider !== 'pollinations' && provider !== 'chatgpt' && !k[provider as keyof Keys]) throw new Error(`No ${provider} API key yet — add it in Media → Keys.`);
     const m = model && MODELS[provider].some((x) => x.id === model) ? model : model && provider === 'fal' ? model : MODELS[provider].find((x) => x.kind === kind)?.id;
     if (!m) throw new Error(`${provider} cannot make ${kind === 'video' ? 'videos' : 'images'}.`);
@@ -157,6 +182,8 @@ function pick(kind: MediaKind, provider?: string, model?: string): { provider: s
   if (chatgptReady()) return { provider: 'chatgpt', model: 'gpt-image' };
   if (k.google) return { provider: 'google', model: MODELS.google[0].id };
   if (k.openai) return { provider: 'openai', model: MODELS.openai[0].id };
+  const local = anyLocalModel();
+  if (local) return { provider: 'local', model: local };
   return { provider: 'pollinations', model: 'flux' };
 }
 
@@ -327,6 +354,7 @@ export function startMedia(req: GenerateRequest): MediaRow {
     try {
       const out =
         provider === 'chatgpt' ? await makeChatGPT(row.prompt, aspect)
+        : provider === 'local' ? await (() => { const b = LOCAL_MODELS.find((x) => x.id === model)!.base; const { width, height } = sizeFor(aspect, b); return makeLocal(row.prompt, model, width, height); })()
         : provider === 'pollinations' ? await inLine(() => makePollinations(row.prompt, model, aspect))
         : provider === 'openai' ? await makeOpenAI(row.prompt, model, aspect)
         : provider === 'google' ? await makeGoogle(row.prompt, model, aspect)
@@ -375,8 +403,8 @@ export const mediaMcpUrl = (port: number, token: string) => `http://127.0.0.1:${
 const MEDIA_TOOLS = [
   {
     name: 'generate_image',
-    description: 'Make an AI image from a prompt and save it on this computer. Drawn by ChatGPT (the user’s account) when signed in, else Gemini/OpenAI keys, else free Pollinations (low quality). Takes 30–60 s. Write the prompt in English, concrete: subject, style, light, composition, colours. Returns the file path — put that path in your answer so the user sees the picture.',
-    inputSchema: { type: 'object', properties: { prompt: { type: 'string' }, aspect: { type: 'string', enum: ASPECTS }, provider: { type: 'string', enum: ['chatgpt', 'pollinations', 'fal', 'openai', 'google'] }, model: { type: 'string' } }, required: ['prompt'] },
+    description: 'Make an AI image from a prompt and save it on this computer. Drawn by ChatGPT (the user’s account) when signed in, else Gemini/OpenAI keys, else the free offline model on this computer ("local", when installed), else free Pollinations (low quality). Takes 30–60 s (local Z-Image up to ~3 min). Write the prompt in English, concrete: subject, style, light, composition, colours. Returns the file path — put that path in your answer so the user sees the picture.',
+    inputSchema: { type: 'object', properties: { prompt: { type: 'string' }, aspect: { type: 'string', enum: ASPECTS }, provider: { type: 'string', enum: ['chatgpt', 'local', 'pollinations', 'fal', 'openai', 'google'] }, model: { type: 'string' } }, required: ['prompt'] },
   },
   {
     name: 'generate_video',
@@ -419,7 +447,7 @@ export async function handleMediaMcp(req: IncomingMessage, res: ServerResponse, 
       const kind: MediaKind = name === 'generate_video' ? 'video' : 'image';
       const row = startMedia({ kind, prompt: a.prompt, aspect: a.aspect, provider: a.provider, model: a.model, conversationId: s.conversationId, source: 'agent' });
       if (kind === 'video') return text(`Started the video (id ${row.id}, ${row.provider}/${row.model}). Call media_status with this id until it is done.`);
-      return text(describe(await waitMedia(row.id, 110_000)));
+      return text(describe(await waitMedia(row.id, row.provider === 'local' ? 240_000 : 110_000)));
     }
     return text(`Unknown tool ${name}`, true);
   };

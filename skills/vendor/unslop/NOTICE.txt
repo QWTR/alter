@@ -1,0 +1,4 @@
+unslop
+Source: https://github.com/heydamir/unslop
+License: CC BY 4.0 — attribution: unslop by heydamir (see LICENSE).
+Bundled in ALTTER unchanged (only the skill folder; plugin manifests and repo docs/images left out).

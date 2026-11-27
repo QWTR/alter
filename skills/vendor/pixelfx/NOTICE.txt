@@ -1,0 +1,4 @@
+pixelfx
+Source: https://github.com/patch-gg/pixelfx
+License: MIT (see NOTICE.md; the Patch Pixel font from gallery/fonts is NOT included) (see LICENSE).
+Bundled in ALTTER unchanged (only the skill folder; plugin manifests and repo docs/images left out).

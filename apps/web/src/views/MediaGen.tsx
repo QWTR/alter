@@ -1,6 +1,6 @@
 // AI images and videos: write a prompt, pick a format and a model, and the results land in the gallery (live, on every device).
 import { AnimatePresence, motion } from 'motion/react';
-import { BookOpen, Download, Film, Image as ImageIcon, KeyRound, RotateCw, Sparkles, Trash2, Wand2, X } from 'lucide-react';
+import { BookOpen, Camera, Cpu, Download, Film, Image as ImageIcon, KeyRound, Megaphone, RotateCw, Sparkles, Trash2, UserRound, Wand2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, invalidate, setCached, useData } from '../api';
 import { PromptPicker } from '../components/PromptPicker';
@@ -15,6 +15,25 @@ export interface MediaItemRow {
 interface ModelInfo { id: string; label: string; kind: 'image' | 'video'; note?: string }
 interface ProviderInfo { id: string; label: string; free: boolean; needsKey: boolean; hasKey: boolean; keyUrl?: string; models: ModelInfo[] }
 interface Options { providers: ProviderInfo[]; aspects: string[] }
+
+// Cinema studio: real camera words the image/video models understand, added to the prompt
+const CINE: Record<'camera' | 'lens' | 'aperture' | 'light' | 'film', string[]> = {
+  camera: ['ARRI Alexa 35', 'RED V-Raptor 8K', 'Sony Venice 2', 'IMAX 70mm film camera', '16mm Bolex film camera', 'Leica M11', 'Hasselblad X2D medium format', 'iPhone 17 Pro', 'GoPro action cam', 'drone aerial'],
+  lens: ['14mm ultra-wide', '24mm wide', '35mm', '50mm', '85mm portrait', '135mm telephoto', '100mm macro', 'anamorphic 40mm', 'fisheye', 'tilt-shift'],
+  aperture: ['f/1.2, creamy bokeh', 'f/2.8, soft background', 'f/5.6', 'f/11, deep focus'],
+  light: ['golden hour', 'blue hour', 'soft window light', 'hard noon sun', 'overcast diffused', 'neon night', 'candlelight', 'studio softbox, rim light', 'low-key chiaroscuro', 'volumetric god rays', 'moonlight'],
+  film: ['Kodak Portra 400', 'Kodak Ektachrome', 'Fuji Velvia 50', 'Cinestill 800T', 'Ilford HP5 black and white', 'teal and orange grade', 'bleach bypass', 'clean digital'],
+};
+const NO_CINE: Record<keyof typeof CINE, string> = { camera: '', lens: '', aperture: '', light: '', film: '' };
+// Marketing studio: one product, several ad angles
+const AD_ANGLES = [
+  'hero product shot on a clean seamless backdrop, premium studio lighting, ad campaign',
+  'lifestyle scene with a person using it in a real everyday setting, natural light, authentic',
+  'top-down flat lay with matching props, styled for social media',
+  'bold graphic poster composition, strong single accent colour, lots of empty space for a headline',
+];
+type Variants = '1' | '2' | '3' | '4';
+interface Character { id: string; name: string; look: string }
 
 const ASPECT_RATIO: Record<string, string> = { '1:1': '1 / 1', '16:9': '16 / 9', '9:16': '9 / 16', '4:3': '4 / 3', '3:4': '3 / 4' };
 
@@ -46,6 +65,22 @@ export function MediaView() {
   const [library, setLibrary] = useState(false);
   const [big, setBig] = useState<MediaItemRow | null>(null);
   const [filter, setFilter] = useState<'all' | 'image' | 'video'>('all');
+  const [panel, setPanel] = useState<'' | 'cine' | 'ads' | 'char'>('');
+  const [cine, setCine] = useState(NO_CINE);
+  const [variants, setVariants] = useState(1);
+  const [charId, setCharId] = useState('');
+  const [localOpen, setLocalOpen] = useState(false);
+  const [charsOpen, setCharsOpen] = useState(false);
+  const { data: chars } = useData<Character[]>('/api/media/characters');
+  const character = (chars ?? []).find((c) => c.id === charId);
+  const cineText = Object.values(cine).filter(Boolean).join(', ');
+  /** The prompt as it goes to the model: character look + the user's words + camera + ad angle. */
+  const fullPrompt = (i: number) => [
+    character && `${character.name}: ${character.look}`,
+    prompt.trim(),
+    cineText && `Shot on ${cineText}`,
+    variants > 1 && AD_ANGLES[i % AD_ANGLES.length],
+  ].filter(Boolean).join('. ');
 
   useEffect(() => {
     const k = route.query.get('kind');
@@ -74,8 +109,10 @@ export function MediaView() {
     if (kind === 'video' && !videoReady) return setKeysOpen(true);
     setBusy(true);
     try {
-      const row = await api<MediaItemRow>('/api/media', { method: 'POST', body: { kind, prompt: prompt.trim(), aspect, provider: provider || undefined, model: model || undefined } });
-      setCached<MediaItemRow[]>('/api/media', (l) => [row, ...(l ?? []).filter((x) => x.id !== row.id)]);
+      for (let i = 0; i < (kind === 'image' ? variants : 1); i++) {
+        const row = await api<MediaItemRow>('/api/media', { method: 'POST', body: { kind, prompt: fullPrompt(i), aspect, provider: provider || undefined, model: model || undefined } });
+        setCached<MediaItemRow[]>('/api/media', (l) => [row, ...(l ?? []).filter((x) => x.id !== row.id)]);
+      }
     } catch (err) {
       toast((err as Error).message, 'error');
     } finally {
@@ -117,7 +154,7 @@ export function MediaView() {
       <PageHead
         title={t('media.title')}
         lead={t('media.lead')}
-        actions={<button className="btn" onClick={() => setKeysOpen(true)}><KeyRound />{t('media.keys')}</button>}
+        actions={<><button className="btn" onClick={() => setLocalOpen(true)}><Cpu />{t('media.local')}</button><button className="btn" onClick={() => setKeysOpen(true)}><KeyRound />{t('media.keys')}</button></>}
       />
 
       <form className="card media-maker" onSubmit={generate}>
@@ -147,6 +184,41 @@ export function MediaView() {
             {models.map((m) => <option key={m.value} value={m.value}>{m.label}{m.free ? ` · ${t('media.free')}` : !m.ok ? ` · ${t('media.needsKey')}` : ''}</option>)}
           </select>
         </div>
+        <div className="media-studios">
+          <button type="button" className={`btn ghost sm${panel === 'cine' || cineText ? ' on' : ''}`} onClick={() => setPanel(panel === 'cine' ? '' : 'cine')}><Camera />{t('media.cine')}{cineText ? ' •' : ''}</button>
+          {kind === 'image' && <button type="button" className={`btn ghost sm${panel === 'ads' || variants > 1 ? ' on' : ''}`} onClick={() => setPanel(panel === 'ads' ? '' : 'ads')}><Megaphone />{t('media.ads')}{variants > 1 ? ` ×${variants}` : ''}</button>}
+          <button type="button" className={`btn ghost sm${panel === 'char' || character ? ' on' : ''}`} onClick={() => setPanel(panel === 'char' ? '' : 'char')}><UserRound />{character ? character.name : t('media.character')}</button>
+        </div>
+        {panel === 'cine' && (
+          <div className="media-panel">
+            {(Object.keys(CINE) as (keyof typeof CINE)[]).map((k) => (
+              <label key={k} className="media-panel-field">
+                <span className="small faint">{t(`media.cine.${k}` as Key)}</span>
+                <select className="input" value={cine[k]} onChange={(e) => setCine((c) => ({ ...c, [k]: e.target.value }))}>
+                  <option value="">—</option>
+                  {CINE[k].map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </label>
+            ))}
+            {cineText && <button type="button" className="btn ghost sm" onClick={() => setCine(NO_CINE)}><X />{t('media.clear')}</button>}
+          </div>
+        )}
+        {panel === 'ads' && kind === 'image' && (
+          <div className="media-panel">
+            <span className="small faint grow">{t('media.adsHint')}</span>
+            <Segmented<Variants> size="sm" value={String(variants) as Variants} onChange={(v) => setVariants(Number(v))} options={(['1', '2', '3', '4'] as Variants[]).map((n) => ({ value: n, label: n === '1' ? t('media.adsOne') : `×${n}` }))} />
+          </div>
+        )}
+        {panel === 'char' && (
+          <div className="media-panel">
+            <select className="input grow" value={charId} onChange={(e) => setCharId(e.target.value)} aria-label={t('media.character')}>
+              <option value="">{t('media.noCharacter')}</option>
+              {(chars ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <button type="button" className="btn ghost sm" onClick={() => setCharsOpen(true)}>{t('media.manageCharacters')}</button>
+            <span className="small faint" style={{ flexBasis: '100%' }}>{t('media.characterHint')}</span>
+          </div>
+        )}
         <div className="media-maker-foot">
           <span className="small faint grow">
             {kind === 'video' && !videoReady ? t('media.videoNeedsKey') : usesFree ? t('media.freeHint') : chosen && !chosen.hasKey && chosen.needsKey ? t('media.keyMissing', { name: chosen.label }) : t('media.savedHint')}
@@ -198,6 +270,8 @@ export function MediaView() {
       )}
 
       <KeysModal open={keysOpen} onClose={() => setKeysOpen(false)} opts={opts} />
+      <LocalModal open={localOpen} onClose={() => setLocalOpen(false)} />
+      <CharactersModal open={charsOpen} onClose={() => setCharsOpen(false)} list={chars ?? []} onPick={(id) => setCharId(id)} />
       <PromptPicker open={library} onClose={() => setLibrary(false)} kind={kind} onPick={(text) => setPrompt(text)} />
       <Modal open={!!big} onClose={() => setBig(null)} wide>
         {big && (
@@ -244,7 +318,7 @@ function KeysModal({ open, onClose, opts }: { open: boolean; onClose: () => void
     <Modal open={open} onClose={onClose}>
       <ModalHead icon={<KeyRound />} title={t('media.keysTitle')} text={t('media.keysText')} onClose={onClose} />
       <div style={{ display: 'grid', gap: 14 }}>
-        {(opts?.providers ?? []).map((p) => (
+        {(opts?.providers ?? []).filter((p) => p.id !== 'local').map((p) => (
           <div key={p.id} className="field">
             <label className="row" style={{ gap: 8 }}>
               <b>{p.label}</b>
@@ -271,6 +345,111 @@ function KeysModal({ open, onClose, opts }: { open: boolean; onClose: () => void
         <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button className="btn primary" onClick={save} disabled={saving || !Object.keys(vals).length}>{saving && <span className="spinner" />}{t('common.save')}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+interface LocalStatus {
+  dir: string; engine: boolean;
+  job: { model: string; step: string; done: number; total: number; error: string | null; running: boolean } | null;
+  models: { id: string; label: string; note: string; sizeMb: number; installed: boolean }[];
+}
+
+/** Free offline images on this computer's graphics card (stable-diffusion.cpp): download once, then no key, no limit, no internet. */
+function LocalModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const t = useT();
+  const [st, setSt] = useState<LocalStatus | null>(null);
+  const load = () => api<LocalStatus>('/api/media/local').then(setSt).catch(() => {});
+  useEffect(() => { if (open) void load(); }, [open]);
+  const running = !!st?.job?.running;
+  useEffect(() => {
+    if (!open || !running) return;
+    const id = setInterval(() => { void load().then(() => invalidate('/api/media/options')); }, 1500);
+    return () => clearInterval(id);
+  }, [open, running]);
+  const install = async (model: string) => {
+    try { setSt(await api<LocalStatus>('/api/media/local/install', { method: 'POST', body: { model } })); } catch (e) { toast((e as Error).message, 'error'); }
+  };
+  const remove = async (model: string) => {
+    try { setSt(await api<LocalStatus>(`/api/media/local/${model}`, { method: 'DELETE' })); invalidate('/api/media/options'); } catch (e) { toast((e as Error).message, 'error'); }
+  };
+  const pct = st?.job && st.job.total ? Math.min(100, Math.round((st.job.done / st.job.total) * 100)) : 0;
+  return (
+    <Modal open={open} onClose={onClose}>
+      <ModalHead icon={<Cpu />} title={t('media.localTitle')} text={t('media.localText')} onClose={onClose} />
+      <div style={{ display: 'grid', gap: 12 }}>
+        {(st?.models ?? []).map((m) => {
+          const mine = st?.job?.model === m.id;
+          return (
+            <div key={m.id} className="card" style={{ padding: 12, display: 'grid', gap: 6 }}>
+              <div className="row" style={{ gap: 8 }}>
+                <b>{m.label}</b>
+                {m.installed && <span className="badge ok">{t('media.localReady')}</span>}
+                <span className="grow" />
+                <span className="small faint">{(m.sizeMb / 1000).toFixed(1)} GB</span>
+              </div>
+              <span className="small muted">{m.note}</span>
+              {mine && running && (
+                <div className="small faint">
+                  <div className="media-progress"><i style={{ width: `${pct}%` }} /></div>
+                  {st!.job!.step === 'engine' ? t('media.localEngine') : st!.job!.step} · {pct}%
+                </div>
+              )}
+              {mine && st?.job?.error && <span className="small media-error-text">{st.job.error}</span>}
+              <div className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
+                {m.installed
+                  ? <button className="btn ghost sm" onClick={() => remove(m.id)}><Trash2 size={14} />{t('common.remove')}</button>
+                  : <button className="btn primary sm" disabled={running} onClick={() => install(m.id)}>{mine && running ? <span className="spinner" /> : <Download size={14} />}{t('media.localInstall')}</button>}
+              </div>
+            </div>
+          );
+        })}
+        <p className="small faint">{t('media.localFoot')}</p>
+      </div>
+    </Modal>
+  );
+}
+
+/** Characters: a saved look (face, hair, clothes, style) added to every prompt, so a series keeps the same person. */
+function CharactersModal({ open, onClose, list, onPick }: { open: boolean; onClose: () => void; list: Character[]; onPick: (id: string) => void }) {
+  const t = useT();
+  const [name, setName] = useState('');
+  const [look, setLook] = useState('');
+  const save = async (next: Character[]) => {
+    setCached<Character[]>('/api/media/characters', () => next);
+    try {
+      const r = await api<Character[]>('/api/media/characters', { method: 'PUT', body: { characters: next } });
+      setCached<Character[]>('/api/media/characters', () => r);
+      return r;
+    } catch (e) {
+      toast((e as Error).message, 'error');
+      invalidate('/api/media/characters');
+      return null;
+    }
+  };
+  const add = async () => {
+    if (!name.trim() || !look.trim()) return;
+    const id = Math.random().toString(36).slice(2, 10);
+    const r = await save([...list, { id, name: name.trim(), look: look.trim() }]);
+    if (r) { onPick(id); setName(''); setLook(''); }
+  };
+  return (
+    <Modal open={open} onClose={onClose}>
+      <ModalHead icon={<UserRound />} title={t('media.charactersTitle')} text={t('media.charactersText')} onClose={onClose} />
+      <div style={{ display: 'grid', gap: 10 }}>
+        {list.map((c) => (
+          <div key={c.id} className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
+            <div className="grow" style={{ minWidth: 0 }}><b>{c.name}</b><p className="small muted" style={{ margin: 0 }}>{c.look}</p></div>
+            <button className="btn ghost sm" onClick={() => { onPick(c.id); onClose(); }}>{t('media.use')}</button>
+            <button className="btn ghost icon sm" title={t('common.remove')} onClick={() => save(list.filter((x) => x.id !== c.id))}><Trash2 /></button>
+          </div>
+        ))}
+        <input className="input" placeholder={t('media.charName')} value={name} onChange={(e) => setName(e.target.value)} />
+        <textarea className="input" rows={3} placeholder={t('media.charLook')} value={look} onChange={(e) => setLook(e.target.value)} />
+        <div className="row" style={{ justifyContent: 'flex-end' }}>
+          <button className="btn primary" disabled={!name.trim() || !look.trim()} onClick={add}>{t('media.charAdd')}</button>
         </div>
       </div>
     </Modal>

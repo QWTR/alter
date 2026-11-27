@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { deleteMedia, handleMediaMcp, listMedia, mediaOptions, mediaView, setMediaKeys, startMedia } from './media.ts';
+import { deleteMedia, handleMediaMcp, listCharacters, listMedia, mediaOptions, mediaView, saveCharacters, setMediaKeys, startMedia } from './media.ts';
+import { installLocal, localStatus, removeLocal } from './localgen.ts';
 import { deletePrompt, listPrompts, savePrompt, usePrompt } from './prompts.ts';
 import { localUsage, warmUsage } from './usageLocal.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -805,6 +806,17 @@ route('POST', '/api/media', ({ body }) => {
   }
 });
 route('DELETE', '/api/media/:id', ({ params }) => ({ ok: deleteMedia(params[0]) }));
+route('GET', '/api/media/local', () => localStatus());
+route('POST', '/api/media/local/install', ({ body, auth }) => {
+  ownerOnly(auth, 'download local AI models');
+  try { return installLocal(String(body?.model ?? '')); } catch (e) { throw new HttpError(400, (e as Error).message); }
+});
+route('DELETE', '/api/media/local/:model', ({ params, auth }) => {
+  ownerOnly(auth, 'remove local AI models');
+  return removeLocal(params[0]);
+});
+route('GET', '/api/media/characters', () => listCharacters());
+route('PUT', '/api/media/characters', ({ body }) => saveCharacters(body?.characters ?? []));
 
 // ---------- prompt library ----------
 route('GET', '/api/prompts', () => listPrompts());
