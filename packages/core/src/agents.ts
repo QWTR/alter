@@ -353,6 +353,9 @@ type TeamHook = (agent: Agent, signal: AbortSignal) => { mcp: { name: string; ur
 let teamHook: TeamHook | null = null;
 export const setTeamHook = (h: TeamHook) => { teamHook = h; };
 
+/** The model an agent runs on when none is chosen: the mid model, so a team of agents doesn't burn the plan limit. */
+export const agentModel = (providerId: string): string | undefined => (providerId === 'claude' ? 'sonnet' : undefined);
+
 /** The agent's chat shows pictures, video and sound by itself when the answer names the file. */
 const SHOW_GUIDE = '## Showing files\nYour chat displays images, videos and sound inline. When asked to show something (a mockup, render, screenshot), or when you made such a file, put its full absolute path on its own line in your answer: the chat turns it into the picture. Do not tell the reader to open a folder, and do not describe a picture instead of showing it.';
 
@@ -405,7 +408,8 @@ export async function runAgent(id: string, trigger: 'manual' | 'schedule' | 'mon
     const own = agent.provider === 'default' || agent.provider === provider.id;
     const { text } = await provider.run({
       prompt,
-      model: own ? agent.model || undefined : undefined,
+      // agents without a chosen model run on Sonnet, not on the account's default (Opus eats the plan limit fast)
+      model: own ? agent.model || agentModel(provider.id) : agentModel(provider.id),
       effort: own ? agent.effort || undefined : undefined,
       access: agent.access,
       tools: [...agent.tools, ...pluginTools()],

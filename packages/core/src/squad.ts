@@ -5,7 +5,7 @@
 // Afterwards "@Team do Y" starts the same loop again. Progress is a live ```alter-teamrun board in the chat.
 import { randomUUID } from 'node:crypto';
 import { logActivity } from './activity.ts';
-import { createAgent, deleteAgent, getAgent, isRunning, listAgents, logRun, runAgent, stopAgent, type Agent } from './agents.ts';
+import { agentModel, createAgent, deleteAgent, getAgent, isRunning, listAgents, logRun, runAgent, stopAgent, type Agent } from './agents.ts';
 import { getConversation, updateConversation, type Message } from './chat.ts';
 import { loadConfig, saveConfig } from './config.ts';
 import { all, get, now, run } from './db.ts';
@@ -219,8 +219,9 @@ async function orchestrate(state: { board: Board; messageId: number; conversatio
     set(lead.id, { status: 'working', task: step });
     const started = now();
     const provider = await resolveProvider(lead.provider, { avoidLimited: true });
+    const own = lead.provider === 'default' || lead.provider === provider.id;
     try {
-      const { text } = await provider.run({ prompt: `You are "${lead.name}", the lead of the team "${b.team}". ${lead.instructions}\n\n${prompt}`, access: project?.folder ? 'read' : 'chat', cwd: project?.folder, timeoutMs: 15 * 60_000 });
+      const { text } = await provider.run({ prompt: `You are "${lead.name}", the lead of the team "${b.team}". ${lead.instructions}\n\n${prompt}`, model: (own && lead.model) || agentModel(provider.id), effort: (own && lead.effort) || undefined, access: project?.folder ? 'read' : 'chat', cwd: project?.folder, timeoutMs: 15 * 60_000 });
       // kept in the lead's history: clicking the lead shows what it was asked and what it told the others
       logRun(lead.id, 'team', `${step}\n\n${prompt}`.slice(0, 8000), text, 'done', started);
       set(lead.id, { status: 'done' });
