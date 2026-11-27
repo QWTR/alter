@@ -3,7 +3,7 @@
 // Everything degrades gracefully: unknown/invalid JSON shows as code, an unfinished block (still streaming) as a skeleton.
 import { motion } from 'motion/react';
 import { AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, BarChart3, CalendarDays, Check, CheckCircle2, Circle, CircleDot, Info, Lightbulb, Table2 } from 'lucide-react';
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
 import { CalendarAdd, EventsView, fromSchedule } from './CalendarAdd';
 
@@ -22,8 +22,9 @@ interface CardsBlock { type: 'cards' | 'compare' | 'options'; title?: string; it
 interface ProgressBlock { type: 'progress'; title?: string; items: { label: string; value: number; max?: number; note?: string }[] }
 interface BoardBlock { type: 'board' | 'kanban'; title?: string; columns: { title: string; items: ({ title: string; note?: string; tag?: string } | string)[] }[] }
 interface CalloutBlock { type: 'callout' | 'note' | 'tip' | 'warning'; tone?: 'info' | 'tip' | 'warn' | 'success'; title?: string; text: string }
+interface AskBlock { type: 'ask' | 'choice' | 'choices' | 'question'; title?: string; questions?: { q?: string; question?: string; options?: (string | { label: string; hint?: string })[]; multi?: boolean }[]; q?: string; options?: (string | { label: string; hint?: string })[] }
 interface EventsBlock { type: 'events' | 'calendar' | 'event'; title?: string; events?: unknown[] }
-type Block = ChartBlock | ScheduleBlock | StatsBlock | TimelineBlock | ChecklistBlock | TableBlock | CardsBlock | ProgressBlock | BoardBlock | CalloutBlock | EventsBlock;
+type Block = ChartBlock | ScheduleBlock | StatsBlock | TimelineBlock | ChecklistBlock | TableBlock | CardsBlock | ProgressBlock | BoardBlock | CalloutBlock | EventsBlock | AskBlock;
 
 /* ---------------------------------------------------------------- parsing */
 
@@ -590,6 +591,51 @@ function CalloutView({ b }: { b: CalloutBlock }) {
   );
 }
 
+/** The chat gives this: clicking an option of an "ask" block sends it as the user's next message. */
+export const SendContext = createContext<((text: string) => void) | undefined>(undefined);
+
+function AskView({ b }: { b: AskBlock }) {
+  const t = useT();
+  const send = useContext(SendContext);
+  const qs = (b.questions?.length ? b.questions : [{ q: b.q, options: b.options }]).map((x) => ({ q: x.q ?? x.question ?? '', multi: !!x.multi, options: (x.options ?? []).map((o) => (typeof o === 'string' ? { label: o } : o)).filter((o) => o?.label) })).filter((x) => x.options.length);
+  const [picked, setPicked] = useState<Record<number, string[]>>({});
+  const [sent, setSent] = useState(false);
+  if (!qs.length) return null;
+  const one = qs.length === 1 && !qs[0].multi;
+  const go = (p: Record<number, string[]>) => {
+    if (!send || sent) return;
+    setSent(true);
+    send(one ? p[0][0] : qs.map((x, i) => (x.q ? x.q.replace(/[?:]\s*$/, '') + ': ' : '') + (p[i] ?? []).join(', ')).join('\n'));
+  };
+  const toggle = (i: number, label: string) => {
+    if (sent) return;
+    const cur = picked[i] ?? [];
+    const next = { ...picked, [i]: qs[i].multi ? (cur.includes(label) ? cur.filter((x) => x !== label) : [...cur, label]) : [label] };
+    setPicked(next);
+    if (one) go(next);
+  };
+  const ready = qs.every((_, i) => (picked[i] ?? []).length > 0);
+  return (
+    <div className={`rb-card rb-ask${sent ? ' sent' : ''}`}>
+      {b.title && <div className="rb-mini-title">{b.title}</div>}
+      {qs.map((x, i) => (
+        <div key={i} className="rb-ask-q">
+          {x.q && <b>{x.q}</b>}
+          <div className="rb-ask-opts">
+            {x.options.map((o) => (
+              <button type="button" key={o.label} className={`rb-ask-opt${(picked[i] ?? []).includes(o.label) ? ' on' : ''}`} disabled={sent || !send} onClick={() => toggle(i, o.label)}>
+                <span>{o.label}</span>
+                {o.hint && <small>{o.hint}</small>}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      {!one && send && <button type="button" className="btn primary sm rb-ask-send" disabled={!ready || sent} onClick={() => go(picked)}>{sent ? <Check size={14} /> : <ArrowRight size={14} />}{t('rich.askSend')}</button>}
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------- entry */
 
 export function RichBlock({ seg }: { seg: Segment }) {
@@ -617,6 +663,7 @@ export function RichBlock({ seg }: { seg: Segment }) {
     case 'progress': return <ProgressView b={b} />;
     case 'board': case 'kanban': return <BoardView b={b as BoardBlock} />;
     case 'callout': case 'note': case 'tip': case 'warning': return <CalloutView b={b as CalloutBlock} />;
+    case 'ask': case 'choice': case 'choices': case 'question': return <AskView b={b as AskBlock} />;
     default: return <pre><code>{seg.raw}</code></pre>;
   }
 }

@@ -1157,6 +1157,7 @@ const en = {
   'rich.today': 'today',
   'rich.recommended': 'Recommended',
   'rich.building': 'Building the view…',
+  'rich.askSend': 'Send',
   // integrations
   'plugins.d.microsoft-365': 'Outlook mail, calendar and contacts, OneDrive, Excel, OneNote and To Do: read, search, write drafts, add events. For personal Microsoft accounts (outlook.com, hotmail, live).',
   'plugins.d.microsoft-365-work': 'Work or school Microsoft account: Outlook, calendar, Teams chats and channels, SharePoint, OneDrive, Excel, Planner. Your organisation may need to approve the app once.',

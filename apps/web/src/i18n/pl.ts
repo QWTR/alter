@@ -1142,6 +1142,7 @@ const pl: Dict = {
   'rich.today': 'dziś',
   'rich.recommended': 'Polecam',
   'rich.building': 'Buduję widok…',
+  'rich.askSend': 'Wyślij',
   // integrations
   'plugins.d.microsoft-365': 'Poczta Outlook, kalendarz i kontakty, OneDrive, Excel, OneNote i To Do: czyta, szuka, pisze szkice, dodaje wydarzenia. Dla prywatnych kont Microsoft (outlook.com, hotmail, live).',
   'plugins.d.microsoft-365-work': 'Konto Microsoft z pracy lub szkoły: Outlook, kalendarz, czaty i kanały Teams, SharePoint, OneDrive, Excel, Planner. Firma może musieć raz zatwierdzić aplikację.',

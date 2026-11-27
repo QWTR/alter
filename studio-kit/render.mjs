@@ -2,7 +2,7 @@
 // Alter Studio renderer.
 //   node render.mjs <video.tsx> [--draft] [--sizes reel,square,wide] [--format mp4|webm|gif|png|jpg] [--at 2.5] [--out path]
 // The video file exports `meta` and a default component built from 'alter-kit'. Output path is printed as "OUTPUT <path>".
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -97,6 +97,22 @@ const fontHead = gf.length ? "import { registerFont } from './kit/stage';\n" + f
 const fwd = (p) => p.replace(/\\/g, '/');
 writeFileSync(join(STUDIO, 'src', 'videos.gen.ts'), `// written by render.mjs\n${fontHead}import * as v0 from ${JSON.stringify(fwd(src))};\nexport const VIDEOS: { id: string; mod: any }[] = [{ id: ${JSON.stringify(id)}, mod: v0 }];\n`);
 
+// ---- names the video imports from 'alter-kit' that the kit does not have: say so plainly (weaker models invent components) ----
+{
+  const kitSrc = join(STUDIO, 'src', 'kit');
+  const have = new Set(['AbsoluteFill', 'Img', 'OffthreadVideo', 'Audio', 'Sequence', 'useCurrentFrame', 'useVideoConfig', 'interpolate', 'spring', 'staticFile']);
+  for (const f of readdirSync(kitSrc)) if (/\.tsx?$/.test(f)) for (const m of readFileSync(join(kitSrc, f), 'utf8').matchAll(/export (?:const|function|type|interface) ([A-Za-z0-9_]+)/g)) have.add(m[1]);
+  const wanted = [...source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]alter-kit['"]/g)].flatMap((m) => m[1].split(',').map((x) => x.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0]).filter(Boolean));
+  const missing = [...new Set(wanted.filter((n) => !have.has(n)))];
+  if (missing.length) {
+    console.error('NOT IN THE KIT: ' + missing.join(', ') + '. These components do not exist in alter-kit. Read ' + join(STUDIO, 'MODELS.md') + ' for what exists (Person, Animal, Item, Scenery, Car…). Anything else: build it yourself in the video file from <Model> + <Part> (see MODELS.md "Build your own model").');
+    process.exit(2);
+  }
+  if (/<Car\b/.test(source) && /<Car\b[^>]*\bsiren\b/.test(source) && !/<Car\b[^>]*kind=["'{]+(police|ambulance|firetruck)/.test(source)) console.error('WARN a <Car> has siren but is not kind="police" | "ambulance" | "firetruck": civilian cars get no emergency lights (the siren prop is ignored).');
+}
+const warns = new Set();
+const onBrowserLog = (log) => { const m = /ALTTER-WARN (.*)/.exec(log.text ?? ''); if (m) warns.add(m[1]); };
+
 const { bundle } = await import('@remotion/bundler');
 const { renderMedia, renderStill, selectComposition, ensureBrowser } = await import('@remotion/renderer');
 
@@ -155,11 +171,11 @@ for (let i = 0; i < sizes.length; i++) {
   const base = 0.25 + (0.75 * i) / sizes.length;
   const span = 0.75 / sizes.length;
   if (isStill) {
-    await renderStill({ ...browser, composition, serveUrl, output, frame: at !== undefined ? Math.min(comp.durationInFrames - 1, Math.round(at * comp.fps)) : 0, imageFormat: ext === 'jpg' ? 'jpeg' : ext, scale: draft ? 0.5 : 1, ...(ext === 'jpg' ? { jpegQuality: 92 } : {}) });
+    await renderStill({ ...browser, onBrowserLog, composition, serveUrl, output, frame: at !== undefined ? Math.min(comp.durationInFrames - 1, Math.round(at * comp.fps)) : 0, imageFormat: ext === 'jpg' ? 'jpeg' : ext, scale: draft ? 0.5 : 1, ...(ext === 'jpg' ? { jpegQuality: 92 } : {}) });
     progress('render', base + span, true);
   } else {
     await renderMedia({
-      ...browser, composition, serveUrl, outputLocation: output, inputProps: {},
+      ...browser, onBrowserLog, composition, serveUrl, outputLocation: output, inputProps: {},
       codec: ext === 'webm' ? 'vp8' : ext === 'gif' ? 'gif' : 'h264',
       everyNthFrame: ext === 'gif' ? 2 : 1,
       scale: draft ? 0.5 : 1,
@@ -171,4 +187,5 @@ for (let i = 0; i < sizes.length; i++) {
   outputs.push(output);
 }
 done();
+for (const w of warns) console.log(`WARN ${w}`);
 for (const o of outputs) console.log(`OUTPUT ${o}`);

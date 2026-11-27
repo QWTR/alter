@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { ConnectCard } from '../components/ConnectKey';
+import { SendContext } from '../components/RichBlocks';
 import { ArrowDown, ArrowUp, AudioLines, Mic, Crosshair, ListChecks, Undo2, WandSparkles, Eye, FileText, Film, FolderKanban, Menu, MessageCircle, MonitorPlay, Music, Paperclip, Plus, Search, Settings2, Square, Terminal, Trash2, Upload, Wrench, X, Clock, CornerDownRight, Copy, Check, RotateCcw, Pencil, ShieldCheck, Zap } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -1183,7 +1184,7 @@ function Bubble({ m, userInitial, animate, agent, onPreview, conversationId, onR
         {m.role === 'assistant' && <div className="meta">{agent?.name ?? 'ALTTER'}{m.provider ? ` · ${m.provider}` : ''}</div>}
         {m.role === 'user' && m.author && <div className="ghost-meta" style={{ color: m.author.color }}>{m.author.name}</div>}
         {files.length > 0 && <Attachments list={files} />}
-        {m.role === 'user' ? !onlyFiles && <UserText content={m.content} /> : <AnswerWithProposals text={shown} m={m} conversationId={conversationId} />}
+        {m.role === 'user' ? !onlyFiles && <UserText content={m.content} /> : <SendContext.Provider value={onSend}><AnswerWithProposals text={shown} m={m} conversationId={conversationId} /></SendContext.Provider>}
         {needsFull && <NeedsFull onGo={onNeedsFull} />}
         {connects.map((id) => <ConnectCard key={id} id={id} onContinue={onSend} />)}
         {m.media && m.media.length > 0 && <MediaResults list={m.media} />}

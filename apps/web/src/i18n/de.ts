@@ -1142,6 +1142,7 @@ const de: Dict = {
   'rich.today': 'heute',
   'rich.recommended': 'Empfohlen',
   'rich.building': 'Ansicht wird gebaut…',
+  'rich.askSend': 'Senden',
   // integrations
   'plugins.d.microsoft-365': 'Outlook mail, calendar and contacts, OneDrive, Excel, OneNote and To Do: read, search, write drafts, add events. For personal Microsoft accounts (outlook.com, hotmail, live).',
   'plugins.d.microsoft-365-work': 'Work or school Microsoft account: Outlook, calendar, Teams chats and channels, SharePoint, OneDrive, Excel, Planner. Your organisation may need to approve the app once.',
