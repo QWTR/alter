@@ -73,6 +73,7 @@ export const claude: Provider = {
     return j ? !!j.loggedIn : undefined;
   },
   models: [
+    { id: 'claude-fable-5-2', label: 'Fable 5.2' },
     { id: 'opus', label: 'Opus' },
     { id: 'sonnet', label: 'Sonnet' },
     { id: 'haiku', label: 'Haiku' },

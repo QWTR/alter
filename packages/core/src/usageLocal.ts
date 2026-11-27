@@ -172,7 +172,8 @@ function require_json(file: string) {
 
 // ---------- price estimate (USD per 1M tokens: input, output, cache read, cache write) ----------
 const PRICES: [RegExp, [number, number, number, number]][] = [
-  [/opus|fable/i, [5, 25, 0.5, 6.25]],
+  [/fable|mythos/i, [8, 40, 0.2, 10]],
+  [/opus/i, [5, 25, 0.5, 6.25]],
   [/sonnet/i, [3, 15, 0.3, 3.75]],
   [/haiku/i, [1, 5, 0.1, 1.25]],
   [/gemini.*flash/i, [0.3, 2.5, 0.075, 0]],
