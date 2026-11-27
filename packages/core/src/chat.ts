@@ -337,10 +337,24 @@ export async function chat(req: ChatRequest): Promise<{ conversationId: string; 
     : undefined;
   // a render in this folder → progress bar
   const poll = studioReady && req.onProgress
-    ? setInterval(() => {
-        const p = renderProgress(cwd);
-        req.onProgress!(p ? { stage: p.stage, pct: p.pct, label: p.id } : null);
-      }, 700)
+    ? (() => {
+        // the bar stays while the AI renders frame after frame: a short gap between two renders (or a slow step
+        // that reports nothing for a while) must not make it vanish and pop back
+        let last: { stage: string; pct: number; label: string } | null = null;
+        let seen = 0;
+        return setInterval(() => {
+          const p = renderProgress(cwd);
+          if (p) {
+            last = { stage: p.stage, pct: p.pct, label: p.id };
+            seen = Date.now();
+            req.onProgress!(last);
+          } else if (last && Date.now() - seen < 25_000) req.onProgress!(last);
+          else if (last) {
+            last = null;
+            req.onProgress!(null);
+          }
+        }, 700);
+      })()
     : undefined;
   const dirs = [...(files.length ? [uploadsDir()] : []), ...(studioReady ? [studioDir()] : []), ...projectDirs(project)];
   const handsAbort = new AbortController();

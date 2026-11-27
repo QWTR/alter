@@ -46,9 +46,14 @@ const progress = (stage, pct, force = false) => {
   const now = Date.now();
   if (!force && now - lastWrite < 400) return;
   lastWrite = now;
-  try { writeFileSync(progFile, JSON.stringify({ cwd: process.cwd(), id, stage, pct: Math.round(pct * 1000) / 10, t: now })); } catch {}
+  lastProg = { cwd: process.cwd(), id, stage, pct: Math.round(pct * 1000) / 10, t: now };
+  try { writeFileSync(progFile, JSON.stringify(lastProg)); } catch {}
 };
-const done = () => { try { rmSync(progFile, { force: true }); } catch {} };
+// a slow step (starting the browser, one heavy frame) reports nothing for a while: keep the file fresh so the bar stays
+let lastProg = null;
+const beat = setInterval(() => { if (lastProg) { try { writeFileSync(progFile, JSON.stringify({ ...lastProg, t: Date.now() })); } catch {} } }, 2000);
+beat.unref();
+const done = () => { clearInterval(beat); lastProg = null; try { rmSync(progFile, { force: true }); } catch {} };
 process.on('exit', done);
 
 // ---- the video being rendered + the media files it points at ----
