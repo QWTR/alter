@@ -118,3 +118,5 @@ Skrypt sprawdza port 4317, ustawia wyłącznie dla swojego procesu `ALTER_HOME` 
 - Nie parowano telefonu, nie testowano fizycznego urządzenia ani płatnych dostawców. Nie wykonano pełnego audytu każdej funkcji aplikacji.
 
 Końcowy odczyt produkcji (bez zmian): relay HTTPS 200 / ok=true, Repair HTTPS 200 / ok=true, VROOM /api/posts?limit=1 HTTP 200.
+
+Kontrola skryptu startowego wykryła niezgodność UTF-8 bez BOM z Windows PowerShell 5.1 (polskie znaki w komunikacie). Komunikat zmieniono na ASCII; ponowne uruchomienie skryptu kończy się kodem 0 i rozpoznaje działający port bez tworzenia drugiego procesu.
