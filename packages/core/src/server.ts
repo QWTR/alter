@@ -1132,9 +1132,12 @@ route('POST', '/api/skills/github/install', async ({ auth, body }) => {
 route('GET', '/api/activity', () => recentActivity(72, 200).reverse());
 
 // ---------- devices / pairing ----------
-route('POST', '/api/pair/start', ({ auth }) => {
+route('POST', '/api/pair/start', async ({ auth }) => {
   ownerOnly(auth, 'start pairing');
-  return startPairing([publicUrl()]);
+  // pairing opens the internet link by itself: the QR leads to it, never to a 192.168… address
+  let url = publicUrl(), linkError: string | undefined;
+  if (!url) ({ url, error: linkError } = await startTunnel(listeningPort));
+  return { ...startPairing(url), linkError };
 });
 route('POST', '/api/pair/claim', ({ body }) => {
   try {

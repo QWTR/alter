@@ -1110,7 +1110,12 @@ html.has-titlebar .sidebar { padding-top: 12px; }
 }
 
 /* ---------- v0.9.1: tabs on one line, compact composer menus ---------- */
-.tabs { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
+.tabs { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tabs[data-r] { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); }
+.tabs[data-l] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px); mask-image: linear-gradient(90deg, transparent, #000 36px); }
+.tabs[data-l][data-r] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+/* wide screens: every tab visible, a second row when needed */
+@media (min-width: 760px) { .tabs { flex-wrap: wrap; overflow: visible; row-gap: 2px; } }
 .tabs::-webkit-scrollbar { display: none; }
 .tabs button { white-space: nowrap; flex-shrink: 0; border-radius: 10px 10px 0 0; transition: color .15s, background .2s; }
 .tabs button:hover:not(.active) { color: var(--text-2); background: color-mix(in srgb, var(--surface-2) 50%, transparent); }

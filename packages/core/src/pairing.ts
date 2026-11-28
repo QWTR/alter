@@ -28,10 +28,15 @@ export function lanUrls(port = listening?.port ?? loadConfig().port): string[] {
   return urls;
 }
 
-export function startPairing(extra: (string | null)[] = []): { code: string; expiresAt: string; urls: string[] } {
+/**
+ * A fresh code. With an internet link (quick link / relay) the QR points only there, so a phone connects from
+ * anywhere, on Wi-Fi or mobile data; the computer's local network addresses are only a fallback without one.
+ */
+export function startPairing(publicUrl: string | null = null): { code: string; expiresAt: string; urls: string[]; public: boolean } {
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   pending = { code, expiresAt: Date.now() + 5 * 60_000 };
-  return { code, expiresAt: new Date(pending.expiresAt).toISOString(), urls: [...extra.filter((u): u is string => !!u), ...lanUrls()].map((u) => `${u}/#pair=${code}`) };
+  const bases = publicUrl ? [publicUrl] : lanUrls();
+  return { code, expiresAt: new Date(pending.expiresAt).toISOString(), urls: bases.map((u) => `${u}/#pair=${code}`), public: !!publicUrl };
 }
 
 export function claimPairing(code: string, name: string): Device {

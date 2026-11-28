@@ -280,7 +280,7 @@ const uk: Dict = {
   'settings.learning': 'Вчитися з моїх чатів і агентів',
   'settings.learningHint': 'Автоматично будує вашу пам’ять. Трохи використовує підписку у фоні.',
   'settings.pair': 'Підключити телефон',
-  'settings.pairLead': 'Телефон і комп’ютер в одній мережі Wi-Fi. Відскануйте код камерою або відкрийте адресу й введіть код.',
+  'settings.pairLead': "Scan the code with your phone's camera or in the ALTTER app. The phone connects through the internet link, on Wi-Fi or mobile data, wherever it is.",
   'settings.pairCode': 'Код',
   'settings.pairValid': 'Дійсний 5 хвилин',
   'settings.noDevices': 'Телефонів ще не підключено.',
@@ -1874,6 +1874,10 @@ const uk: Dict = {
   'sv.embedLead': "The full VoiceStudio — voice cloning, voice library, dubbing — right here in ALTTER.",
   'sv.openStudio': "Open VoiceStudio",
   'sv.hideStudio': "Hide",
+  'settings.pairOpening': "Opening the internet link…",
+  'settings.pairRenews': "A new code in {time}",
+  'settings.pairViaLink': "Through the internet link: works on Wi-Fi and mobile data.",
+  'settings.pairNoLink': "The internet link didn't open, so this code only works on the same Wi-Fi. Check the Settings → Internet tab.",
 };
 
 export default uk;

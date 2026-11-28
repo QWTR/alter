@@ -157,13 +157,32 @@ export function Segmented<T extends string>({ value, options, onChange, size }: 
 export function Tabs<T extends string>({ value, tabs, onChange }: { value: T; tabs: { value: T; label: string; icon?: LucideIcon; count?: number }[]; onChange: (v: T) => void }) {
   const id = useId();
   const ref = useRef<HTMLDivElement>(null);
+  // which sides hide more tabs (a fade shows it there); wide screens wrap instead of scrolling
+  const [edge, setEdge] = useState({ l: false, r: false });
+  const measure = () => {
+    const b = ref.current;
+    if (!b) return;
+    const l = b.scrollLeft > 2, r = b.scrollLeft + b.clientWidth < b.scrollWidth - 2;
+    setEdge((e) => (e.l === l && e.r === r ? e : { l, r }));
+  };
   useEffect(() => {
     const el = ref.current?.querySelector<HTMLElement>('button.active');
     const box = ref.current;
-    if (el && box && box.scrollWidth > box.clientWidth) box.scrollTo({ left: el.offsetLeft - box.clientWidth / 2 + el.offsetWidth / 2, behavior: 'smooth' });
+    if (el && box && box.scrollWidth > box.clientWidth) {
+      // only as far as needed to show the active tab, so the first tabs stay visible whenever they can
+      const left = el.offsetLeft - box.offsetLeft, right = left + el.offsetWidth;
+      if (left < box.scrollLeft) box.scrollTo({ left: Math.max(0, left - 24), behavior: 'smooth' });
+      else if (right > box.scrollLeft + box.clientWidth) box.scrollTo({ left: right - box.clientWidth + 24, behavior: 'smooth' });
+    }
+    measure();
   }, [value]);
+  useEffect(() => {
+    const ro = new ResizeObserver(measure);
+    if (ref.current) ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, []);
   return (
-    <div className="tabs" ref={ref}>
+    <div className="tabs" ref={ref} onScroll={measure} data-l={edge.l || undefined} data-r={edge.r || undefined}>
       {tabs.map((tb) => (
         <button key={tb.value} className={tb.value === value ? 'active' : ''} onClick={() => onChange(tb.value)}>
           {tb.icon && <tb.icon />}

@@ -280,7 +280,7 @@ const pl: Dict = {
   'settings.learning': 'Ucz się z moich czatów i agentów',
   'settings.learningHint': 'Automatycznie buduje Twoją pamięć. Zużywa w tle odrobinę subskrypcji.',
   'settings.pair': 'Połącz telefon',
-  'settings.pairLead': 'Telefon i komputer w tej samej sieci Wi-Fi. Zeskanuj kod aparatem albo otwórz adres i wpisz kod.',
+  'settings.pairLead': "Zeskanuj kod aparatem telefonu albo w aplikacji ALTTER. Telefon łączy się przez link internetowy — na Wi-Fi i na danych komórkowych, gdziekolwiek jest.",
   'settings.pairCode': 'Kod',
   'settings.pairValid': 'Ważny przez 5 minut',
   'settings.noDevices': 'Nie połączono jeszcze żadnego telefonu.',
@@ -1874,6 +1874,10 @@ const pl: Dict = {
   'sv.embedLead': "Pełne VoiceStudio — klonowanie głosu, biblioteka głosów, dubbing — tutaj, w ALTTER.",
   'sv.openStudio': "Otwórz VoiceStudio",
   'sv.hideStudio': "Ukryj",
+  'settings.pairOpening': "Otwieram link internetowy…",
+  'settings.pairRenews': "Nowy kod za {time}",
+  'settings.pairViaLink': "Przez link internetowy: działa na Wi-Fi i na danych komórkowych.",
+  'settings.pairNoLink': "Link internetowy się nie otworzył, więc ten kod działa tylko w tej samej sieci Wi-Fi. Sprawdź zakładkę Ustawienia → Internet.",
 };
 
 export default pl;

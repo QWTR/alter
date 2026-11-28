@@ -291,7 +291,7 @@ const en = {
   'settings.learning': 'Learn from my chats and agents',
   'settings.learningHint': 'Builds your memory automatically. Uses a little of your subscription in the background.',
   'settings.pair': 'Connect a phone',
-  'settings.pairLead': 'Phone and computer on the same Wi-Fi. Scan the code with the camera, or open the address and enter the code.',
+  'settings.pairLead': "Scan the code with your phone's camera or in the ALTTER app. The phone connects through the internet link, on Wi-Fi or mobile data, wherever it is.",
   'settings.pairCode': 'Code',
   'settings.pairValid': 'Valid for 5 minutes',
   'settings.noDevices': 'No phones connected yet.',
@@ -1889,6 +1889,10 @@ const en = {
   'sv.embedLead': "The full VoiceStudio — voice cloning, voice library, dubbing — right here in ALTTER.",
   'sv.openStudio': "Open VoiceStudio",
   'sv.hideStudio': "Hide",
+  'settings.pairOpening': "Opening the internet link…",
+  'settings.pairRenews': "A new code in {time}",
+  'settings.pairViaLink': "Through the internet link: works on Wi-Fi and mobile data.",
+  'settings.pairNoLink': "The internet link didn't open, so this code only works on the same Wi-Fi. Check the Settings → Internet tab.",
 };
 
 export default en;

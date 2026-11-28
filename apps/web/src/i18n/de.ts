@@ -280,7 +280,7 @@ const de: Dict = {
   'settings.learning': 'Aus meinen Chats und Agenten lernen',
   'settings.learningHint': 'Baut dein Gedächtnis automatisch auf. Nutzt im Hintergrund etwas von deinem Abo.',
   'settings.pair': 'Handy verbinden',
-  'settings.pairLead': 'Handy und Computer im selben WLAN. Code mit der Kamera scannen oder Adresse öffnen und Code eingeben.',
+  'settings.pairLead': "Scan the code with your phone's camera or in the ALTTER app. The phone connects through the internet link, on Wi-Fi or mobile data, wherever it is.",
   'settings.pairCode': 'Code',
   'settings.pairValid': '5 Minuten gültig',
   'settings.noDevices': 'Noch kein Handy verbunden.',
@@ -1874,6 +1874,10 @@ const de: Dict = {
   'sv.embedLead': "The full VoiceStudio — voice cloning, voice library, dubbing — right here in ALTTER.",
   'sv.openStudio': "Open VoiceStudio",
   'sv.hideStudio': "Hide",
+  'settings.pairOpening': "Opening the internet link…",
+  'settings.pairRenews': "A new code in {time}",
+  'settings.pairViaLink': "Through the internet link: works on Wi-Fi and mobile data.",
+  'settings.pairNoLink': "The internet link didn't open, so this code only works on the same Wi-Fi. Check the Settings → Internet tab.",
 };
 
 export default de;

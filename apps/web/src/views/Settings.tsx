@@ -287,19 +287,42 @@ function AiTab() {
 function Devices({ isComputer, status }: { isComputer: boolean; status: Status }) {
   const t = useT();
   const { data: devices } = useData<Device[]>('/api/devices');
-  const [pair, setPair] = useState<{ code: string; urls: string[]; expiresAt: string } | null>(null);
+  const [pair, setPair] = useState<{ code: string; urls: string[]; expiresAt: string; public: boolean; linkError?: string } | null>(null);
   const [qr, setQr] = useState('');
+  const [opening, setOpening] = useState(false);
+  const [left, setLeft] = useState(0);
+  const [pairedBefore, setPairedBefore] = useState(-1);
 
+  // the computer opens its quick internet link first, then the QR leads there: the phone connects from anywhere
   const start = async () => {
-    const p = await api('/api/pair/start', { method: 'POST' });
-    setPair(p);
-    setQr(p.urls[0] ? await QRCode.toDataURL(p.urls[0], { margin: 0, width: 220, color: { dark: '#0b0a12', light: '#ffffff' } }) : '');
+    setOpening(true);
+    try {
+      const p = await api<NonNullable<typeof pair>>('/api/pair/start', { method: 'POST' });
+      setQr(p.urls[0] ? await QRCode.toDataURL(p.urls[0], { margin: 0, width: 220, color: { dark: '#0b0a12', light: '#ffffff' } }) : '');
+      setPair(p);
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setOpening(false);
+    }
   };
+  // a fresh code (and link, if it dropped) the moment the old one expires, while the card is open
   useEffect(() => {
     if (!pair) return;
-    const id = setTimeout(() => setPair(null), new Date(pair.expiresAt).getTime() - Date.now());
-    return () => clearTimeout(id);
+    const end = new Date(pair.expiresAt).getTime();
+    const tick = () => setLeft(Math.max(0, Math.round((end - Date.now()) / 1000)));
+    tick();
+    const tickId = setInterval(tick, 1000);
+    const id = setTimeout(() => void start(), end - Date.now());
+    return () => { clearTimeout(id); clearInterval(tickId); };
   }, [pair]);
+  // a phone just paired: the code closes by itself
+  const count = devices?.length ?? 0;
+  useEffect(() => {
+    if (!pair) return setPairedBefore(-1);
+    if (pairedBefore < 0) setPairedBefore(count);
+    else if (count > pairedBefore) setPair(null);
+  }, [pair, count]);
 
   const revoke = async (id: string) => {
     if (!confirm(t('common.confirmDelete'))) return;
@@ -348,7 +371,8 @@ function Devices({ isComputer, status }: { isComputer: boolean; status: Status }
             <h3>{t('settings.pair')}</h3>
             <p className="muted small" style={{ margin: '4px 0 0' }}>{t('settings.pairLead')}</p>
           </div>
-          {!pair && <button className="btn primary" onClick={start}><Smartphone />{t('settings.pair')}</button>}
+          {!pair && <button className="btn primary" onClick={start} disabled={opening}>{opening ? <span className="spinner" /> : <Smartphone />}{opening ? t('settings.pairOpening') : t('settings.pair')}</button>}
+          {pair && <button className="btn ghost" onClick={() => setPair(null)}>{t('common.close')}</button>}
         </div>
         <AnimatePresence>
           {pair && (
@@ -358,8 +382,11 @@ function Devices({ isComputer, status }: { isComputer: boolean; status: Status }
                 <div style={{ display: 'grid', gap: 8 }}>
                   <span className="small muted">{t('settings.pairCode')}</span>
                   <div className="code-big">{pair.code}</div>
-                  <span className="small faint">{t('settings.pairValid')}</span>
-                  {pair.urls.map((u) => <span key={u} className="small mono muted">{u}</span>)}
+                  <span className="small faint">{t('settings.pairRenews', { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` })}</span>
+                  {pair.public
+                    ? <span className="small muted">{t('settings.pairViaLink')}</span>
+                    : <span className="small" style={{ color: 'var(--warn, #e6a23c)', maxWidth: 300 }}>{t('settings.pairNoLink')}</span>}
+                  {pair.urls[0] && <span className="small mono faint truncate" style={{ maxWidth: 300 }}>{pair.urls[0].replace(/\/#pair=\d+$/, '')}</span>}
                 </div>
               </div>
             </motion.div>
