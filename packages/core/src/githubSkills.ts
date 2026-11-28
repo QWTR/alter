@@ -55,10 +55,65 @@ async function loadTree(s: GitHubSource, pin?: string): Promise<Tree> {
   if (data.truncated) throw Error('Repository is too large to inspect safely. Use a smaller skills repository.');
   return { sha: commit.sha, entries: data.tree.filter((e: Entry) => e.type === 'blob' && e.mode !== '120000' && safePath(e.path)) };
 }
-export async function searchGitHubSkills(query: string) {
-  if (query.trim().length < 2 || query.length > 100) throw Error('Enter 2–100 characters.');
-  const data = await json(`https://api.github.com/search/repositories?q=${encodeURIComponent(query.trim() + ' skills in:name,description')}&per_page=8`);
-  return data.items.map((r: any) => ({ name: r.full_name, description: r.description ?? '', url: r.html_url }));
+export type SkillSort = 'stars' | 'updated' | 'best';
+export interface SkillRepo { name: string; description: string; url: string; stars: number; updated: string; created: string; language: string | null; topics: string[]; license: string | null; avatar: string }
+const searches = new Map<string, { expires: number; value: SkillRepo[] }>();
+/** Repositories with agent skills. Empty query = the most popular ones; sort by stars, recent activity or relevance. */
+export async function searchGitHubSkills(query: string, sort: SkillSort = 'best', page = 1): Promise<SkillRepo[]> {
+  const q = query.trim();
+  if (q.length === 1 || q.length > 100) throw Error('Enter 2–100 characters.');
+  if (!['stars', 'updated', 'best'].includes(sort)) sort = 'best';
+  page = Math.min(Math.max(1, Math.floor(page) || 1), 10);
+  // no query: well-known skill repositories (topic tags + SKILL.md style names)
+  const term = q ? `${q} skills in:name,description,topics` : 'skills in:name stars:>20';
+  const key = `${term}|${sort}|${page}`;
+  const hit = searches.get(key);
+  if (hit && hit.expires > Date.now()) return hit.value;
+  const order = sort === 'best' ? (q ? '' : '&sort=stars&order=desc') : `&sort=${sort}&order=desc`;
+  const data = await json(`https://api.github.com/search/repositories?q=${encodeURIComponent(term)}${order}&per_page=24&page=${page}`);
+  const value: SkillRepo[] = (data.items ?? []).filter((r: any) => !r.fork && !r.archived && /skill/i.test(`${r.name} ${r.description ?? ""} ${(r.topics ?? []).join(" ")}`)).map((r: any) => ({
+    name: r.full_name, description: r.description ?? '', url: r.html_url, stars: r.stargazers_count ?? 0,
+    updated: r.pushed_at ?? r.updated_at, created: r.created_at, language: r.language ?? null,
+    topics: Array.isArray(r.topics) ? r.topics.slice(0, 6) : [], license: r.license?.spdx_id && r.license.spdx_id !== 'NOASSERTION' ? r.license.spdx_id : null,
+    avatar: r.owner?.avatar_url ?? '',
+  }));
+  searches.set(key, { expires: Date.now() + 10 * 60_000, value });
+  while (searches.size > 100) searches.delete(searches.keys().next().value!);
+  return value;
+}
+/** "name" and "description" from a SKILL.md front matter — what the skill can do, in its author's words. */
+export function skillFrontMatter(text: string): { name?: string; description?: string } {
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!m) { const h = text.match(/^#\s+(.+)$/m); return h ? { name: h[1].trim() } : {}; }
+  const out: Record<string, string> = {};
+  const lines = m[1].split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const kv = lines[i].match(/^(name|description):\s*(.*)$/);
+    if (!kv) continue;
+    let v = kv[2].trim();
+    if (v === '|' || v === '>' || v === '>-' || v === '|-') { const more: string[] = []; while (i + 1 < lines.length && /^\s+/.test(lines[i + 1])) more.push(lines[++i].trim()); v = more.join(' '); }
+    out[kv[1]] = v.replace(/^["']|["']$/g, '').slice(0, 600);
+  }
+  return out;
+}
+const summaries = new Map<string, { name: string; description: string }>();
+/** What each package in a repository does (first 40), read from its SKILL.md front matter. */
+async function packageSummaries(s: GitHubSource, sha: string, packages: string[]) {
+  const list = packages.slice(0, 40);
+  const out: { path: string; name: string; description: string }[] = [];
+  for (let i = 0; i < list.length; i += 8) {
+    await Promise.all(list.slice(i, i + 8).map(async (path) => {
+      const key = `${s.owner}/${s.repo}@${sha}:${path}`;
+      let v = summaries.get(key);
+      if (!v) {
+        try { const fm = skillFrontMatter(Buffer.from(await get(rawUrl(s, sha, path), 512_000)).toString('utf8')); v = { name: fm.name || path.split('/').slice(-2, -1)[0] || s.repo, description: fm.description || '' }; }
+        catch { v = { name: path.split('/').slice(-2, -1)[0] || s.repo, description: '' }; }
+        summaries.set(key, v);
+      }
+      out.push({ path, ...v });
+    }));
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
 }
 export async function previewGitHubSkills(source: string, selected?: string, pin?: string) {
   const s = parseGitHubSource(source);const { sha, entries } = await tree(s, pin);
@@ -67,12 +122,12 @@ export async function previewGitHubSkills(source: string, selected?: string, pin
   if (!packages.length) throw Error('No SKILL.md found at this repository path. Existing local Markdown skills remain supported.');
   if (selected && !packages.includes(selected)) throw Error('Select a SKILL.md from this repository.');
   const path = selected ?? (packages.length === 1 ? packages[0] : undefined);
-  if (!path) return { source, sha, packages };
+  if (!path) return { source, sha, packages, summaries: await packageSummaries(s, sha, packages) };
   const prefix = path.slice(0, -'SKILL.md'.length);
   const files = entries.filter(e => e.path.startsWith(prefix));
   if (files.length > 100 || files.some(e => (e.size ?? 0) > 2_000_000) || files.reduce((n,e) => n + (e.size ?? 0),0) > 8_000_000) throw Error('Package exceeds the limit (100 files, 2 MB/file, 8 MB total).');
   const body = Buffer.from(await get(rawUrl(s, sha, path), 512_000)).toString('utf8');
-  return { source, sha, packages, path, body, files: files.map(e => e.path) };
+  return { source, sha, packages, path, body, files: files.map(e => e.path), about: skillFrontMatter(body) };
 }
 export async function installGitHubSkill(source: string, path: string, sha: string) {
   if (!sha || !path) throw Error('Preview and select a package first.');

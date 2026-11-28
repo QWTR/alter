@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// Voice-overs with the user's ElevenLabs key (Settings → Plugins → ElevenLabs).
+// Voice-overs: VoiceStudio (free, local, on this computer) or the user's ElevenLabs key (Settings → Plugins → ElevenLabs).
+//   Engine: --engine voicestudio|elevenlabs, else ALTER_VOICE_ENGINE (Studio → Voice), else ElevenLabs when a key is set, else VoiceStudio.
 //   node voice.mjs --text-file script.txt --out assets/<reel>/voice.mp3 [--voice "Brian" | <voice_id>] [--model eleven_multilingual_v2]
-//                  [--stability 0.4] [--style 0.35] [--similarity 0.75] [--speed 1]
+//                  [--stability 0.4] [--style 0.35] [--similarity 0.75] [--speed 1] [--lang pl] [--engine voicestudio]
 //   node voice.mjs --list            (the voices this account can use)
 // Writes the MP3 and, next to it, <out>.json = {duration, lines[{text,start,end}], words[{text,start,end}]} — exact
 // timings from ElevenLabs (same shape as voice-times.mjs), so captions and scenes follow the voice.
-// Without a key: prints NO_VOICE_KEY and exits 3 (ask the user to connect ElevenLabs).
+// Neither VoiceStudio running nor a key: prints NO_VOICE_KEY and exits 3.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
@@ -17,17 +18,23 @@ for (let i = 0; i < argv.length; i++) {
   else rest.push(argv[i]);
 }
 const key = process.env.ALTER_ELEVENLABS_KEY || process.env.ELEVENLABS_API_KEY;
-if (!key) {
-  console.error('NO_VOICE_KEY: ElevenLabs is not connected. Ask the user to connect it: put [[altter:connect:elevenlabs]] on its own line in your answer (ALTTER shows a card with the steps and a key field), then wait.');
+const VS = (process.env.ALTER_VOICESTUDIO_URL || 'http://127.0.0.1:3900/elevenlabs').replace(/\/+$/, '');
+const vsUp = async () => { try { return (await fetch(`${VS}/v1/voices`, { signal: AbortSignal.timeout(2500) })).ok; } catch { return false; } };
+const want = typeof opt.engine === 'string' ? opt.engine : process.env.ALTER_VOICE_ENGINE || 'auto';
+let engine = want === 'voicestudio' ? 'voicestudio' : want === 'elevenlabs' && key ? 'elevenlabs' : (await vsUp()) ? 'voicestudio' : key ? 'elevenlabs' : null;
+if (engine === 'voicestudio' && want === 'voicestudio' && !(await vsUp())) engine = key ? 'elevenlabs' : null;
+if (!engine) {
+  console.error('NO_VOICE_KEY: no voice engine. Free and local: ask the user to open the VoiceStudio app (Studio → Voice in ALTTER shows how to get it), then run this again. Or connect ElevenLabs: put [[altter:connect:elevenlabs]] on its own line in your answer, then wait.');
   process.exit(3);
 }
-const API = 'https://api.elevenlabs.io';
-const H = { 'xi-api-key': key };
+const NAME = engine === 'voicestudio' ? 'VoiceStudio' : 'ElevenLabs';
+const API = engine === 'voicestudio' ? VS : 'https://api.elevenlabs.io';
+const H = engine === 'voicestudio' ? {} : { 'xi-api-key': key };
 
 async function voices() {
   const r = await fetch(`${API}/v1/voices`, { headers: H });
-  if (r.status === 401) throw new Error(`ElevenLabs refused the key (${(await r.text()).slice(0, 160)}) — the key may lack the "Voices" permission or be wrong`);
-  if (!r.ok) throw new Error(`ElevenLabs voices: HTTP ${r.status}`);
+  if (r.status === 401) throw new Error(`${NAME} refused the key (${(await r.text()).slice(0, 160)}) — the key may lack the "Voices" permission or be wrong`);
+  if (!r.ok) throw new Error(`${NAME} voices: HTTP ${r.status}`);
   return ((await r.json()).voices ?? []).map((v) => ({ id: v.voice_id, name: v.name, category: v.category, labels: v.labels ?? {}, description: v.description ?? '' }));
 }
 
@@ -48,7 +55,7 @@ async function main() {
   const num = (k, d) => (opt[k] !== undefined && !Number.isNaN(Number(opt[k])) ? Number(opt[k]) : d);
 
   // the voice: an id, a name from the account, or a calm narrator by default
-  let voiceId = typeof opt.voice === 'string' && /^[A-Za-z0-9]{18,}$/.test(opt.voice) ? opt.voice : null;
+  let voiceId = typeof opt.voice === 'string' && /^[A-Za-z0-9]{18,}$/.test(opt.voice) ? opt.voice : engine === 'voicestudio' && !opt.voice ? 'default' : null;
   if (!voiceId) {
     const list = await voices().catch(() => []);
     const want = typeof opt.voice === 'string' ? opt.voice.toLowerCase() : '';
@@ -56,9 +63,9 @@ async function main() {
       || (!want && list.find((v) => /narrat|documentar|storytell/i.test(`${v.description} ${Object.values(v.labels).join(' ')}`)))
       || (!want && list.find((v) => /^(brian|george|daniel|adam)\b/i.test(v.name)))
       || (!want && list[0]);
-    if (!pick && want) throw new Error(`No voice called "${opt.voice}" in this ElevenLabs account — run with --list`);
-    voiceId = pick?.id ?? 'nPczCjzI2devNBz1zQrb'; // Brian: a deep, calm narrator (default ElevenLabs voice)
-    console.log(`Voice: ${pick?.name ?? 'Brian'} (${voiceId})`);
+    if (!pick && want) throw new Error(`No voice called "${opt.voice}" in ${NAME} — run with --list`);
+    voiceId = pick?.id ?? (engine === 'voicestudio' ? 'default' : 'nPczCjzI2devNBz1zQrb'); // Brian: a deep, calm narrator (default ElevenLabs voice)
+    console.log(`Voice: ${pick?.name ?? (engine === 'voicestudio' ? 'default' : 'Brian')} (${voiceId})`);
   }
 
   const body = {
@@ -66,13 +73,14 @@ async function main() {
     model_id: typeof opt.model === 'string' ? opt.model : 'eleven_multilingual_v2',
     voice_settings: { stability: num('stability', 0.4), similarity_boost: num('similarity', 0.75), style: num('style', 0.35), use_speaker_boost: true, speed: Math.max(0.7, Math.min(1.2, num('speed', 1))) },
   };
-  console.log(`Reading ${text.split(/\s+/).length} words with ElevenLabs…`);
+  if (typeof opt.lang === 'string' && /^[a-z]{2}$/.test(opt.lang)) body.language_code = opt.lang;
+  console.log(`Reading ${text.split(/\s+/).length} words with ${NAME}…`);
   const r = await fetch(`${API}/v1/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`, { method: 'POST', headers: { ...H, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (!r.ok) {
     const t = await r.text();
     if (/quota|credits|limit/i.test(t)) console.error(`NO_VOICE_CREDITS: ${t.slice(0, 240)} — the ElevenLabs plan has no characters left this month`);
     else if (r.status === 401) console.error(`NO_VOICE_KEY: ElevenLabs refused the key (${t.slice(0, 200)}). Ask the user to connect it again: [[altter:connect:elevenlabs]]`);
-    else console.error(`ElevenLabs: HTTP ${r.status} ${t.slice(0, 300)}`);
+    else console.error(`${NAME}: HTTP ${r.status} ${t.slice(0, 300)}`);
     process.exitCode = /quota|credits|limit/i.test(t) ? 4 : r.status === 401 ? 3 : 1;
   } else {
   const j = await r.json();

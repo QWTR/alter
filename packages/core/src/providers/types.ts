@@ -94,6 +94,10 @@ export interface Provider {
   authStatus?(): Promise<boolean | undefined>;
   models?: { id: string; label: string }[];
   efforts?: string[];
+  /** The models this account can use right now (read from the CLI); falls back to `models`. */
+  listModels?(): Promise<{ id: string; label: string }[]>;
+  /** Thinking levels the CLI offers right now; falls back to `efforts`. */
+  listEfforts?(): Promise<string[]>;
   detect(): Promise<{ installed: boolean; version?: string }>;
   /** Takes follow-up messages while it is answering (RunOptions.inbox). */
   steerable?: boolean;

@@ -2,7 +2,7 @@
 // ALTTER writes a short, precise brief (no wasted tokens) and its built-in kit renders it.
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  ArrowRight, Box, Captions, Check, Clapperboard, Download, Film, Image as ImageIcon, Images, Layers, Megaphone, MonitorPlay, Paintbrush, Paperclip,
+  ArrowRight, Box, Captions, Camera, Mic, SearchCheck, Check, Clapperboard, Download, Film, Image as ImageIcon, Images, Layers, Megaphone, MonitorPlay, Paintbrush, Paperclip,
   KeyRound, Palette, Play, Scissors, Smartphone, Sparkles, Trash2, Type, WandSparkles, X, FolderKanban, type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -10,7 +10,9 @@ import { api, invalidate, setCached, uploadFile, useData, type Attachment, type 
 import { ProgressBar } from '../components/Media';
 import { Field, Modal, ModalHead, PageHead, Segmented, softSpring, spring, stagger, Switch, toast } from '../components/ui';
 import { useT, type Key } from '../i18n';
-import { navigate } from '../router';
+import { navigate, useRoute } from '../router';
+import { InstagramPane, SeoPane, VoicePane } from './StudioPanes';
+import { Tabs } from '../components/ui';
 import { setPendingMessage } from './Chat';
 
 // ---------- install progress (pushed by the event stream) ----------
@@ -85,8 +87,15 @@ function usePreviewFont(name?: string, file?: string): string | undefined {
 }
 const FORMAT_LABEL: Record<Fmt, string> = { reel: '9:16', square: '1:1', post: '4:5', wide: '16:9', thumb: '16:9 · 1280' };
 
+type StudioTab = 'reels' | 'graphics' | 'voice' | 'instagram' | 'seo';
+const STUDIO_TABS: StudioTab[] = ['reels', 'graphics', 'voice', 'instagram', 'seo'];
+
 export function StudioView() {
   const t = useT();
+  const route = useRoute();
+  const q = route.query.get('tab') as StudioTab | null;
+  const tab: StudioTab = q && STUDIO_TABS.includes(q) ? q : 'reels';
+  const setTab = (v: StudioTab) => navigate(v === 'reels' ? '/studio' : `/studio?tab=${v}`);
   const { data } = useData<StudioInfo>('/api/studio', 4000);
   const install = useInstall();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
@@ -122,9 +131,25 @@ export function StudioView() {
         </div>
       </div>
 
-      <h3 className="studio-h">{t('studio.make')}</h3>
+      <nav className="studio-tabs"><Tabs value={tab} onChange={setTab} tabs={[
+        { value: 'reels', label: t('st.tab.reels'), icon: Film }, { value: 'graphics', label: t('st.tab.graphics'), icon: Paintbrush },
+        { value: 'voice', label: t('st.tab.voice'), icon: Mic }, { value: 'instagram', label: t('st.tab.instagram'), icon: Camera }, { value: 'seo', label: t('st.tab.seo'), icon: SearchCheck },
+      ]} /></nav>
+
+      {tab === 'voice' && <VoicePane renders={data?.renders ?? []} />}
+      {tab === 'instagram' && <InstagramPane />}
+      {tab === 'seo' && <SeoPane />}
+      {(tab === 'reels' || tab === 'graphics') && <>
+      <h3 className="studio-h">{t(tab === 'reels' ? 'st.makeReels' : 'st.makeGraphics')}</h3>
       <div className="recipe-grid">
-        {RECIPES.map((r, i) => (
+        {tab === 'graphics' && (
+          <motion.button className="recipe" {...stagger(0)} whileHover={{ y: -4 }} whileTap={{ scale: 0.98 }} onClick={() => navigate('/media')}>
+            <div className="recipe-art" style={{ background: 'linear-gradient(135deg,#1d1f27,#7c5cff 55%,#2ee6ff)' }}><Sparkles className="recipe-icon" /><span className="recipe-fmt"><ImageIcon size={12} />AI</span></div>
+            <b>{t('st.aiMedia')}</b>
+            <span className="small muted">{t('st.aiMediaDesc')}</span>
+          </motion.button>
+        )}
+        {RECIPES.filter((r) => (tab === 'graphics' ? r.still : !r.still)).map((r, i) => (
           <motion.button key={r.id} className="recipe" {...stagger(i)} whileHover={{ y: -4 }} whileTap={{ scale: 0.98 }} onClick={() => setRecipe(r)}>
             <div className={`recipe-art ${r.id}`} style={{ background: r.grad }}>
               <r.icon className="recipe-icon" />
@@ -137,9 +162,10 @@ export function StudioView() {
       </div>
 
       <div className="studio-split">
-        <Gallery renders={data?.renders ?? []} />
+        <Gallery renders={(data?.renders ?? []).filter((m) => (tab === 'graphics' ? m.kind === 'image' : m.kind !== 'image'))} />
         <BrandCard brand={data?.brand ?? {}} />
       </div>
+      </>}
 
       <Brief recipe={recipe} brand={data?.brand ?? {}} onClose={() => setRecipe(null)} />
     </div>

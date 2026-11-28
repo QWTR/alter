@@ -1,21 +1,20 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { ArrowDownToLine, BookOpen, ExternalLink } from 'lucide-react';
 import { useData, type Skill } from '../api';
 import { getLang } from '../i18n';
 import { skillRepositories } from '../skillCatalog';
-import { GitHubSkills } from './GitHubSkills';
+import { SkillBrowser } from './SkillBrowser';
 
 export function SkillsTab() {
   const pl = getLang() === 'pl';
   const { data: skills } = useData<Skill[]>('/api/skills');
   const [selection, setSelection] = useState({ url: '', revision: 0 });
-  const search = useRef<HTMLDivElement>(null);
   return <div className="skill-catalog">
     <div>
       <h2>{pl ? 'Skille dla ALTTER-a' : 'Skills for ALTTER'}</h2>
       <p className="muted">{pl ? 'Dodaj umiejętności do swojej biblioteki, a potem przypisz je wybranym agentom.' : 'Add skills to your library, then assign them to your agents.'}</p>
     </div>
-    <div ref={search} className="skill-catalog-search"><GitHubSkills key={selection.revision} library initialSource={selection.url} /></div>
+    <div className="skill-catalog-search"><SkillBrowser openUrl={selection.url} openRev={selection.revision} /></div>
     <section aria-labelledby="recommended-skills">
       <h3 id="recommended-skills">{pl ? 'Polecane repozytoria' : 'Recommended repositories'}</h3>
       <div className="skill-repositories">
@@ -24,7 +23,7 @@ export function SkillsTab() {
           <h3>{repo.name}</h3>
           <a href={`https://github.com/${repo.repo}`} target="_blank" rel="noopener noreferrer" className="small muted">{repo.repo}<ExternalLink size={12} /></a>
           <p>{repo.description[pl ? 'pl' : 'en']}</p>
-          <button type="button" className="btn" onClick={() => { setSelection(s => ({ url: `https://github.com/${repo.repo}`, revision: s.revision + 1 }));requestAnimationFrame(() => search.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }}><ArrowDownToLine size={16} />{pl ? 'Przeglądaj skille' : 'Browse skills'}</button>
+          <button type="button" className="btn" onClick={() => { setSelection(s => ({ url: `https://github.com/${repo.repo}`, revision: s.revision + 1 })); }}><ArrowDownToLine size={16} />{pl ? 'Zobacz skille' : 'See skills'}</button>
         </article>)}
       </div>
     </section>

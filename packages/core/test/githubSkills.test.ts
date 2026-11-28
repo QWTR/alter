@@ -50,3 +50,10 @@ test('select, preview, install pinned files, preserve legacy skills and reload p
     await assert.rejects(previewGitHubSkills(source,'../bad',sha),/Select/);
   } finally { globalThis.fetch=realFetch; }
 });
+
+test('skill front matter tells what a skill can do', async () => {
+  const { skillFrontMatter } = await import('../src/githubSkills.ts');
+  assert.deepEqual(skillFrontMatter('---\nname: seo-audit\ndescription: "Find SEO problems on a page"\n---\n# Body'), { name: 'seo-audit', description: 'Find SEO problems on a page' });
+  assert.deepEqual(skillFrontMatter('---\nname: x\ndescription: >\n  Long text\n  on two lines\n---\n'), { name: 'x', description: 'Long text on two lines' });
+  assert.deepEqual(skillFrontMatter('# Plain title\ntext'), { name: 'Plain title' });
+});

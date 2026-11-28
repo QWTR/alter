@@ -42,14 +42,16 @@ export async function installAgy(): Promise<void> {
 }
 
 // 'pro' / 'flash' → the newest matching slug agy offers right now (slugs change with every Gemini release)
-let modelCache: { at: number; list: string[] } | undefined;
-async function slugs(): Promise<string[]> {
+let modelCache: { at: number; list: { id: string; label: string }[] } | undefined;
+async function agyModels(): Promise<{ id: string; label: string }[]> {
   if (modelCache && Date.now() - modelCache.at < 6 * 3600_000) return modelCache.list;
   const r = await runProcess(agyBin(), ['models'], { timeoutMs: 30_000 }).catch(() => undefined);
-  const list = (r?.stdout ?? '').split(/\r?\n/).map((l) => l.split('\t')[0].trim()).filter((s) => /^[a-z0-9][\w.-]+$/.test(s) && s.includes('-'));
+  const list = (r?.stdout ?? '').split(/\r?\n/).map((l) => { const [id, label] = l.split('\t').map((s) => s?.trim()); return { id, label: label || id }; })
+    .filter((m) => /^[a-z0-9][\w.-]+$/.test(m.id ?? '') && m.id.includes('-'));
   if (list.length) modelCache = { at: Date.now(), list };
   return list;
 }
+const slugs = async () => (await agyModels()).map((m) => m.id);
 async function slugFor(model?: string, fast?: boolean): Promise<string | undefined> {
   const want = fast && !model ? 'flash' : model;
   if (!want) return undefined;
@@ -99,6 +101,11 @@ export const gemini: Provider = {
     { id: 'pro', label: 'Pro' },
     { id: 'flash', label: 'Flash' },
   ],
+  // every model agy offers this account (Gemini, plus the Claude / GPT-OSS ones Antigravity hosts); Pro/Flash = newest
+  listModels: async () => {
+    const list = await agyModels();
+    return list.length ? [{ id: 'pro', label: 'Pro' }, { id: 'flash', label: 'Flash' }, ...list] : [];
+  },
   efforts: ['low', 'medium', 'high', 'xhigh'],
   detect: detectAgy,
 

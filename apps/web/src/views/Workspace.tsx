@@ -3,7 +3,7 @@
 // The owner reaches the same view from the project page (#/workspace/<project>).
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, Bot, Building2, CalendarDays, Check, ChevronDown, Copy, FileText, KanbanSquare, Link2, MessageSquare, Plus, Receipt, Trash2, UserPlus, Users, X, Zap } from 'lucide-react';
-import { AutoPane, CalendarPane, CompanyView, DocsPane, SalesPane, TasksPane, type WsCtx } from './WorkspaceTools';
+import { AutoPane, CalendarPane, CompanyView, DocsPane, SalesPane, TasksPane, type Task, type WsCtx } from './WorkspaceTools';
 import { Tabs } from '../components/ui';
 import { JoinModal, forgetWorkspace, joinedWorkspaces, openSession } from '../components/Join';
 import { Download, ExternalLink, LogIn } from 'lucide-react';
@@ -195,10 +195,10 @@ export function WorkspaceView({ memberKey }: { memberKey?: string }) {
         <div className="grow" style={{ minWidth: 0 }}>
           {(me.workspaces?.length ?? 0) > 1 ? (
             <span className="ws-switch">
-              <button className="ws-switch-btn" onClick={() => setWsMenu((v) => !v)}><b className="truncate">{p.name}</b><ChevronDown size={14} /></button>
-              {wsMenu && <span className="ws-switch-menu">{me.workspaces!.map((w) => <button key={w.id} className={w.id === p.id ? 'on' : ''} onClick={() => switchWs(w.id)}><span className="wt-dot" style={{ background: PALETTES[w.color] ?? PALETTES.violet }} />{w.name}</button>)}</span>}
+              <button className="ws-switch-btn" title={p.name} onClick={() => setWsMenu((v) => !v)}><b className="truncate">{shortName(p.name)}</b><ChevronDown size={14} /></button>
+              {wsMenu && <span className="ws-switch-menu">{me.workspaces!.map((w) => <button key={w.id} className={w.id === p.id ? 'on' : ''} title={w.name} onClick={() => switchWs(w.id)}><span className="wt-dot" style={{ background: PALETTES[w.color] ?? PALETTES.violet }} />{shortName(w.name)}</button>)}</span>}
             </span>
-          ) : <b className="truncate" style={{ display: 'block' }}>{p.name}</b>}
+          ) : <b className="truncate" style={{ display: 'block' }} title={p.name}>{shortName(p.name)}</b>}
           <span className="small faint">{t('ws.label')} · {t('ws.online', { n: online })}</span>
         </div>
         <div className="ws-people">
@@ -300,15 +300,10 @@ export function WorkspaceView({ memberKey }: { memberKey?: string }) {
               {member ? (memberConv ? <ChatView key={memberConv.id} /> : null) : <ChatView key={openId ?? 'new'} />}
             </>
           ) : (
-            <div className="ws-welcome">
-              <span className="ws-icon big" style={{ background: glow }}><Icon size={30} /></span>
-              <h2>{p.name}</h2>
-              <p className="muted">{p.description || t('ws.lead')}</p>
-              <div className="row" style={{ gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button className="btn primary" onClick={() => newChat()}><Plus size={16} />{t('chat.new')}</button>
-                {me.isOwner && <button className="btn" onClick={() => setInvite(true)}><UserPlus size={15} />{t('ws.invite')}</button>}
-              </div>
-            </div>
+            <WsOverview q={q} name={p.name} description={p.description} glow={glow} Icon={Icon} isOwner={me.isOwner}
+              chats={chats ?? []} agents={agents ?? []} people={people}
+              onOpen={open} onNewChat={newChat} onInvite={() => setInvite(true)} onView={setView} onNewAgent={() => setNewAgent(true)}
+              onAgent={(a) => setAgentChat({ id: a.id, name: a.name, avatar: a.avatar, ws: q })} />
           )}
         </section>
       </div>}
@@ -316,6 +311,104 @@ export function WorkspaceView({ memberKey }: { memberKey?: string }) {
       {me.isOwner && <InviteModal open={invite} onClose={() => setInvite(false)} projectId={p.id} projectName={p.name} lanUrls={status?.lanUrls ?? []} />}
       <NewAgentModal open={newAgent} onClose={() => setNewAgent(false)} q={q} />
       <AgentChatDrawer open={agentChat} onClose={() => setAgentChat(null)} />
+    </div>
+  );
+}
+
+/** A project made from a folder is named by its path; show the folder name, keep the path as a hint. */
+export const shortName = (n: string) => (/[\\/]/.test(n) ? n.split(/[\\/]/).filter(Boolean).pop() || n : n);
+
+/** What the workspace opens on: what is going on now and where to start — not an empty page. */
+function WsOverview(props: {
+  q: string; name: string; description: string; glow: string; Icon: typeof Users; isOwner: boolean;
+  chats: Conversation[]; agents: Agent[]; people: WsPerson[];
+  onOpen: (id: string) => void; onNewChat: (agentId?: string) => void; onInvite: () => void; onView: (v: View) => void;
+  onNewAgent: () => void; onAgent: (a: Agent) => void;
+}) {
+  const t = useT();
+  const { q, chats, agents, people, Icon } = props;
+  const { data: tasks } = useData<Task[]>(`/api/ws/tasks${q}`, 15_000);
+  const open = (tasks ?? []).filter((x) => x.status !== 'done');
+  const today = new Date().toISOString().slice(0, 10);
+  const late = open.filter((x) => x.due && x.due.slice(0, 10) < today).length;
+  const prio: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+  const topTasks = [...open].sort((a, b) => (prio[a.priority] ?? 2) - (prio[b.priority] ?? 2) || (a.due ?? '9').localeCompare(b.due ?? '9')).slice(0, 5);
+  const working = agents.filter((a) => a.running);
+  const topAgents = [...agents].sort((a, b) => Number(!!b.running) - Number(!!a.running)).slice(0, 5);
+  const online = people.filter((x) => x.online);
+  const stats = [
+    { n: chats.length, label: t('wo.chats'), go: () => chats[0] && props.onOpen(chats[0].id), dis: !chats.length },
+    { n: open.length, label: t('wo.openTasks'), sub: late ? t('wo.late', { n: late }) : '', go: () => props.onView('tasks') },
+    { n: working.length, label: t('wo.working'), sub: t('wo.ofAgents', { n: agents.length }) },
+    { n: online.length, label: t('wo.online'), sub: t('wo.ofPeople', { n: people.length }) },
+  ];
+  return (
+    <div className="ws-over">
+      <div className="ws-over-head">
+        <span className="ws-icon big" style={{ background: props.glow }}><Icon size={28} /></span>
+        <div className="grow" style={{ minWidth: 0 }}>
+          <h2 className="truncate" title={props.name}>{shortName(props.name)}</h2>
+          <p className="muted">{props.description || (shortName(props.name) !== props.name ? props.name : t('ws.lead'))}</p>
+        </div>
+      </div>
+      <div className="ws-over-actions">
+        <button className="btn primary" onClick={() => props.onNewChat()}><Plus size={16} />{t('chat.new')}</button>
+        <button className="btn" onClick={() => props.onView('tasks')}><KanbanSquare size={15} />{t('wo.newTask')}</button>
+        <button className="btn" onClick={props.onNewAgent}><Bot size={15} />{t('ws.newAgent')}</button>
+        {props.isOwner && <button className="btn" onClick={props.onInvite}><UserPlus size={15} />{t('ws.invite')}</button>}
+      </div>
+      <div className="ws-stats">
+        {stats.map((s) => (
+          <button key={s.label} className="ws-stat" disabled={!s.go || s.dis} onClick={s.go}>
+            <b>{s.n}</b><span>{s.label}</span>{s.sub && <span className="faint small">{s.sub}</span>}
+          </button>
+        ))}
+      </div>
+      <div className="ws-over-grid">
+        <section className="ws-panel">
+          <header><b>{t('wo.recent')}</b></header>
+          {!chats.length && <p className="small faint ws-panel-empty">{t('ws.noChats')}</p>}
+          {chats.slice(0, 6).map((c) => (
+            <button key={c.id} className="ws-row" onClick={() => props.onOpen(c.id)}>
+              <MessageSquare size={15} className="faint" /><span className="grow truncate">{c.title}</span><span className="small faint">{ago(c.updated_at)}</span>
+            </button>
+          ))}
+        </section>
+        <section className="ws-panel">
+          <header><b>{t('wo.tasks')}</b><button className="btn ghost sm" onClick={() => props.onView('tasks')}>{t('wo.all')}</button></header>
+          {!topTasks.length && <p className="small faint ws-panel-empty">{t('wo.noTasks')}</p>}
+          {topTasks.map((x) => (
+            <button key={x.id} className="ws-row" onClick={() => props.onView('tasks')}>
+              <span className={`wo-dot ${x.status}`} />
+              <span className="grow truncate">{x.title}</span>
+              {x.due && <span className={`small ${x.due.slice(0, 10) < today ? 'wo-late' : 'faint'}`}>{new Date(x.due.slice(0, 10) + 'T12:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>}
+            </button>
+          ))}
+        </section>
+        <section className="ws-panel">
+          <header><b>{t('ws.tab.agents')}</b><span className="small faint">{agents.length}</span></header>
+          {!agents.length && <p className="small faint ws-panel-empty">{t('ws.noAgents')}</p>}
+          {topAgents.map((a) => (
+            <div key={a.id} className="ws-row" role="button" tabIndex={0} onClick={() => props.onAgent(a)} onKeyDown={(e) => { if (e.key === 'Enter') props.onAgent(a); }}>
+              <Orb avatar={a.avatar} size={24} running={a.running} />
+              <span className="grow truncate">{a.name}</span>
+              <span className={`small ${a.running ? 'wo-busy' : 'faint'}`}>{a.running ? t('ac.working') : t('wo.idle')}</span>
+              <button className="btn ghost icon sm ws-row-act" title={t('ws.talkTo', { name: a.name })} onClick={(e) => { e.stopPropagation(); props.onNewChat(a.id); }}><MessageSquare size={14} /></button>
+            </div>
+          ))}
+        </section>
+        <section className="ws-panel">
+          <header><b>{t('ws.tab.team')}</b><span className="small faint">{t('ws.online', { n: online.length })}</span></header>
+          {people.slice(0, 6).map((x) => (
+            <div key={x.id} className="ws-row static">
+              <span className={`ws-person${x.online ? ' on' : ''}`}><MemberDot name={x.name} color={x.color} size={24} /></span>
+              <span className="grow truncate">{x.name}{x.id === 'owner' ? ` · ${t('ws.owner')}` : ''}</span>
+              <span className="small faint">{x.online ? t('ws.isOnline') : x.joined ? (x.lastSeen ? ago(x.lastSeen) : t('ws.offline')) : t('ws.invited')}</span>
+            </div>
+          ))}
+          {props.isOwner && people.length < 2 && <button className="btn ghost sm" onClick={props.onInvite}><UserPlus size={14} />{t('ws.invite')}</button>}
+        </section>
+      </div>
     </div>
   );
 }
@@ -488,7 +581,8 @@ export function WorkspacesView() {
               <button className="ws-card-main" onClick={() => navigate(`/workspace/${p.id}`)}>
                 <span className="ws-icon" style={{ background: glow }}><Icon size={18} /></span>
                 <span className="grow" style={{ minWidth: 0 }}>
-                  <b className="truncate" style={{ display: 'block' }}>{p.name}</b>
+                  <b className="truncate" style={{ display: 'block' }} title={p.name}>{shortName(p.name)}</b>
+                  {shortName(p.name) !== p.name && <span className="small faint truncate mono" style={{ display: 'block' }}>{p.name}</span>}
                   <span className="small faint">{t('projects.stats', { chats: p.chats ?? 0, agents: p.agents ?? 0 })}</span>
                 </span>
               </button>

@@ -21,7 +21,7 @@ export interface Skill {
 const builtInDir = process.env.ALTER_SKILLS_DIR ?? resolve(import.meta.dirname, '../../../skills');
 
 /** Paths a skill can name: {{SKILLS}} (the built-in skills folder, with tools/ and vendor/) and {{DATA}} (ALTTER's data folder). */
-const fill = (body: string) => body.replaceAll('{{SKILLS}}', builtInDir.replace(/\\/g, '/')).replaceAll('{{DATA}}', HOME.replace(/\\/g, '/'));
+const fill = (body: string) => body.replaceAll('{{SKILLS}}', builtInDir.replace(/\\/g, '/')).replaceAll('{{DATA}}', HOME.replace(/\\/g, '/')).replaceAll('{{STUDIO}}', join(HOME, 'studio').replace(/\\/g, '/'));
 
 function parse(id: string, raw: string, builtIn: boolean): Skill {
   const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);

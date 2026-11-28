@@ -10,8 +10,10 @@ import { deleteGroup, handleTeamMcp, listGroups, saveGroup } from './team.ts';
 import { handleCouncilMcp } from './council.ts';
 import { agentStatuses } from './status.ts';
 import { ensureVoice, transcribe, voiceStatus } from './voice.ts';
+import { normalizeUrl, seoAudit } from './seo.ts';
+import { exportVoiceEngine, setVoiceEngine, speak, voiceoverStatus, voiceStudioStatus } from './voiceover.ts';
 import { sendFollowUp } from './followups.ts';
-import { deleteRender, ensureStudio, publicBrand, listRenders, mediaForFiles, mediaIn, mediaNamedIn, serveMedia, setBrand, studioStatus } from './studio.ts';
+import { deleteRender, ensureStudio, mediaFor, publicBrand, listRenders, mediaForFiles, mediaIn, mediaNamedIn, serveMedia, setBrand, studioStatus } from './studio.ts';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
@@ -405,6 +407,22 @@ route('POST', '/api/studio/install', () => {
   return studioStatus();
 });
 route('PUT', '/api/studio/brand', ({ body }) => (setBrand(body ?? {}), publicBrand()));
+// voice-over (Studio → Voice): VoiceStudio locally, or ElevenLabs
+exportVoiceEngine();
+voiceStudioStatus(true).catch(() => {});
+setInterval(() => voiceStudioStatus(true).catch(() => {}), 60_000).unref();
+route('GET', '/api/voiceover', () => voiceoverStatus());
+route('PUT', '/api/voiceover', async ({ auth, body }) => { ownerOnly(auth, 'change the voice engine'); setVoiceEngine(String(body?.engine ?? 'auto')); return voiceoverStatus(); });
+route('POST', '/api/voiceover/speak', async ({ body }) => {
+  try { const r = await speak(body ?? {}); return { ...r, file: undefined, media: mediaFor(r.file) }; } catch (e) { throw new HttpError(400, (e as Error).message); }
+});
+route('POST', '/api/seo/audit', async ({ auth, body }) => {
+  let url: string;
+  try { url = normalizeUrl(String(body?.url ?? '')); } catch { throw new HttpError(400, 'Invalid address'); }
+  // a local or private address reaches this computer's network: only the owner may audit those
+  if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|\[?::1\]?$|0\.)/i.test(new URL(url).hostname)) ownerOnly(auth, 'audit a local address');
+  try { return await seoAudit(url); } catch (e) { throw new HttpError(400, (e as Error).message); }
+});
 route('DELETE', '/api/studio/renders', ({ body }) => ({ ok: deleteRender(String(body?.url ?? ''), projectFolders()) }));
 
 // ---------- attachments ----------
@@ -1094,7 +1112,7 @@ route('GET', '/api/runs', ({ url }) => {
 route('GET', '/api/skills', () => listSkills().map(({ body, ...s }) => ({ ...s, preview: body.slice(0, 200) })));
 route('GET', '/api/skills/github/search', async ({ auth, url }) => {
   ownerOnly(auth, 'search GitHub skills');
-  try { return await searchGitHubSkills(url.searchParams.get('q') ?? ''); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  try { return await searchGitHubSkills(url.searchParams.get('q') ?? '', (url.searchParams.get('sort') ?? 'best') as 'best', Number(url.searchParams.get('page') ?? 1)); } catch (e) { throw new HttpError(400, (e as Error).message); }
 });
 route('POST', '/api/skills/github/preview', async ({ auth, body }) => {
   ownerOnly(auth, 'preview GitHub skills');

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { workspaceDir } from '../config.ts';
 import { detectCli, runProcess, tryJson } from './process.ts';
 import type { Provider } from './types.ts';
@@ -7,6 +10,16 @@ const images = (files: string[]) => {
   const list = files.filter((f) => /.(png|jpe?g|gif|webp|bmp)$/i.test(f) && !f.includes(','));
   return list.length ? ['--image', list.join(',')] : [];
 };
+
+interface CodexModel { slug: string; display_name?: string; visibility?: string; priority?: number; supported_reasoning_levels?: { effort: string }[] }
+/** The models the Codex CLI offers this account (it keeps the list in ~/.codex/models_cache.json and refreshes it itself). */
+function codexModels(): CodexModel[] {
+  try {
+    const file = join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'models_cache.json');
+    const list: CodexModel[] = JSON.parse(readFileSync(file, 'utf8')).models ?? [];
+    return list.filter((m) => m.slug && m.visibility !== 'hide').sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
+  } catch { return []; }
+}
 
 /** ChatGPT Plus / Pro subscription through the official OpenAI Codex CLI (`codex exec`). */
 export const codex: Provider = {
@@ -23,6 +36,12 @@ export const codex: Provider = {
     return r.code === 0 && !/not logged in/i.test(r.stdout + r.stderr);
   },
   efforts: ['minimal', 'low', 'medium', 'high'],
+  listModels: async () => codexModels().map((m) => ({ id: m.slug, label: m.display_name || m.slug })),
+  listEfforts: async () => {
+    const order = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+    const all = new Set(codexModels().flatMap((m) => (m.supported_reasoning_levels ?? []).map((l) => l.effort)));
+    return order.filter((e) => all.has(e));
+  },
   detect: () => detectCli('codex'),
 
   async run({ prompt, onDelta, onActivity, files = [], access = 'chat', cwd, signal, timeoutMs, model, effort, mcp = [] }) {

@@ -10,6 +10,7 @@ import { HOME, loadConfig, saveConfig, workspaceDir, generatedDir } from './conf
 import { emit } from './events.ts';
 import { getUpload, sendFileRange } from './uploads.ts';
 import { nativeKey } from './plugins.ts';
+import { activeEngine } from './voiceover.ts';
 
 export const studioDir = () => join(HOME, 'studio');
 const kitDir = () => process.env.ALTER_STUDIO_KIT_DIR ?? resolve(import.meta.dirname, '../../../studio-kit');
@@ -215,7 +216,8 @@ Fonts: display/body take any Google Fonts family by name (e.g. "Montserrat", "Lo
 
 // ---------- connected AI services (Settings → Plugins: ElevenLabs, Higgsfield, fal) ----------
 
-const hasVoice = () => !!(process.env.ALTER_ELEVENLABS_KEY || nativeKey('elevenlabs', 'ELEVENLABS_API_KEY'));
+const hasVoice = () => !!activeEngine();
+const voiceName = () => (activeEngine() === 'voicestudio' ? 'VoiceStudio (free, local on this computer)' : 'ElevenLabs');
 function videoAIs(): string[] {
   const out: string[] = [];
   if (process.env.ALTER_HIGGSFIELD_KEY || (nativeKey('higgsfield', 'HF_API_KEY_ID') && nativeKey('higgsfield', 'HF_API_KEY_SECRET'))) out.push('Higgsfield (Seedance 2.0, Kling 3: --via higgsfield [--model kling])');
@@ -228,8 +230,8 @@ function videoAIs(): string[] {
 function voiceGuide(): string {
   const dir = studioDir().replace(/\\/g, '/');
   return hasVoice()
-    ? 'VOICE-OVER: ElevenLabs is CONNECTED — record it yourself, the user does nothing: write the script (one sentence per line; "…" = pause; hard words spelled as they sound) to assets/<reel>/voice.txt, then `node "' + dir + '/voice.mjs" --text-file assets/<reel>/voice.txt --out assets/<reel>/voice.mp3 [--voice "<name or id>"] [--speed 0.95]` → OUTPUT <mp3> and TIMES <mp3>.json {duration, lines, words} (exact timings, use them instead of voice-times). `--list` shows the account\'s voices (calm deep narrator = deadpan; pick by the mood). NO_VOICE_CREDITS = the month\'s characters are used up: say so and offer the manual way. NO_VOICE_KEY = the key stopped working: put [[altter:connect:elevenlabs]] on its own line.'
-    : 'VOICE-OVER: ElevenLabs is NOT connected. Offer it once (one line + the card): with their ElevenLabs key ALTTER records the voice itself and times every word — put [[altter:connect:elevenlabs]] on its own line (ALTTER shows a card with the steps and a key field; when they save it, continue). Meanwhile the manual way below still works. When connected: `node "' + dir + '/voice.mjs" --text-file assets/<reel>/voice.txt --out assets/<reel>/voice.mp3` → OUTPUT + TIMES json.';
+    ? 'VOICE-OVER: ' + voiceName() + ' is READY — record it yourself, the user does nothing: write the script (one sentence per line; "…" = pause; hard words spelled as they sound) to assets/<reel>/voice.txt, then `node "' + dir + '/voice.mjs" --text-file assets/<reel>/voice.txt --out assets/<reel>/voice.mp3 [--voice "<name or id>"] [--speed 0.95] [--lang <2-letter language of the script, e.g. pl>]` → OUTPUT <mp3> and TIMES <mp3>.json {duration, lines, words} (exact timings, use them instead of voice-times). `--list` shows the account\'s voices (calm deep narrator = deadpan; pick by the mood). NO_VOICE_CREDITS = the month\'s characters are used up: say so and offer the manual way. NO_VOICE_KEY = the key stopped working: put [[altter:connect:elevenlabs]] on its own line.'
+    : 'VOICE-OVER: no voice engine yet. Offer it once in one line: the free, local VoiceStudio app (ALTTER → Studio → Voice shows where to get it; once it is open ALTTER records the voice itself) — or, if they prefer, their ElevenLabs key: put [[altter:connect:elevenlabs]] on its own line. Meanwhile the manual way below still works. When connected: `node "' + dir + '/voice.mjs" --text-file assets/<reel>/voice.txt --out assets/<reel>/voice.mp3` → OUTPUT + TIMES json.';
 }
 
 /** Which video AI to use for clips (gen-video.mjs). */
@@ -380,7 +382,7 @@ b) "Voice-over" in a code block, one sentence per line, 8–14 lines. How to mak
    - Take the second or third idea, not the first one that comes to mind. Avoid: talking animals as the only joke, "it was all a dream", robots taking over, generic office boredom.
 c) Shot list: one row per line — time · where (which Scenery / place) · who and what they do (pose, mood, movement) · camera (wide / close-up / push-in / orbit) · overlay (Tag, Say, Gauge, Notify…). Vary shot sizes: after a wide shot use a close-up; change the place at least twice in the reel.
 d) Model check, one line: "Kit models: … · To build: …" — every noun from the shot list sorted into one of the two groups (rule 3).
-e) ${hasVoice() ? 'Voice: ElevenLabs is connected — say you will record it yourself (name the voice) when they say go.' : 'Voice: offer the one-minute ElevenLabs connection ([[altter:connect:elevenlabs]] on its own line — then ALTTER records it itself), or the manual way:\n  ' + ELEVEN_STEPS}
+e) ${hasVoice() ? 'Voice: ' + voiceName() + ' is ready — say you will record it yourself (name the voice) when they say go.' : 'Voice: offer the free local VoiceStudio (Studio → Voice in ALTTER) or the one-minute ElevenLabs connection ([[altter:connect:elevenlabs]] on its own line — then ALTTER records it itself), or the manual way:\n  ' + ELEVEN_STEPS}
 f) End with a choice the user can CLICK (never "answer A or B" in text) — an ask block in the user's language, e.g.:
 ${ASK_GO}
 ### STEP 2 — build (full access; when the user says go or sends the MP3)

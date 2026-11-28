@@ -35,6 +35,8 @@ export async function providerStatuses(fresh = false): Promise<ProviderStatus[]>
         markConnected(p.id);
         h = loadConfig().providerHealth[p.id];
       }
+      const live = d.installed ? await p.listModels?.().catch(() => undefined) : undefined;
+      const liveEfforts = d.installed ? await p.listEfforts?.().catch(() => undefined) : undefined;
       return {
         id: p.id,
         name: p.name,
@@ -45,8 +47,8 @@ export async function providerStatuses(fresh = false): Promise<ProviderStatus[]>
         installCmd: p.installCmd,
         loginCmd: p.loginCmd,
         isDefault: p.id === resolved.id,
-        models: p.models ?? [],
-        efforts: p.efforts ?? [],
+        models: live?.length ? live : p.models ?? [],
+        efforts: liveEfforts?.length ? liveEfforts : p.efforts ?? [],
         connected: p.id === 'demo' ? true : d.installed && !!h?.ok,
         health: h,
       };
