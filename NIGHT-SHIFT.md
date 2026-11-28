@@ -66,3 +66,55 @@
 - Po poprawce: JEDEN POST, widoczny błąd dostawcy, brak wiecznego busy, oryginalny tekst w polu do ponowienia (error-after-results.json).
 - Błąd 503 i zdarzenia narzędzi są symulowane na granicy fetch/SSE. Nie wywołano rzeczywistego dostawcy AI.
 - Następne: końcowy typecheck/build, powtórka sąsiednich ścieżek i raport.
+
+## Odbiór — końcowe sprawdzenie
+
+- `npm test`: **10/10 OK** (w tym 4 dotychczasowe testy).
+- `npm run typecheck`: **OK**.
+- `npm run build:web`: **OK**. Ostrzeżenie: główny bundle około 1,44 MB, gzip 463 KB; optymalizacja ładowania pozostaje osobnym zadaniem.
+- `git diff --check`: **OK**.
+- Ostatnia powtórka w Edge: `after`, `workspace-skills`, `media-after`, `error-after`, `page` — wszystkie OK, brak wyjątków JavaScript. Tour objął 24 widoki i osiem zakładek workspace.
+- API: status 200; podgląd skilla bez uwierzytelnienia 401; nieistniejący skill przy zapisie agenta workspace 400.
+- Osobny serwer testowy: `127.0.0.1:4317`, PID 18188 w chwili odbioru. Dane: `G:\ALTTER-Repair\altter-plan-test-data`.
+- Caddy 3232, relay 7340, Repair 17268 — te same PID-y co na początku. Nie restartowano ich ani nie zmieniano konfiguracji stron. Nie było push, publikacji wydania ani wdrożenia produkcyjnego.
+
+### Co kliknąć
+
+1. Na VPS otwórz `http://127.0.0.1:4317`.
+2. Workspace → projekt `Night shift workspace…` → Agenci → `Night shift skill demo` → Stałe instrukcje → Edytuj. Zobacz przypisany `webapp-testing`; rozwiń „Dodaj skill z GitHuba”, wyszukaj repo lub wklej adres, wybierz paczkę, obejrzyj instrukcje i pliki. Po instalacji kliknij **Zapisz**, aby zachować przypisanie.
+3. Czaty → `Local page preview demo` → przycisk podglądu `page-demo.html` → „Wskaż element”. Można wskazać nagłówek; zmieniony plik jest widoczny po odświeżeniu podglądu.
+4. Studio → galeria wyników → `night-vroom.mp4` lub WAV. `night-vroom-project.mp4` ma przycisk powrotu do projektu.
+5. Wpisz szkic wiadomości, przejdź na inny ekran i wróć. Szkice są osobne dla rozmów, projektów i zadań agenta; zapis w sesji tej karty przeglądarki, bez synchronizacji między urządzeniami.
+
+### Gałąź i commity
+
+Katalog: `G:\ALTTER-Repair\altter-plan`, gałąź `codex/altter-plan`.
+
+- `94cabc5` — komendy narzędzi i rozwijanie szczegółów.
+- `b4d6164` — szkice rozmów.
+- `7247357` — paczki GitHub z podglądem i SHA.
+- `b5872cd` — utrata i powrót sieci.
+- `bee4348` — skille w workspace i szkice zadań agenta.
+- `ccfb41e` — odtwarzanie audio, galeria i przykłady lokalnych wyników.
+- `9ff654f` — blokada podwójnego wysłania i odzyskanie tekstu po odrzuceniu.
+
+### Uruchomienie obok obecnej wersji
+
+```powershell
+& 'G:\ALTTER-Repair\altter-plan\scripts\start-night-shift.ps1'
+```
+
+Skrypt sprawdza port 4317, ustawia wyłącznie dla swojego procesu `ALTER_HOME` i startuje lokalny serwer. Zależności i build są już przygotowane. Po kolejnych zmianach źródeł frontendu uruchom `npm run build:web` w tej kopii. Zamknięcie testowego procesu nie wymaga zmiany Caddy ani zadań produkcyjnych.
+
+### Dowody i ograniczenia
+
+- Zrzuty, JSON-y, metadane filmu: `G:\ALTTER-Repair\altter-plan-artifacts`.
+- Film: `G:\ALTTER-Repair\altter-plan-test-data\workspace\renders\night-vroom.mp4`.
+- Przykłady źródeł: `examples/night-shift/`; scenariusze przeglądarkowe: `scripts/night-shift-browser.cjs`. Harness korzysta z Edge i istniejącego modułu `G:\servervroom\node_modules\ws`; uruchamia osobny profil oraz port CDP 9340. Nie jest testem dla dowolnego komputera bez tych narzędzi.
+- Rzeczywisty skill pobrano z publicznego GitHuba i potwierdzono jego obecność w kontekście agenta oraz trwałość po restarcie. **Nie wykonano zadania przez rzeczywisty model AI**. Zdarzenia narzędzi i awaria dostawcy były symulowane, aby nie zużywać usług AI.
+- HTML był przygotowany deterministycznie, a edycja wykonana bezpośrednio w pliku podczas testu. Przepływ generowania i edycji przez model pozostaje do sprawdzenia.
+- MP4 renderowano rzeczywiście lokalnie. Audio AAC i odtwarzanie potwierdzono technicznie; nie oceniono odsłuchowo lektora. Materiał ma syntetyczny podkład WAV, bez polskiej mowy i bez zewnętrznych modeli głosu.
+- Pierwszy ekran onboardingu obejrzano; konfigurację fixture zakończono przez API. Nie przeprowadzono pełnego łączenia kont AI przez onboarding.
+- Nie parowano telefonu, nie testowano fizycznego urządzenia ani płatnych dostawców. Nie wykonano pełnego audytu każdej funkcji aplikacji.
+
+Końcowy odczyt produkcji (bez zmian): relay HTTPS 200 / ok=true, Repair HTTPS 200 / ok=true, VROOM /api/posts?limit=1 HTTP 200.
