@@ -13,6 +13,7 @@ export interface Skill {
   description: string;
   body: string;
   builtIn: boolean;
+  source?: { url: string; sha: string; path: string; installedAt: string };
   /** When the chat message matches, the skill is added to the answer by itself. */
   triggers?: string;
 }
@@ -39,6 +40,16 @@ export function listSkills(): Skill[] {
   for (const [dir, builtIn] of [[builtInDir, true], [userSkillsDir(), false]] as const) {
     if (!existsSync(dir)) continue;
     for (const file of readdirSync(dir)) {
+      if (!builtIn && !file.startsWith('.') && existsSync(join(dir, file, 'SKILL.md')) && existsSync(join(dir, file, '.altter-source.json'))) {
+        try {
+          const skill = parse(file, readFileSync(join(dir, file, 'SKILL.md'), 'utf8'), false);
+          skill.source = JSON.parse(readFileSync(join(dir, file, '.altter-source.json'), 'utf8'));
+          // Relative references in third-party skills resolve to the installed package.
+          skill.body = `Package directory: ${join(dir, file)}\n\n${skill.body}`;
+          out.set(file, skill);
+        } catch { /* An incomplete package cannot break the legacy skills list. */ }
+        continue;
+      }
       if (!file.endsWith('.md') || file.toLowerCase() === 'readme.md') continue;
       const id = file.slice(0, -3);
       out.set(id, parse(id, readFileSync(join(dir, file), 'utf8'), builtIn)); // user skills override built-ins

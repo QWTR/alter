@@ -55,7 +55,7 @@ export interface Run {
   error: string | null; detail: string | null; task?: string | null; author?: string | null; media?: MediaItem[]; attachments?: Attachment[]; started_at: string; finished_at: string | null; agent_name?: string; agent_avatar?: Avatar;
 }
 export interface Memory { id: string; kind: string; content: string; importance: number; source: string | null; projectId: string | null; updatedAt: string }
-export interface Skill { id: string; name: string; description: string }
+export interface Skill { id: string; name: string; description: string; source?: { url: string; sha: string; path: string; installedAt: string } }
 export interface Device { id: string; name: string; pairedAt: string; lastSeen?: string }
 
 // ---------- auth ----------

@@ -550,6 +550,15 @@ button.chip-select { cursor: pointer; }
 .tool-detail summary svg { flex: none; }
 .tool-detail summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .tool-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.5; margin: 8px 0 2px; user-select: text; }
+.github-skills { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin: 12px 0; min-width: 0; }
+.github-skills > summary { cursor: pointer; font-weight: 600; }
+.github-skill-body { display: grid; gap: 10px; min-width: 0; }
+.github-skill-body label { display: grid; gap: 5px; font-size: 13px; min-width: 0; }
+.github-skill-body .input { width: 100%; min-width: 0; }
+.github-skill-body pre, .github-skill-body .mono { white-space: pre-wrap; overflow-wrap: anywhere; }
+.github-repository { display: flex; flex-direction: column; align-items: flex-start; white-space: normal; text-align: left; height: auto; overflow-wrap: anywhere; }
+.github-skill-preview { max-height: 300px; overflow: auto; padding: 10px; border: 1px solid var(--border); border-radius: 8px; }
+.github-skill-error { color: var(--danger); overflow-wrap: anywhere; }
 .preview-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--border); background: var(--bg-2, var(--bg)); }
 .preview-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
 .preview-frame { position: relative; flex: 1; min-height: 0; padding: 12px; }

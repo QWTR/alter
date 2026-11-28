@@ -46,6 +46,7 @@ import { importProject, pickFolder, scanProject } from './projectImport.ts';
 import { previewFor, resolvePreview } from './preview.ts';
 import { PREVIEW_KIT } from './previewKit.ts';
 import { listSkills } from './skills.ts';
+import { searchGitHubSkills, previewGitHubSkills, installGitHubSkill } from './githubSkills.ts';
 import { VERSION } from './version.ts';
 import { MAX_UPLOAD, getUpload, saveUpload, serveUpload, type Attachment } from './uploads.ts';
 import { addCalendar, publicCalendars, removeCalendar, upcoming } from './calendar.ts';
@@ -1086,6 +1087,18 @@ route('GET', '/api/runs', ({ url }) => {
   return agentId ? agentRuns(agentId, 60) : listRuns({ projectId: url.searchParams.get('projectId') ?? undefined });
 });
 route('GET', '/api/skills', () => listSkills().map(({ body, ...s }) => ({ ...s, preview: body.slice(0, 200) })));
+route('GET', '/api/skills/github/search', async ({ auth, url }) => {
+  ownerOnly(auth, 'search GitHub skills');
+  try { return await searchGitHubSkills(url.searchParams.get('q') ?? ''); } catch (e) { throw new HttpError(400, (e as Error).message); }
+});
+route('POST', '/api/skills/github/preview', async ({ auth, body }) => {
+  ownerOnly(auth, 'preview GitHub skills');
+  try { return await previewGitHubSkills(String(body.source ?? ''), body.path ? String(body.path) : undefined, body.sha ? String(body.sha) : undefined); } catch (e) { throw new HttpError(400, (e as Error).message); }
+});
+route('POST', '/api/skills/github/install', async ({ auth, body }) => {
+  ownerOnly(auth, 'install GitHub skills');
+  try { return await installGitHubSkill(String(body.source ?? ''), String(body.path ?? ''), String(body.sha ?? '')); } catch (e) { throw new HttpError(400, (e as Error).message); }
+});
 route('GET', '/api/activity', () => recentActivity(72, 200).reverse());
 
 // ---------- devices / pairing ----------

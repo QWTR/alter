@@ -7,6 +7,7 @@ import { ago, formatTime, useT, type Key } from '../i18n';
 import { Markdown } from './Markdown';
 import { AgentCreator } from './AgentCreator';
 import { AgentChat } from './AgentChat';
+import { GitHubSkills } from './GitHubSkills';
 import { navigate } from '../router';
 import { useDescribeSchedule, ScheduleEditor } from './schedule';
 import { Drawer, Field, ICON_KEYS, ICONS, Modal, ModalHead, Orb, PALETTE_KEYS, PALETTES, Segmented, Switch, Tabs, spring, stagger, toast } from './ui';
@@ -345,7 +346,7 @@ export function AgentEditor({ agent, onSaved }: { agent: Agent; onSaved: () => v
           {(skills ?? []).map((s) => {
             const on = f.skills.includes(s.id);
             return (
-              <motion.button type="button" key={s.id} className={`badge${on ? ' accent' : ''}`} style={{ height: 30, cursor: 'pointer' }} title={s.description} onClick={() => set({ skills: on ? f.skills.filter((x) => x !== s.id) : [...f.skills, s.id] })} whileTap={{ scale: 0.94 }}>
+              <motion.button type="button" key={s.id} className={`badge${on ? ' accent' : ''}`} style={{ height: 30, cursor: 'pointer' }} title={s.description + (s.source ? `\n${s.source.url}\nSHA: ${s.source.sha}` : '')} aria-pressed={on} onClick={() => set({ skills: on ? f.skills.filter((x) => x !== s.id) : [...f.skills, s.id] })} whileTap={{ scale: 0.94 }}>
                 {on && <Check />}
                 {s.name}
               </motion.button>
@@ -353,6 +354,7 @@ export function AgentEditor({ agent, onSaved }: { agent: Agent; onSaved: () => v
           })}
         </div>
       </Field>
+      <GitHubSkills onInstalled={id => set({ skills: [...new Set([...f.skills, id])] })} />
       <Field label={t('agents.tools')} hint={t('agents.toolsHint')}><input className="input mono" value={f.tools} onChange={(e) => set({ tools: e.target.value })} /></Field>
       <div className="row" style={{ margin: '6px 0 4px' }}>
         <Switch on={f.learns} onChange={(learns) => set({ learns })} />

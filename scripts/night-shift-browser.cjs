@@ -1,4 +1,4 @@
-﻿// Isolated UI regression harness. Chat events are simulated; no AI is called.
+// Isolated UI regression harness. Chat events are simulated; no AI is called.
 const {spawn}=require('node:child_process');
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
@@ -18,6 +18,31 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));let ws;
  await send('Page.addScriptToEvaluateOnNewDocument',{source:`const realFetch=window.fetch.bind(window);window.fetch=(input,init)=>{if(input==='/api/chat'){return Promise.resolve(new Response(new ReadableStream({start(c){const emit=(event,data)=>c.enqueue(new TextEncoder().encode('event: '+event+'\\ndata: '+JSON.stringify(data)+'\\n\\n'));emit('activity',{text:'PowerShell: "C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -NoProfile -Command "git status --short"'});emit('activity',{text:'PowerShell: "C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -NoProfile -Command "npm run build"'});}}),{headers:{'content-type':'text/event-stream'}}));}return realFetch(input,init);};`});
  await send('Page.navigate',{url:'http://127.0.0.1:4317'});await pause(2500);
  fs.writeFileSync(out+'/'+phase+'-initial.txt',await evaluate('document.body.innerText'));
+ if(phase==='skills') {
+  const agentId=await evaluate(`(async()=>{const {token}=await(await fetch('/api/boot')).json();const headers={'Content-Type':'application/json',Authorization:'Bearer '+token};const all=await(await fetch('/api/agents',{headers})).json();const old=all.find(a=>a.name==='Night shift skill demo');if(old)return old.id;return (await(await fetch('/api/agents',{method:'POST',headers,body:JSON.stringify({name:'Night shift skill demo',instructions:'Use the assigned skill to test a local web app.',schedule:'manual',enabled:false,learns:false,access:'read'})})).json()).id;})()`);
+  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+  await evaluate(`location.hash='/agents'`);await send('Page.reload');await pause(1800);
+  await evaluate(`[...document.querySelectorAll('.card')].find(x=>x.textContent.includes('Night shift skill demo')).click()`);await pause(600);
+  await evaluate(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Edytuj').click()`);await pause(500);
+  await evaluate(`document.querySelector('.github-skills summary').click()`);await pause(200);
+  const fill=async (index,value)=>{await evaluate(`(()=>{const t=document.querySelectorAll('.github-skills input')[${index}];Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(t,${JSON.stringify(value)});t.dispatchEvent(new Event('input',{bubbles:true}));})()`);await pause(200);};
+  const click=async text=>{assert.ok(await evaluate(`(()=>{const b=[...document.querySelectorAll('.github-skills button')].find(x=>x.textContent===${JSON.stringify(text)});if(!b||b.disabled)return false;b.click();return true;})()`));};
+  const wait=async expression=>{for(let i=0;i<100;i++){if(await evaluate("Boolean("+expression+")"))return;await pause(300);}throw Error('Timed out: '+expression+' '+await evaluate(`document.querySelector('.github-skills')?.innerText`));};
+  await fill(0,'anthropics');await click('Szukaj repozytoriów');await wait(`document.querySelector('.github-repository') || document.querySelector('.github-skill-error')`);
+  assert.ok(await evaluate(`document.querySelectorAll('.github-repository').length>0`),'real repository search results');
+  await fill(1,'https://github.com/anthropics/skills');await click('Podgląd');await wait(`document.querySelector('.github-skills select')`);
+  const choices=await evaluate(`document.querySelector('.github-skills select').options.length`);assert.ok(choices>2,'multiple packages');
+  await evaluate(`(()=>{const s=document.querySelector('.github-skills select');s.value='skills/webapp-testing/SKILL.md';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await wait(`document.querySelector('.github-skill-preview')`);
+  const preview=await evaluate(`({text:document.querySelector('.github-skill-preview').innerText,sha:document.querySelector('.github-skills .mono').innerText})`);assert.ok(preview.text.includes('Playwright'));
+  for(const width of [360,390,768,1440]){await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});await pause(200);await evaluate(`document.querySelector('.github-skills').scrollIntoView()`);assert.ok(await evaluate(`document.documentElement.scrollWidth<=innerWidth+1`));fs.writeFileSync(out+'/skills-'+width+'.png',Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));}
+  const installed=await evaluate(`(async()=>{const {token}=await(await fetch('/api/boot')).json();return (await(await fetch('/api/skills',{headers:{Authorization:'Bearer '+token}})).json()).find(s=>s.source?.path==='skills/webapp-testing/SKILL.md');})()`);
+  if(!installed){await click('Zainstaluj i zaznacz');await wait(`!document.querySelector('.github-skills').open`);}else{await evaluate(`[...document.querySelectorAll('button.badge')].find(b=>b.textContent.includes('webapp-testing'))?.click()`);}
+  await evaluate(`document.querySelector('.modal-foot button').click()`);await pause(800);
+  const saved=await evaluate(`(async()=>{const {token}=await(await fetch('/api/boot')).json();return (await(await fetch('/api/agents',{headers:{Authorization:'Bearer '+token}})).json()).find(a=>a.id===${JSON.stringify(agentId)});})()`);assert.ok(saved.skills.some(s=>s.startsWith('github-anthropics-skills')));
+  await send('Page.reload');await pause(1000);
+  fs.writeFileSync(out+'/skills-results.json',JSON.stringify({agentId,choices,preview,assigned:saved.skills,errors},null,2));assert.deepEqual(errors,[]);console.log(JSON.stringify({agentId,choices,assigned:saved.skills,errors}));await send('Browser.close');return;
+ }
  // Finish onboarding using the same settings endpoint as the UI (no provider check).
  await evaluate(`(async()=>{const {token}=await(await fetch('/api/boot')).json();await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({onboarded:true,language:'pl'})});})()`);
  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});

@@ -24,3 +24,13 @@
 - Przed poprawką test w przeglądarce potwierdził pusty tekst po opuszczeniu czatu i po reloadzie (draft-before-drafts.json).
 - Po poprawce oba scenariusze zachowują tekst (after-drafts.json); zapis w sessionStorage per rozmowa/projekt, bez wysyłania treści na serwer.
 - Regresja draftStore 2/2, typecheck i build OK. Następne: skille GitHub.
+
+## Etap 3 — skille z GitHuba
+- Commit szkiców: b4d6164.
+- Nowy przepływ: Agenci → karta agenta → Edytuj → Dodaj skill z GitHuba → wyszukiwanie/link → wybór paczki → podgląd → Zainstaluj i zaznacz → Zapisz.
+- Rzeczywiste źródło: https://github.com/anthropics/skills/tree/e4bb5d960d87126ff3b3a8af1a104b7db67560ba/skills/webapp-testing . W repo odnaleziono 20 paczek; zapisano SKILL.md, LICENSE, examples i skrypt pomocniczy bez uruchamiania.
+- Test UI: wyszukiwanie prawdziwych repo, wybór paczki, podgląd, instalacja, zapis przypisania. Zrzuty skills-360/390/768/1440.png, skills-results.json w katalogu artefaktów.
+- Oddzielny proces Node potwierdził odczyt przypisania z bazy i włączenie instrukcji Playwright oraz ścieżki paczki do skillsText. Nie wywoływano AI; jakość wykonania zadania przez model nie jest jeszcze sprawdzona.
+- Testy repo: 10/10, w tym stare skille, walidacja ścieżek, pin SHA i brak wykonania skryptu.
+- Zabezpieczenia: tylko publiczny github.com HTTPS, brak kluczy GitHub, timeouty i limity rozmiaru, pomijane symlinki, bez git clone/hooków/npm. Podgląd instrukcji renderuje wyłącznie bezpieczny Markdown, bez aktywnych bloków zadań.
+- Następne: restart wyłącznie instancji testowej, offline, przegląd workspace i Studio.
