@@ -209,9 +209,9 @@ export function BoardPane({ c }: { c: WsCtx }) {
       commit([{ put: s }]);
       setSel(s.id);
       setEditing(s.id);
-      setTool('select');
       return;
     }
+    setSel(null); // drawing: no selection box left over from before
     const s = base(tool as ShapeType, wx, wy);
     if (tool === 'pen') { s.p = [0, 0]; }
     commit([{ put: s }], false);
@@ -268,8 +268,7 @@ export function BoardPane({ c }: { c: WsCtx }) {
         const s = cur.t === 'line' || cur.t === 'arrow' ? { ...cur, w: 160, h: 0 } : { ...cur, x: cur.x - 60, y: cur.y - 40, w: 120, h: 80 };
         commit([{ put: s }], true, d.before);
       } else commit([{ put: norm(cur) }], true, d.before);
-      setSel(cur.id);
-      setTool('select');
+      // the chosen tool stays (draw stroke after stroke); switch to the arrow yourself to select
       return;
     }
     commit([{ put: cur }], true, d.before);
