@@ -9,6 +9,7 @@
 // Neither VoiceStudio running nor a key: prints NO_VOICE_KEY and exits 3.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { spawn } from 'node:child_process';
 
 const argv = process.argv.slice(2);
 const opt = {};
@@ -19,10 +20,20 @@ for (let i = 0; i < argv.length; i++) {
 }
 const key = process.env.ALTER_ELEVENLABS_KEY || process.env.ELEVENLABS_API_KEY;
 const VS = (process.env.ALTER_VOICESTUDIO_URL || 'http://127.0.0.1:3900/elevenlabs').replace(/\/+$/, '');
-const vsUp = async () => { try { return (await fetch(`${VS}/v1/voices`, { signal: AbortSignal.timeout(2500) })).ok; } catch { return false; } };
+const vsPing = async () => { try { return (await fetch(`${VS}/v1/voices`, { signal: AbortSignal.timeout(2500) })).ok; } catch { return false; } };
+// installed through ALTTER but asleep: wake it in the background (no window) and wait up to 90 s
+const vsUp = async () => {
+  if (await vsPing()) return true;
+  const exe = process.env.ALTER_VOICESTUDIO_EXE;
+  if (!exe || !existsSync(exe)) return false;
+  console.log('Starting VoiceStudio in the background…');
+  spawn(exe, ['--voicestudio-background'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  for (let i = 0; i < 45; i++) { await new Promise((r) => setTimeout(r, 2000)); if (await vsPing()) return true; }
+  return false;
+};
 const want = typeof opt.engine === 'string' ? opt.engine : process.env.ALTER_VOICE_ENGINE || 'auto';
 let engine = want === 'voicestudio' ? 'voicestudio' : want === 'elevenlabs' && key ? 'elevenlabs' : (await vsUp()) ? 'voicestudio' : key ? 'elevenlabs' : null;
-if (engine === 'voicestudio' && want === 'voicestudio' && !(await vsUp())) engine = key ? 'elevenlabs' : null;
+if (engine === 'voicestudio' && want === 'voicestudio' && !(await vsPing()) && !(await vsUp())) engine = key ? 'elevenlabs' : null;
 if (!engine) {
   console.error('NO_VOICE_KEY: no voice engine. Free and local: ask the user to open the VoiceStudio app (Studio → Voice in ALTTER shows how to get it), then run this again. Or connect ElevenLabs: put [[altter:connect:elevenlabs]] on its own line in your answer, then wait.');
   process.exit(3);

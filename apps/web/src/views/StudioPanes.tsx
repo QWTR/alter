@@ -10,8 +10,11 @@ import { setPendingMessage } from './Chat';
 
 interface VoiceStatus {
   engine: 'auto' | 'voicestudio' | 'elevenlabs'; active: 'voicestudio' | 'elevenlabs' | null; download: string; url: string;
-  voicestudio: { up: boolean; voices: { id: string; name: string }[] }; elevenlabs: { connected: boolean };
+  voicestudio: { up: boolean; voices: { id: string; name: string }[]; app?: VsApp }; elevenlabs: { connected: boolean };
 }
+interface VsApp { supported: boolean; installed: boolean; up: boolean; needsSetup: boolean; setupOpened: boolean; phase: 'idle' | 'downloading' | 'verifying' | 'installing' | 'starting' | 'error'; got: number; total: number; version?: string; error?: string; ui: string }
+const mb = (n: number) => `${Math.round(n / 1048576)} MB`;
+const onThisPc = () => ['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname);
 const LANGS = ['pl', 'en', 'de', 'es', 'fr', 'uk', 'it', 'pt', 'cs'];
 const store = { get: (k: string) => { try { return localStorage.getItem(k) ?? ''; } catch { return ''; } }, set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} } };
 const chat = (text: string) => { setPendingMessage(text, { access: 'full' }); navigate('/chat/new'); };
@@ -24,6 +27,7 @@ export function VoicePane({ renders }: { renders: MediaItem[] }) {
   const [lang, setLang] = useState(() => store.get('altter.voiceLang') || 'pl');
   const [speed, setSpeed] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [full, setFull] = useState(false);
   const [last, setLast] = useState<{ media: MediaItem; duration: number; words: number; engine: string } | null>(null);
   useEffect(() => store.set('altter.voiceDraft', text), [text]);
   const engine = st?.active;
@@ -50,13 +54,7 @@ export function VoicePane({ renders }: { renders: MediaItem[] }) {
           <div className={`st-engine${engine === 'voicestudio' ? ' on' : ''}`}>
             <span className="st-engine-name"><Mic size={16} />VoiceStudio <span className="badge">{t('sv.free')}</span></span>
             <span className="small muted">{t('sv.vsLead')}</span>
-            {st?.voicestudio.up
-              ? <span className="st-ok small"><CheckCircle2 size={14} />{t('sv.vsUp', { n: st.voicestudio.voices.length })}</span>
-              : <span className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                  <a className="btn primary sm" href={st?.download ?? 'https://github.com/debpalash/VoiceStudio/releases/latest'} target="_blank" rel="noopener noreferrer"><Download size={14} />{t('sv.get')}</a>
-                  <button className="btn sm" onClick={() => invalidate('/api/voiceover')}><RefreshCw size={14} />{t('sv.check')}</button>
-                  <span className="small faint">{t('sv.vsDown')}</span>
-                </span>}
+            <VoiceStudioControls st={st} />
           </div>
           <div className={`st-engine${engine === 'elevenlabs' ? ' on' : ''}`}>
             <span className="st-engine-name"><AudioLines size={16} />ElevenLabs</span>
@@ -67,6 +65,16 @@ export function VoicePane({ renders }: { renders: MediaItem[] }) {
           </div>
         </div>
       </section>
+
+      {st?.voicestudio.up && st.voicestudio.app?.installed && onThisPc() && (
+        <section className="st-card st-vs-embed">
+          <div className="st-row-head">
+            <div><h3>VoiceStudio</h3><p className="small muted">{t('sv.embedLead')}</p></div>
+            <button className="btn sm" onClick={() => setFull((v) => !v)}>{full ? t('sv.hideStudio') : t('sv.openStudio')}</button>
+          </div>
+          {full && <iframe className="st-vs-frame" src={st.voicestudio.app.ui} title="VoiceStudio" allow="microphone; clipboard-write; autoplay" />}
+        </section>
+      )}
 
       <section className="st-card">
         <h3>{t('sv.record')}</h3>
@@ -114,6 +122,52 @@ export function VoicePane({ renders }: { renders: MediaItem[] }) {
       )}
       <p className="small faint">{t('sv.license')}</p>
     </div>
+  );
+}
+
+function VoiceStudioControls({ st }: { st?: VoiceStatus }) {
+  const t = useT();
+  const app = st?.voicestudio.app;
+  const working = !!app && ['downloading', 'verifying', 'installing', 'starting'].includes(app.phase);
+  // poll fast while ALTTER installs or wakes it
+  useEffect(() => {
+    if (!working && !(app?.installed && !app.up)) return;
+    const id = setInterval(() => invalidate('/api/voiceover'), working ? 1500 : 5000);
+    return () => clearInterval(id);
+  }, [working, app?.installed, app?.up]);
+  const post = async (path: string) => {
+    try { await api(path, { method: 'POST' }); invalidate('/api/voiceover'); } catch (err) { toast((err as Error).message, 'error'); }
+  };
+  if (st?.voicestudio.up) return <span className="st-ok small"><CheckCircle2 size={14} />{t('sv.vsUp', { n: st.voicestudio.voices.length })}</span>;
+  if (!app) return null;
+  if (working) {
+    const pct = app.total ? Math.min(100, Math.round((app.got / app.total) * 100)) : 0;
+    return (
+      <div className="st-vs-progress">
+        <span className="small"><Loader2 size={13} className="spin" />{t(`sv.phase.${app.phase}` as Key, { got: mb(app.got), total: mb(app.total) })}</span>
+        {app.phase === 'downloading' && <div className="st-bar"><i style={{ width: `${pct}%` }} /></div>}
+      </div>
+    );
+  }
+  if (!app.supported) return <a className="btn sm" href={st?.download} target="_blank" rel="noopener noreferrer"><Download size={14} />{t('sv.get')}</a>;
+  if (!app.installed) return (
+    <span className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <button className="btn primary sm" onClick={() => post('/api/voiceover/install')}><Download size={14} />{t('sv.install')}</button>
+      <span className="small faint">{app.phase === 'error' ? <span style={{ color: 'var(--danger, #ff5d6c)' }}>{app.error}</span> : t('sv.installNote')}</span>
+    </span>
+  );
+  if (app.needsSetup) return (
+    <span className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <button className="btn primary sm" onClick={() => post('/api/voiceover/setup')}>{t('sv.finishSetup')}</button>
+      <button className="btn sm" onClick={() => invalidate('/api/voiceover')}><RefreshCw size={14} />{t('sv.check')}</button>
+      <span className="small faint">{t('sv.setupNote')}</span>
+    </span>
+  );
+  return (
+    <span className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <span className="small muted"><Loader2 size={13} className="spin" /> {t('sv.waking')}</span>
+      <button className="btn sm" onClick={() => post('/api/voiceover/start')}><RefreshCw size={14} />{t('sv.start')}</button>
+    </span>
   );
 }
 

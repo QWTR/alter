@@ -1861,6 +1861,19 @@ const pl: Dict = {
   'seo.a.meta.name': "Tytuły i opisy",
   'seo.a.meta.desc': "Lepszy title i meta description dla każdej podstrony",
   'seo.a.meta.ask': "Przejdź przez główne podstrony {url} i napisz dla każdej lepszy tytuł (≤ 60 znaków) i meta description (≤ 155 znaków), z uzasadnieniem.",
+  'sv.install': "Zainstaluj VoiceStudio",
+  'sv.installNote': "ALTTER pobierze oficjalną wersję (ok. 230 MB), sprawdzi sumę kontrolną i zainstaluje — bez kreatora.",
+  'sv.phase.downloading': "Pobieranie {got} z {total}…",
+  'sv.phase.verifying': "Sprawdzanie pobranego pliku…",
+  'sv.phase.installing': "Instalowanie…",
+  'sv.phase.starting': "Uruchamianie VoiceStudio…",
+  'sv.finishSetup': "Dokończ jednorazową konfigurację",
+  'sv.setupNote': "Tylko raz: VoiceStudio pobiera swój silnik mowy (kilka GB). Potem działa w tle wewnątrz ALTTER.",
+  'sv.waking': "Uruchamianie w tle…",
+  'sv.start': "Uruchom",
+  'sv.embedLead': "Pełne VoiceStudio — klonowanie głosu, biblioteka głosów, dubbing — tutaj, w ALTTER.",
+  'sv.openStudio': "Otwórz VoiceStudio",
+  'sv.hideStudio': "Ukryj",
 };
 
 export default pl;

@@ -824,6 +824,11 @@ button.chip-select { cursor: pointer; }
 .st-ig-auto { gap: 8px; align-content: start; }
 .st-ig-auto .btn { justify-self: start; }
 @media (max-width: 720px) { .st-ig-head, .st-ig-inputs { grid-template-columns: 1fr; } }
+.st-vs-progress { display: grid; gap: 8px; }
+.st-vs-progress .small { display: inline-flex; align-items: center; gap: 6px; }
+.st-bar { height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.st-bar i { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .4s var(--ease); }
+.st-vs-frame { width: 100%; height: min(78vh, 820px); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); }
 .st-seo-form { display: flex; gap: 10px; flex-wrap: wrap; }
 .st-seo-form .input { flex: 1 1 280px; }
 .st-seo-score { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1 1 260px; }

@@ -11,7 +11,8 @@ import { handleCouncilMcp } from './council.ts';
 import { agentStatuses } from './status.ts';
 import { ensureVoice, transcribe, voiceStatus } from './voice.ts';
 import { normalizeUrl, seoAudit } from './seo.ts';
-import { exportVoiceEngine, setVoiceEngine, speak, voiceoverStatus, voiceStudioStatus } from './voiceover.ts';
+import { exportVoiceEngine, setVoiceEngine, speak, voiceEngineSetting as voiceoverStatusEngine, voiceoverStatus, voiceStudioStatus } from './voiceover.ts';
+import { installVoiceStudio, openVoiceStudioWindow, startVoiceStudio, vsAppStatus, vsExe } from './voicestudioApp.ts';
 import { sendFollowUp } from './followups.ts';
 import { deleteRender, ensureStudio, mediaFor, publicBrand, listRenders, mediaForFiles, mediaIn, mediaNamedIn, serveMedia, setBrand, studioStatus } from './studio.ts';
 import { spawn } from 'node:child_process';
@@ -409,7 +410,13 @@ route('POST', '/api/studio/install', () => {
 route('PUT', '/api/studio/brand', ({ body }) => (setBrand(body ?? {}), publicBrand()));
 // voice-over (Studio → Voice): VoiceStudio locally, or ElevenLabs
 exportVoiceEngine();
-voiceStudioStatus(true).catch(() => {});
+voiceStudioStatus(true).then((s) => {
+  // installed through ALTTER: run it in the background together with ALTTER (unless ElevenLabs is the chosen engine)
+  if (!s.up && vsExe() && voiceoverStatusEngine() !== 'elevenlabs' && !process.env.ALTER_NO_VOICESTUDIO) startVoiceStudio();
+}).catch(() => {});
+route('POST', '/api/voiceover/install', ({ auth }) => { ownerOnly(auth, 'install VoiceStudio'); try { installVoiceStudio(); } catch (e) { throw new HttpError(400, (e as Error).message); } return vsAppStatus(); });
+route('POST', '/api/voiceover/start', async ({ auth }) => { ownerOnly(auth, 'start VoiceStudio'); startVoiceStudio(); return vsAppStatus(); });
+route('POST', '/api/voiceover/setup', async ({ auth }) => { ownerOnly(auth, 'open VoiceStudio'); openVoiceStudioWindow(); return vsAppStatus(); });
 setInterval(() => voiceStudioStatus(true).catch(() => {}), 60_000).unref();
 route('GET', '/api/voiceover', () => voiceoverStatus());
 route('PUT', '/api/voiceover', async ({ auth, body }) => { ownerOnly(auth, 'change the voice engine'); setVoiceEngine(String(body?.engine ?? 'auto')); return voiceoverStatus(); });

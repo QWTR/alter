@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig, saveConfig, workspaceDir } from './config.ts';
 import { nativeKey } from './plugins.ts';
+import { ensureVoiceStudio, vsAppStatus, vsExe } from './voicestudioApp.ts';
 
 export type VoiceEngine = 'auto' | 'voicestudio' | 'elevenlabs';
 export const VOICESTUDIO_URL = (process.env.ALTER_VOICESTUDIO_URL || 'http://127.0.0.1:3900/elevenlabs').replace(/\/+$/, '');
@@ -50,14 +51,15 @@ export function activeEngine(): 'voicestudio' | 'elevenlabs' | null {
   const key = !!elevenKey();
   if (pref === 'elevenlabs') return key ? 'elevenlabs' : vsCache.up ? 'voicestudio' : null;
   if (pref === 'voicestudio') return 'voicestudio';
-  return vsCache.up ? 'voicestudio' : key ? 'elevenlabs' : null;
+  // installed through ALTTER counts as available: it is started on demand
+  return vsCache.up || vsExe() ? 'voicestudio' : key ? 'elevenlabs' : null;
 }
 
 export async function voiceoverStatus() {
   const vs = await voiceStudioStatus();
   return {
     engine: voiceEngineSetting(), active: activeEngine(), download: VOICESTUDIO_DOWNLOAD, url: VOICESTUDIO_URL.replace(/\/elevenlabs$/, ''),
-    voicestudio: { up: vs.up, voices: vs.voices },
+    voicestudio: { up: vs.up, voices: vs.voices, app: await vsAppStatus() },
     elevenlabs: { connected: !!elevenKey() },
   };
 }
@@ -70,7 +72,11 @@ export async function speak(o: { text: string; engine?: string; voice?: string; 
   await voiceStudioStatus(true);
   const engine = o.engine === 'elevenlabs' || o.engine === 'voicestudio' ? o.engine : activeEngine();
   if (!engine) throw Error('NO_VOICE: start VoiceStudio (free, local) or connect ElevenLabs.');
-  if (engine === 'voicestudio' && !vsCache.up) throw Error('VoiceStudio is not running. Open the VoiceStudio app, then try again.');
+  if (engine === 'voicestudio' && !vsCache.up) {
+    if (!vsExe()) throw Error('VoiceStudio is not installed: Studio → Voice-over → Install.');
+    if (!(await ensureVoiceStudio())) throw Error('VoiceStudio did not start — finish its one-time setup (Studio → Voice-over), then try again.');
+    await voiceStudioStatus(true);
+  }
   const key = elevenKey();
   if (engine === 'elevenlabs' && !key) throw Error('ElevenLabs is not connected (Settings → Plugins).');
   const base = engine === 'voicestudio' ? VOICESTUDIO_URL : ELEVEN;

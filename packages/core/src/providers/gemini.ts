@@ -1,6 +1,6 @@
 import { workspaceDir } from '../config.ts';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { runProcess, tryJson } from './process.ts';
@@ -109,8 +109,10 @@ export const gemini: Provider = {
   efforts: ['low', 'medium', 'high', 'xhigh'],
   detect: detectAgy,
 
-  async run({ prompt, onDelta, onActivity, fileDirs = [], access = 'chat', cwd, signal, timeoutMs, model, effort, fast }) {
+  async run({ prompt, onDelta, onActivity, fileDirs = [], access = 'chat', cwd, signal, timeoutMs, model, effort, fast, mcp = [] }) {
     const slug = await slugFor(model, fast);
+    const mcpNames = addAgyMcp(mcp);
+    try {
     let text = '';
     let final = '';
     let error = '';
@@ -160,5 +162,59 @@ export const gemini: Provider = {
     }
     authCache = { at: Date.now(), ok: true };
     return { text: out, usage };
+    } finally {
+      removeAgyMcp(mcpNames);
+    }
   },
 };
+
+// ---- MCP servers for one run ----
+// agy has no per-run MCP flag (--settings rejects mcpServers): it reads ~/.gemini/config/mcp_config.json.
+// ALTTER adds its servers (alter_hands, alter_media, …) there for the run and removes them afterwards;
+// the user's own entries are never touched. Leftovers from a crash are swept on the next run.
+type McpServer = { name: string; url?: string; headers?: Record<string, string>; command?: string; args?: string[]; env?: Record<string, string> };
+const agyMcpFile = () => join(process.env.ANTIGRAVITY_GEMINI_DIR || join(home, '.gemini'), 'config', 'mcp_config.json');
+const OURS = /^(alter|altter)_[a-z]+(_\d+)?$/;
+const live = new Set<string>();
+let swept = false;
+
+function editAgyMcp(fn: (servers: Record<string, unknown>) => void) {
+  const file = agyMcpFile();
+  let cfg: { mcpServers?: Record<string, unknown> } = {};
+  try { cfg = JSON.parse(readFileSync(file, 'utf8')); } catch { /* missing or unreadable: start fresh */ }
+  const servers = cfg.mcpServers && typeof cfg.mcpServers === 'object' ? cfg.mcpServers : {};
+  fn(servers);
+  cfg.mcpServers = servers;
+  mkdirSync(dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(cfg, null, 2));
+  renameSync(tmp, file);
+}
+
+function addAgyMcp(list: McpServer[]): string[] {
+  if (!list.length && swept) return [];
+  const names: string[] = [];
+  try {
+    editAgyMcp((servers) => {
+      if (!swept) { for (const k of Object.keys(servers)) if (OURS.test(k) && !live.has(k)) delete servers[k]; swept = true; }
+      for (const m of list) {
+        // two chats at once get alter_hands and alter_hands_2, each with its own session URL
+        let name = m.name;
+        for (let i = 2; live.has(name); i++) name = `${m.name}_${i}`;
+        const shim = isWin && /^(npx|uvx|npm|pnpm|bunx)$/i.test(m.command ?? '');
+        servers[name] = m.url
+          ? { serverUrl: m.url, ...(m.headers ? { headers: m.headers } : {}), disabled: false }
+          : { command: shim ? 'cmd' : m.command, args: shim ? ['/c', m.command!, ...(m.args ?? [])] : m.args ?? [], ...(m.env ? { env: m.env } : {}), disabled: false };
+        live.add(name);
+        names.push(name);
+      }
+    });
+  } catch { /* without the file Gemini simply runs without these tools */ }
+  return names;
+}
+
+function removeAgyMcp(names: string[]) {
+  if (!names.length) return;
+  for (const n of names) live.delete(n);
+  try { editAgyMcp((servers) => { for (const n of names) delete servers[n]; }); } catch { /* swept next run */ }
+}
