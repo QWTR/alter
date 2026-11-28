@@ -225,6 +225,7 @@ export function ChatView() {
   // one live answer per conversation ('new' until the server names it) — several can run at once
   const [lives, setLives] = useState<Record<string, Live>>({});
   const aborts = useRef<Record<string, AbortController>>({});
+  const pendingSends = useRef(new Set<string>());
   const [preview, setPreview] = useState<Preview | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -584,12 +585,18 @@ export function ChatView() {
     const ready = extra?.attachments ?? (via ? [] : files.filter((f) => f.att).map((f) => f.att!));
     if (!via && live && !live.done && text && !ready.length) return followUp(text);
     if ((!text && !ready.length) || (live && !live.done) || (!via && uploading)) return;
+    if (guest && !guest.guestsCanSend) return;
+    // React state updates are deferred: two Enter events can arrive before `live` changes.
+    const sendKey = key;
+    if (pendingSends.current.has(sendKey)) return;
+    pendingSends.current.add(sendKey);
+    const retryDraft = text;
+    let accepted = false;
     if (!via && editFrom != null && routeId) {
       const from = editFrom;
       setEditFrom(null);
       await api(`/api/conversations/${routeId}/messages/from/${from}`, { method: 'DELETE' }).catch(() => {});
     }
-    if (guest && !guest.guestsCanSend) return;
     if (!via) {
       text = withPicks(text, picks);
       setPicks([]);
@@ -614,6 +621,7 @@ export function ChatView() {
           : { conversationId: routeId, projectId, agentId, message: text, attachments: ready.map((a) => a.id), cid: clientId, name: myName, provider: useProvider === 'default' ? undefined : useProvider, access, plan: plan || undefined, model: pref.model || undefined, effort: pref.effort || undefined },
         {
           meta: (m) => {
+            accepted = true;
             // name the chat right away: "New chat" is free again and the list shows it while it works
             if (k === 'new') {
               const id = m.conversationId;
@@ -661,9 +669,11 @@ export function ChatView() {
         return;
       }
       if (err.name !== 'AbortError') toast(err.message, 'error');
+      if (!accepted && err.name !== 'AbortError') setInput(current => current || retryDraft);
       patchLive(k, (l) => ({ ...l, done: true, text: l.text || `⚠️ ${(err as Error).message}` }));
       invalidate('/api/conversations');
     } finally {
+      pendingSends.current.delete(sendKey);
       delete aborts.current[k];
     }
   }

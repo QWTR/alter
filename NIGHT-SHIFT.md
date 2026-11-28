@@ -59,3 +59,10 @@
 - Kod sceny: examples/night-shift/vroom-demo.tsx; odtworzenie: node scripts/night-shift-render.cjs (jeden worker).
 - Podgląd strony: odpowiedź testowa → otwarcie prawdziwego HTML → wskazanie #hero-title → ręczna zmiana pliku w teście → odświeżenie pokazuje nowy nagłówek. Dowody page-picked.png, page-edited.png, page-results.json. Nie jest to test edycji przez model.
 - Umiejętność użyta przy teście renderowania: Remotion (lokalny silnik).
+
+## Etap 7 — błąd dostawcy i podwójna wysyłka
+- Odtworzenie w przeglądarce: dwa synchroniczne Enter przed aktualizacją React dawały DWA POST-y. Odpowiedź 503 usuwała szkic (error-before-results.json).
+- Dodano natychmiastową blokadę per rozmowa i przywrócenie tekstu, gdy nie było zdarzenia meta potwierdzającego przyjęcie. Nowy szkic wpisany w międzyczasie nie jest nadpisywany.
+- Po poprawce: JEDEN POST, widoczny błąd dostawcy, brak wiecznego busy, oryginalny tekst w polu do ponowienia (error-after-results.json).
+- Błąd 503 i zdarzenia narzędzi są symulowane na granicy fetch/SSE. Nie wywołano rzeczywistego dostawcy AI.
+- Następne: końcowy typecheck/build, powtórka sąsiednich ścieżek i raport.
