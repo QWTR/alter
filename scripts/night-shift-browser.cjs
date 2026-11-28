@@ -18,6 +18,22 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));let ws;
  await send('Page.addScriptToEvaluateOnNewDocument',{source:`const realFetch=window.fetch.bind(window);window.fetch=(input,init)=>{if(input==='/api/chat'){return Promise.resolve(new Response(new ReadableStream({start(c){const emit=(event,data)=>c.enqueue(new TextEncoder().encode('event: '+event+'\\ndata: '+JSON.stringify(data)+'\\n\\n'));emit('activity',{text:'PowerShell: "C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -NoProfile -Command "git status --short"'});emit('activity',{text:'PowerShell: "C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -NoProfile -Command "npm run build"'});}}),{headers:{'content-type':'text/event-stream'}}));}return realFetch(input,init);};`});
  await send('Page.navigate',{url:'http://127.0.0.1:4317'});await pause(2500);
  fs.writeFileSync(out+'/'+phase+'-initial.txt',await evaluate('document.body.innerText'));
+ if(phase==='tour') {
+  const fixture=await evaluate(`(async()=>{const {token}=await(await fetch('/api/boot')).json();const headers={'Content-Type':'application/json',Authorization:'Bearer '+token};const call=async(path,body)=>{const r=await fetch(path,{headers,...(body?{method:'POST',body:JSON.stringify(body)}:{})});if(!r.ok)throw Error(path+' '+r.status);return r.json();};const projects=await call('/api/projects');let p=projects.find(p=>p.name.startsWith('Night shift workspace'));if(!p){p=await call('/api/projects',{name:'Night shift workspace — long project name for navigation and layout checks',description:'Isolated local test data'});for(let i=0;i<8;i++)await call('/api/ws/tasks?project='+p.id,{title:'Task '+i+' — a deliberately long title to check wrapping and controls',description:'Test fixture',status:'todo'});await call('/api/ws/docs?project='+p.id,{title:'Long document title for the local workspace regression',body:'# Test document\\n\\nA saved document visible in the workspace.'});await call('/api/ws/chats?project='+p.id,{title:'Local test conversation'});}let empty=projects.find(p=>p.name==='Night shift empty');if(!empty)empty=await call('/api/projects',{name:'Night shift empty'});return {project:p.id,empty:empty.id};})()`);
+  const results=[];
+  for(const width of [360,390,768,1440]) {
+   await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});
+   for(const [name,route] of [['home','/'],['projects','/projects'],['workspace-list','/workspace'],['empty','/workspace/'+fixture.empty],['workspace','/workspace/'+fixture.project],['studio','/studio']]) {
+    await evaluate(`location.hash=${JSON.stringify(route)}`);await pause(550);
+    const result=await evaluate(`({width:innerWidth,scroll:document.documentElement.scrollWidth,text:document.body.innerText.slice(0,180),buttons:document.querySelectorAll('button').length})`);assert.ok(result.buttons>0,name+' renders');
+    fs.writeFileSync(out+'/tour-'+name+'-'+width+'.png',Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));results.push({name,...result});
+   }
+  }
+  await evaluate(`location.hash='/workspace/${fixture.project}'`);await pause(500);
+  const tabs=await evaluate(`[...document.querySelectorAll('.ws-nav button')].map(x=>x.textContent)`);
+  for(let i=0;i<tabs.length;i++){await evaluate(`document.querySelectorAll('.ws-nav button')[${i}].click()`);await pause(450);fs.writeFileSync(out+'/workspace-tab-'+i+'.png',Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));}
+  fs.writeFileSync(out+'/tour-results.json',JSON.stringify({fixture,results,tabs,errors},null,2));console.log(JSON.stringify({screens:results.length,tabs,overflow:results.filter(r=>r.scroll>r.width+1).map(r=>({name:r.name,width:r.width,scroll:r.scroll})),errors}));assert.deepEqual(errors,[]);await send('Browser.close');return;
+ }
  if(phase==='skills') {
   const agentId=await evaluate(`(async()=>{const {token}=await(await fetch('/api/boot')).json();const headers={'Content-Type':'application/json',Authorization:'Bearer '+token};const all=await(await fetch('/api/agents',{headers})).json();const old=all.find(a=>a.name==='Night shift skill demo');if(old)return old.id;return (await(await fetch('/api/agents',{method:'POST',headers,body:JSON.stringify({name:'Night shift skill demo',instructions:'Use the assigned skill to test a local web app.',schedule:'manual',enabled:false,learns:false,access:'read'})})).json()).id;})()`);
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
@@ -37,7 +53,7 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));let ws;
   const preview=await evaluate(`({text:document.querySelector('.github-skill-preview').innerText,sha:document.querySelector('.github-skills .mono').innerText})`);assert.ok(preview.text.includes('Playwright'));
   for(const width of [360,390,768,1440]){await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});await pause(200);await evaluate(`document.querySelector('.github-skills').scrollIntoView()`);assert.ok(await evaluate(`document.documentElement.scrollWidth<=innerWidth+1`));fs.writeFileSync(out+'/skills-'+width+'.png',Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));}
   const installed=await evaluate(`(async()=>{const {token}=await(await fetch('/api/boot')).json();return (await(await fetch('/api/skills',{headers:{Authorization:'Bearer '+token}})).json()).find(s=>s.source?.path==='skills/webapp-testing/SKILL.md');})()`);
-  if(!installed){await click('Zainstaluj i zaznacz');await wait(`!document.querySelector('.github-skills').open`);}else{await evaluate(`[...document.querySelectorAll('button.badge')].find(b=>b.textContent.includes('webapp-testing'))?.click()`);}
+  if(!installed){await click('Zainstaluj i zaznacz');await wait(`!document.querySelector('.github-skills').open`);}else{await evaluate(`[...document.querySelectorAll('button.badge')].find(b=>b.textContent.includes('webapp-testing') && b.getAttribute('aria-pressed')!=='true')?.click()`);}
   await evaluate(`document.querySelector('.modal-foot button').click()`);await pause(800);
   const saved=await evaluate(`(async()=>{const {token}=await(await fetch('/api/boot')).json();return (await(await fetch('/api/agents',{headers:{Authorization:'Bearer '+token}})).json()).find(a=>a.id===${JSON.stringify(agentId)});})()`);assert.ok(saved.skills.some(s=>s.startsWith('github-anthropics-skills')));
   await send('Page.reload');await pause(1000);
@@ -57,7 +73,18 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));let ws;
  const reloaded=await evaluate(`document.querySelector('textarea')?.value`);
  fs.writeFileSync(out+'/'+phase+'-drafts.json',JSON.stringify({restored,reloaded}));
  if(phase==='after'){assert.equal(restored,'Draft stays with this chat');assert.equal(reloaded,'Draft stays with this chat');}
- const filled=await evaluate(`(()=>{const t=document.querySelector('textarea');if(!t)return false;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'SprawdÅº projekt');t.dispatchEvent(new Event('input',{bubbles:true}));return true;})()`);assert.ok(filled,'chat textarea');await pause(300);
+ if(phase==='after') {
+  await send('Network.enable');await send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:-1,uploadThroughput:-1});await pause(500);
+  assert.equal(await evaluate(`navigator.onLine`),false);
+  assert.ok(await evaluate(`document.querySelector('.network-status')?.textContent.includes('Brak połączenia')`));
+  await enter('Offline draft survives');
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:1000,deviceScaleFactor:1,mobile:false});
+  fs.writeFileSync(out+'/offline-390.png',Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+  await send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});await pause(600);
+  assert.ok(await evaluate(`!document.querySelector('.network-status')`));assert.equal(await evaluate(`document.querySelector('textarea').value`),'Offline draft survives');
+  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+ }
+ const filled=await evaluate(`(()=>{const t=document.querySelector('textarea');if(!t)return false;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'Sprawdź projekt');t.dispatchEvent(new Event('input',{bubbles:true}));return true;})()`);assert.ok(filled,'chat textarea');await pause(300);
  await evaluate(`document.querySelector('textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}))`);await pause(1500);
  const results=[];
  for(const width of [360,390,768,1440]){

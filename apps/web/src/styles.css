@@ -559,6 +559,8 @@ button.chip-select { cursor: pointer; }
 .github-repository { display: flex; flex-direction: column; align-items: flex-start; white-space: normal; text-align: left; height: auto; overflow-wrap: anywhere; }
 .github-skill-preview { max-height: 300px; overflow: auto; padding: 10px; border: 1px solid var(--border); border-radius: 8px; }
 .github-skill-error { color: var(--danger); overflow-wrap: anywhere; }
+.network-status { display: flex; align-items: center; gap: 8px; flex: none; padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px; line-height: 1.45; }
+.network-status svg { flex: none; }
 .preview-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--border); background: var(--bg-2, var(--bg)); }
 .preview-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
 .preview-frame { position: relative; flex: 1; min-height: 0; padding: 12px; }

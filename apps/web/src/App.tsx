@@ -7,6 +7,7 @@ import { ConnectionChip, setProviderProgress } from './components/providers';
 import { AgentsPanel, ChatsPanel } from './components/SidePanels';
 import { Logo, Orb, PALETTES, toast, Toasts, spring } from './components/ui';
 import { TitleBar } from './components/TitleBar';
+import { NetworkStatus } from './components/NetworkStatus';
 import { pushAgentStatus } from './components/agentStatus';
 import { setLang, t as tr, useT } from './i18n';
 import { navigate, useRoute } from './router';
@@ -136,10 +137,11 @@ function Shell() {
       else if (hiddenAt && Date.now() - hiddenAt > 3000) invalidate('/api/');
     };
     document.addEventListener('visibilitychange', on);
-    window.addEventListener('online', on);
+    const reconnect = () => invalidate('/api/');
+    window.addEventListener('online', reconnect);
     return () => {
       document.removeEventListener('visibilitychange', on);
-      window.removeEventListener('online', on);
+      window.removeEventListener('online', reconnect);
     };
   }, []);
 
@@ -312,6 +314,7 @@ function Shell() {
         </aside>
 
         <main className="main">
+            <NetworkStatus />
             <UpdateBanner />
             <ReportHost />
             <ReportQuestions />

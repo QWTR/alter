@@ -34,3 +34,11 @@
 - Testy repo: 10/10, w tym stare skille, walidacja ścieżek, pin SHA i brak wykonania skryptu.
 - Zabezpieczenia: tylko publiczny github.com HTTPS, brak kluczy GitHub, timeouty i limity rozmiaru, pomijane symlinki, bez git clone/hooków/npm. Podgląd instrukcji renderuje wyłącznie bezpieczny Markdown, bez aktywnych bloków zadań.
 - Następne: restart wyłącznie instancji testowej, offline, przegląd workspace i Studio.
+
+## Etap 4 — sieć i przegląd ekranów
+- Commit skilli: 7247357.
+- Poprawiono odświeżanie po online: wcześniej zależało od wcześniejszego ukrycia karty na ponad 3 s. Teraz powrót sieci zawsze odświeża cache API.
+- Dodano komunikat offline w sześciu językach. CDP faktycznie odłączył sieć, wpisany tekst przetrwał; komunikat zniknął po połączeniu. Dowód: offline-390.png.
+- Tour 24 widoków przy 360/390/768/1440: start, projekty, lista workspace, pusty i wypełniony projekt, Studio. Bez overflow i wyjątków JS. Osiem zakładek workspace otwarto również na desktopie (workspace-tab-*.png). Fixture: 8 zadań, dokument, rozmowa, długa nazwa.
+- Studio zainstalowane wyłącznie w katalogu danych testowych; trwa lokalny eksport 6 s, 1080x1920, bez płatnych usług. Render ma jeden worker, syntetyczny podkład WAV; nie jest to test polskiego lektora.
+- Następne: odczyt skilli po restarcie instancji testowej, weryfikacja MP4, podgląd HTML i końcowe checki.
