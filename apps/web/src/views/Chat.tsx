@@ -27,6 +27,7 @@ import { useT, type Key } from '../i18n';
 import { navigate, useRoute } from '../router';
 import { setRunningChats } from '../liveChats';
 import { commandSummary } from '../commandSummary';
+import { useChatDraft } from '../useChatDraft';
 
 let pending: string | null = null;
 let pendingExtra: SendExtra | undefined;
@@ -218,7 +219,7 @@ export function ChatView() {
   const access = accessState;
   const [provider, setProvider] = useState('default');
   const [limitHit, setLimitHit] = useState<LimitHit | null>(null);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useChatDraft(routeId ?? `new:${projectFromQuery ?? ''}:${agentId ?? ''}`);
   /** Editing an earlier message: sending replaces it and everything after it. */
   const [editFrom, setEditFrom] = useState<number | null>(null);
   // one live answer per conversation ('new' until the server names it) — several can run at once

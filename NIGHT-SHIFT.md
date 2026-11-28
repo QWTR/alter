@@ -18,3 +18,9 @@
 - Przeglądarka Edge: przed/po 360, 390, 768, 1440 px; komendy rozróżnialne, brak poziomego overflow, pełna komenda rozwijana, brak wyjątków JS.
 - Dowody: G:\ALTTER-Repair\altter-plan-artifacts\before-*.png i after-*.png oraz *-results.json. Zdarzenia SSE symulowane, bez AI.
 - Następne: szkice per rozmowa i instalacja skilli z GitHuba.
+
+## Etap 2 — szkice
+- Commit etapu 1: 94cabc5.
+- Przed poprawką test w przeglądarce potwierdził pusty tekst po opuszczeniu czatu i po reloadzie (draft-before-drafts.json).
+- Po poprawce oba scenariusze zachowują tekst (after-drafts.json); zapis w sessionStorage per rozmowa/projekt, bez wysyłania treści na serwer.
+- Regresja draftStore 2/2, typecheck i build OK. Następne: skille GitHub.

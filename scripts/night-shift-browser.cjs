@@ -23,6 +23,15 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));let ws;
  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
  await send('Page.navigate',{url:'http://127.0.0.1:4317/#/chat/new'});await send('Page.reload');await pause(2000);
  fs.writeFileSync(out+'/'+phase+'-chat.txt',await evaluate('document.body.innerText'));
+ const enter=async text=>{await evaluate(`(()=>{const t=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,${JSON.stringify(text)});t.dispatchEvent(new Event('input',{bubbles:true}));})()`);await pause(150);};
+ await enter('Draft stays with this chat');
+ await evaluate(`location.hash='/settings'`);await pause(500);
+ await evaluate(`location.hash='/chat/new'`);await pause(700);
+ const restored=await evaluate(`document.querySelector('textarea')?.value`);
+ await send('Page.reload');await pause(1500);
+ const reloaded=await evaluate(`document.querySelector('textarea')?.value`);
+ fs.writeFileSync(out+'/'+phase+'-drafts.json',JSON.stringify({restored,reloaded}));
+ if(phase==='after'){assert.equal(restored,'Draft stays with this chat');assert.equal(reloaded,'Draft stays with this chat');}
  const filled=await evaluate(`(()=>{const t=document.querySelector('textarea');if(!t)return false;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'SprawdÅº projekt');t.dispatchEvent(new Event('input',{bubbles:true}));return true;})()`);assert.ok(filled,'chat textarea');await pause(300);
  await evaluate(`document.querySelector('textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}))`);await pause(1500);
  const results=[];
