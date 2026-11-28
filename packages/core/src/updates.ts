@@ -183,18 +183,19 @@ function writable(dir: string): boolean {
 export async function installUpdate(): Promise<void> {
   if (!inDesktopApp()) throw new Error('Download the new version from ' + PAGE);
   if (info.installing) return;
-  if (!info.available) await checkUpdate();
+  // always fresh: a retry picks up release files that were replaced since the last check
+  await checkUpdate();
   if (!info.available) throw new Error('ALTTER is up to date');
   const appDir = dirname(process.execPath);
-  const quick = assets.quick;
-  const mode: UpdateProgress['mode'] = quick ? 'quick' : 'full';
+  let quick = assets.quick;
+  let mode: UpdateProgress['mode'] = quick ? 'quick' : 'full';
   const admin = !writable(appDir);
   info = { ...info, installing: true, progress: undefined };
   try {
     const work = join(tmpdir(), `altter-update-${info.latest}`);
     rmSync(work, { recursive: true, force: true });
     mkdirSync(work, { recursive: true });
-    let src: string;
+    let src = "";
     if (quick) {
       const zip = join(work, APP_ZIP);
       await download(quick.url, zip, quick.size, mode);
@@ -206,9 +207,16 @@ export async function installUpdate(): Promise<void> {
       mkdirSync(src, { recursive: true });
       const tar = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
       const r = spawnSync(tar, ['-xf', zip, '-C', src], { windowsHide: true, encoding: 'utf8' });
-      if (r.status !== 0 || !existsSync(join(src, 'app.asar'))) throw new Error('Could not unpack the update' + (r.stderr ? `: ${r.stderr.trim().slice(0, 200)}` : ''));
-      progress({ stage: 'unpack', mode, done: 1, total: 1 });
-    } else {
+      if (r.status === 0 && existsSync(join(src, 'app.asar'))) progress({ stage: 'unpack', mode, done: 1, total: 1 });
+      else {
+        // a broken quick package must never leave anyone stuck: take the full installer instead
+        console.warn('[update] quick package unusable, using the installer' + (r.stderr ? `: ${r.stderr.trim().slice(0, 200)}` : ''));
+        rmSync(src, { recursive: true, force: true });
+        quick = undefined;
+        mode = 'full';
+      }
+    }
+    if (!quick) {
       src = join(work, `ALTTER-Setup-${info.latest}.exe`);
       await download(assets.setup?.url ?? SETUP, src, assets.setup?.size ?? 0, mode);
       if (statSync(src).size < 5_000_000) throw new Error('The download is incomplete — try again');
