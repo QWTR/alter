@@ -9,12 +9,13 @@ import { ProviderCard, useProviders } from '../components/providers';
 import { InternetCard, ServerCard } from '../components/Internet';
 import { NotificationsCard } from '../components/Notifications';
 import { PluginsTab } from '../components/Plugins';
+import { SkillsTab } from '../components/SkillsTab';
 import { MyReports } from '../components/Report';
 import { Field, Logo, PageHead, Segmented, Switch, Tabs, spring, stagger, toast } from '../components/ui';
-import { ago, formatTime, LANGS, setLang, useT } from '../i18n';
+import { ago, formatTime, getLang, LANGS, setLang, useT } from '../i18n';
 import { navigate, useRoute } from '../router';
 
-type Tab = 'general' | 'ai' | 'plugins' | 'devices' | 'internet' | 'data' | 'about';
+type Tab = 'general' | 'ai' | 'plugins' | 'skills' | 'devices' | 'internet' | 'data' | 'about';
 
 
 export function SettingsView() {
@@ -27,6 +28,7 @@ export function SettingsView() {
     { value: 'general', label: t('settings.general'), icon: Laptop },
     { value: 'ai', label: t('settings.ai'), icon: Cpu },
     ...(isComputer ? [{ value: 'plugins' as Tab, label: t('plugins.tab'), icon: Puzzle }] : []),
+    ...(isComputer ? [{ value: 'skills' as Tab, label: getLang() === 'pl' ? 'Skille' : 'Skills', icon: Puzzle }] : []),
     { value: 'devices', label: t('settings.devices'), icon: Smartphone },
     ...(isComputer ? [{ value: 'internet' as Tab, label: t('net.tab'), icon: Globe }] : []),
     { value: 'data', label: t('settings.data'), icon: Database },
@@ -36,12 +38,13 @@ export function SettingsView() {
   return (
     <div className="page" style={{ maxWidth: 820 }}>
       <PageHead title={t('settings.title')} />
-      <Tabs value={tab} onChange={(v) => navigate(`/settings?tab=${v}`, true)} tabs={tabs} />
+      <Tabs key={status?.you.kind ?? 'loading'} value={tab} onChange={(v) => navigate(`/settings?tab=${v}`, true)} tabs={tabs} />
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.08 } }} transition={{ duration: 0.2 }}>
           {status && tab === 'general' && <General status={status} />}
           {tab === 'ai' && <AiTab />}
           {isComputer && tab === 'plugins' && <PluginsTab />}
+          {isComputer && tab === 'skills' && <SkillsTab />}
           {status && tab === 'devices' && <Devices isComputer={isComputer} status={status} />}
           {isComputer && tab === 'internet' && <div style={{ display: 'grid', gap: 16 }}><InternetCard /><ServerCard /></div>}
           {status && tab === 'data' && <DataTab status={status} />}

@@ -31,8 +31,23 @@ async function get(url: string, max = 2_000_000): Promise<Uint8Array> {
 }
 const json = async (url: string) => JSON.parse(Buffer.from(await get(url, 8_000_000)).toString('utf8'));
 const rawUrl = (s: GitHubSource, sha: string, path: string) => `https://raw.githubusercontent.com/${s.owner}/${s.repo}/${sha}/${path.split('/').map(encodeURIComponent).join('/')}`;
+type Tree = { sha: string; entries: Entry[] };
+const trees = new Map<string, { expires: number; value: Promise<Tree> }>();
 async function tree(s: GitHubSource, pin?: string): Promise<{ sha: string; entries: Entry[] }> {
   if (pin && !/^[a-f0-9]{40}$/.test(pin)) throw Error('Invalid commit SHA.');
+  const key = `${s.owner.toLowerCase()}/${s.repo.toLowerCase()}@${pin ?? s.ref ?? 'default'}`;
+  const cached = trees.get(key);
+  if (cached && cached.expires > Date.now()) return cached.value;
+  const value = loadTree(s, pin);
+  trees.set(key, { expires: Date.now() + 5 * 60_000, value });
+  try {
+    const result = await value;
+    trees.set(`${s.owner.toLowerCase()}/${s.repo.toLowerCase()}@${result.sha}`, { expires: Date.now() + 60 * 60_000, value });
+    while (trees.size > 64) trees.delete(trees.keys().next().value!);
+    return result;
+  } catch (e) { trees.delete(key);throw e; }
+}
+async function loadTree(s: GitHubSource, pin?: string): Promise<Tree> {
   const base = `https://api.github.com/repos/${s.owner}/${s.repo}`;
   const ref = pin ?? s.ref ?? (await json(base)).default_branch;
   const commit = await json(`${base}/commits/${encodeURIComponent(ref)}`);

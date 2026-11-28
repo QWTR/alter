@@ -45,6 +45,7 @@ test('select, preview, install pinned files, preserve legacy skills and reload p
     const skills=listSkills();assert.ok(skills.some(s=>s.id==='legacy'));assert.equal(skills.find(s=>s.id===installed.id)?.source?.sha,sha);
     assert.ok(skillsText([installed.id]).includes('Always start a report with findings'));
     assert.ok(seen.filter(s=>s.includes('raw.githubusercontent.com')).every(s=>s.includes('/'+sha+'/')));
+    assert.equal(seen.filter(s=>s.includes('/git/trees/')).length, 1, 'selection and install reuse the pinned tree instead of exhausting the public GitHub quota');
     await assert.rejects(installGitHubSkill(source,'packs/report/SKILL.md',sha),/already installed/);
     await assert.rejects(previewGitHubSkills(source,'../bad',sha),/Select/);
   } finally { globalThis.fetch=realFetch; }

@@ -18,6 +18,42 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));let ws;
  await send('Page.addScriptToEvaluateOnNewDocument',{source:`const realFetch=window.fetch.bind(window);window.fetch=(input,init)=>{if(input==='/api/chat'){return Promise.resolve(new Response(new ReadableStream({start(c){const emit=(event,data)=>c.enqueue(new TextEncoder().encode('event: '+event+'\\ndata: '+JSON.stringify(data)+'\\n\\n'));emit('activity',{text:'PowerShell: "C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -NoProfile -Command "git status --short"'});emit('activity',{text:'PowerShell: "C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -NoProfile -Command "npm run build"'});}}),{headers:{'content-type':'text/event-stream'}}));}return realFetch(input,init);};`});
  await send('Page.navigate',{url:'http://127.0.0.1:4317'});await pause(2500);
  fs.writeFileSync(out+'/'+phase+'-initial.txt',await evaluate('document.body.innerText'));
+ if(phase==='catalog') {
+  const wait=async expression=>{for(let i=0;i<100;i++){if(await evaluate('Boolean('+expression+')'))return;await pause(300);}throw Error('Catalog timeout: '+expression+' '+await evaluate(`document.querySelector('.github-skills')?.innerText`));};
+  const click=async label=>{assert.ok(await evaluate(`(()=>{const b=[...document.querySelectorAll('.github-skills button')].find(x=>x.textContent===${JSON.stringify(label)});if(!b||b.disabled)return false;b.click();return true;})()`));};
+  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+  await evaluate(`location.hash='/settings'`);await pause(700);
+  await evaluate(`[...document.querySelectorAll('.tabs button')].find(b=>b.textContent==='Skille').click()`);await pause(600);
+  assert.ok(await evaluate(`location.hash.includes('tab=skills')`));
+  assert.equal(await evaluate(`document.querySelectorAll('.skill-repo-card').length`),3);
+  assert.ok(await evaluate(`[...document.querySelectorAll('.skill-repo-card')].every(c=>c.querySelector('h3').textContent&&c.querySelector('p').textContent.length>30)`));
+  for(const width of [360,390,768,1440]){
+    await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});await send('Page.reload');await pause(900);
+    assert.ok(await evaluate(`document.documentElement.scrollWidth<=innerWidth+1`));
+    fs.writeFileSync(out+'/catalog-'+width+'.png',Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+  }
+  await evaluate(`(()=>{const original=window.fetch;window.__catalogInstalls=0;window.fetch=(url,init)=>{if(url==='/api/skills/github/install')window.__catalogInstalls++;return original(url,init);};})()`);
+  await evaluate(`document.querySelector('.skill-repo-card button').click()`);await wait(`document.querySelector('.github-skills select')`);
+  assert.equal(await evaluate(`window.__catalogInstalls`),0);
+  await evaluate(`(()=>{const s=document.querySelector('.github-skills select');s.value='skills/frontend-design/SKILL.md';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);await wait(`document.querySelector('.github-skill-preview')`);
+  const beforeInstalled=await evaluate(`!![...document.querySelectorAll('.github-skills button')].find(b=>b.textContent==='Zainstalowano')`);
+  if(!beforeInstalled){await click('Zainstaluj w ALTTER');await wait(`document.querySelector('.github-skills button.primary')?.textContent==='Zainstalowano'`);assert.equal(await evaluate(`window.__catalogInstalls`),1);}
+  await wait(`[...document.querySelectorAll('.skill-library h3')].some(h=>h.textContent==='frontend-design')`);
+  assert.equal(await evaluate(`document.querySelector('.github-skills button.primary').disabled`),true);
+  fs.writeFileSync(out+'/catalog-installed.png',Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+  await send('Page.reload');await pause(1200);assert.ok(await evaluate(`[...document.querySelectorAll('.skill-library h3')].some(h=>h.textContent==='frontend-design')`));
+  // An alternative URL to the installed package must not offer a second installation.
+  await evaluate(`(()=>{const t=document.querySelectorAll('.github-skills input')[1];Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(t,'https://github.com/anthropics/skills/tree/main/skills/frontend-design');t.dispatchEvent(new Event('input',{bubbles:true}));})()`);await pause(150);await click('Podgląd');await wait(`document.querySelector('.github-skill-preview')`);assert.equal(await evaluate(`document.querySelector('.github-skills button.primary').disabled`),true);
+  const installed=await evaluate(`(async()=>{const {token}=await(await fetch('/api/boot')).json();return (await(await fetch('/api/skills',{headers:{Authorization:'Bearer '+token}})).json()).find(s=>s.source?.path==='skills/frontend-design/SKILL.md');})()`);assert.ok(installed?.source.sha);
+  // Real GitHub search, submitted with Enter.
+  await evaluate(`(()=>{const t=document.querySelectorAll('.github-skills input')[0];Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(t,'vercel');t.dispatchEvent(new Event('input',{bubbles:true}));})()`);await pause(150);await evaluate(`document.querySelectorAll('.github-skills input')[0].dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`);await wait(`document.querySelectorAll('.github-repository').length>0`);
+  const searchResults=await evaluate(`document.querySelectorAll('.github-repository').length`);
+  await evaluate(`(()=>{window.__catalogFetch=window.fetch;window.fetch=(url,init)=>String(url).startsWith('/api/skills/github/search')?Promise.resolve(Response.json({error:'Test: GitHub unavailable'},{status:503})):window.__catalogFetch(url,init);})()`);await click('Szukaj repozytoriów');await wait(`document.querySelector('.github-skill-error')?.textContent.includes('Test: GitHub unavailable')`);assert.ok(await evaluate(`!document.querySelector('.github-skills input').disabled`));await evaluate(`window.fetch=window.__catalogFetch`);
+  // The global installation appears in the existing agent editor without another download.
+  await evaluate(`location.hash='/agents'`);await pause(700);await evaluate(`[...document.querySelectorAll('.card')].find(c=>c.textContent.includes('Night shift skill demo')).click()`);await pause(400);await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Edytuj').click()`);await pause(400);
+  assert.ok(await evaluate(`[...document.querySelectorAll('button.badge')].some(b=>b.textContent.trim()==='frontend-design')`));
+  fs.writeFileSync(out+'/catalog-results.json',JSON.stringify({cards:3,widths:[360,390,768,1440],installed:{id:installed.id,source:installed.source},firstInstall:!beforeInstalled,searchResults,persisted:true,agentVisible:true,errors},null,2));assert.deepEqual(errors,[]);console.log(JSON.stringify({cards:3,firstInstall:!beforeInstalled,searchResults,persisted:true,agentVisible:true,errors}));await send('Browser.close');return;
+ }
  if(phase.startsWith('error-')) {
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
   await evaluate(`location.hash='/chat/new'`);await pause(700);

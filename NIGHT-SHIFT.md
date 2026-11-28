@@ -120,3 +120,15 @@ Skrypt sprawdza port 4317, ustawia wyłącznie dla swojego procesu `ALTER_HOME` 
 Końcowy odczyt produkcji (bez zmian): relay HTTPS 200 / ok=true, Repair HTTPS 200 / ok=true, VROOM /api/posts?limit=1 HTTP 200.
 
 Kontrola skryptu startowego wykryła niezgodność UTF-8 bez BOM z Windows PowerShell 5.1 (polskie znaki w komunikacie). Komunikat zmieniono na ASCII; ponowne uruchomienie skryptu kończy się kodem 0 i rozpoznaje działający port bez tworzenia drugiego procesu.
+
+## Rozszerzenie — katalog skilli w ustawieniach (2026-11-28)
+- Nowa zakładka: Ustawienia → Skille, adres #/settings?tab=skills. Wyszukiwarka znajduje się nad polecanymi repozytoriami, również na małym ekranie.
+- Polecane źródła z nazwami i opisami PL/EN: https://github.com/anthropics/skills , https://github.com/openai/skills , https://github.com/vercel-labs/agent-skills . To wybór redakcyjny, nie deklaracja bieżącego rankingu gwiazdek.
+- Rzeczywisty podgląd potwierdził paczki: Anthropic 20, OpenAI 44, Vercel 9. Bez instalowania całych repozytoriów: wybór SKILL.md, podgląd instrukcji i plików, instalacja wskazanej paczki w bibliotece ALTTER-a.
+- Zainstalowano frontend-design bezpośrednio przez nowy ekran (firstInstall=true w catalog-first-install-results.json). Źródło zapisane z SHA e4bb5d960d87126ff3b3a8af1a104b7db67560ba; po reloadzie nadal w bibliotece i przy edycji agenta.
+- Istniejące paczki są oznaczone jako zainstalowane, również przy podaniu alternatywnego linku tree/blob. W edytorze agenta można wybrać już zainstalowaną paczkę bez kolejnego pobierania. Instalacja z ustawień nie zmienia automatycznie instrukcji wszystkich agentów.
+- Bufor drzew GitHub: gałąź 5 min, SHA 1 h, maksymalnie 64 wpisy; preview i install korzystają z tego samego zatwierdzonego drzewa. Test chroni przed ponownym pobieraniem drzewa dla wyboru paczki i instalacji.
+- Testy przeglądarkowe: rzeczywiste wyszukiwanie (8 wyników), instalacja, odświeżenie, wykrycie duplikatu, widoczność w edytorze agenta, symulowany błąd GitHub z komunikatem i odblokowaniem formularza. Brak wyjątków JS. Sąsiedni przepływ workspace-skills nadal OK.
+- Szerokości 360/390/768/1440 bez overflow; catalog-*.png i catalog-results.json w katalogu artefaktów. Tabs w ustawieniach przewijają wybraną zakładkę po ustaleniu uprawnień lokalnego użytkownika.
+- Weryfikacja: npm test 11/11, npm run typecheck OK, npm run build:web OK (dotychczasowe ostrzeżenie o dużym bundlu), git diff --check OK.
+- Zrestartowano wyłącznie serwer testowy 4317 (PID 18040) w celu załadowania cache backendu. Caddy 3232, relay 7340, Repair 17268 bez restartu. Produkcji nie wdrażano; brak push i płatnych operacji.
