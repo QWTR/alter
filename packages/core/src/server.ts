@@ -553,6 +553,11 @@ route('PUT', '/api/ws/agents/:id', ({ auth, url, params, body }) => {
   if (typeof body?.name === 'string' && body.name.trim()) patch.name = body.name.trim().slice(0, 60);
   if (typeof body?.description === 'string') patch.description = body.description.slice(0, 200);
   if (typeof body?.instructions === 'string' && body.instructions.trim()) patch.instructions = body.instructions.trim().slice(0, 8000);
+  if (auth === 'owner' && Array.isArray(body?.skills)) {
+    const available = new Set(listSkills().map(s => s.id));
+    if (body.skills.length > 100 || body.skills.some((id: unknown) => typeof id !== 'string' || !available.has(id))) throw new HttpError(400, 'Unknown skill. Refresh the skills list.');
+    patch.skills = [...new Set(body.skills)];
+  }
   const out = updateAgent(a.id, patch);
   emit('workspace.changed', { projectId: p.id });
   wsLog(p.id, wsActor(auth), 'agent.edit', out?.name ?? a.name, a.id);

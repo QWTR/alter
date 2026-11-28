@@ -42,3 +42,11 @@
 - Tour 24 widoków przy 360/390/768/1440: start, projekty, lista workspace, pusty i wypełniony projekt, Studio. Bez overflow i wyjątków JS. Osiem zakładek workspace otwarto również na desktopie (workspace-tab-*.png). Fixture: 8 zadań, dokument, rozmowa, długa nazwa.
 - Studio zainstalowane wyłącznie w katalogu danych testowych; trwa lokalny eksport 6 s, 1080x1920, bez płatnych usług. Render ma jeden worker, syntetyczny podkład WAV; nie jest to test polskiego lektora.
 - Następne: odczyt skilli po restarcie instancji testowej, weryfikacja MP4, podgląd HTML i końcowe checki.
+
+## Etap 5 — agent wewnątrz workspace
+- Commit sieci: b5872cd.
+- Skille można wybrać i zainstalować również w Workspace → Agenci → agent → Stałe instrukcje → Edytuj. Właściciel zapisuje przypisania przez endpoint workspace; uprawnienia członków nie zostały rozszerzone.
+- Walidowane są identyfikatory skilli. Dodano szkic zadania agenta zachowywany po zamknięciu panelu.
+- Test przeglądarkowy przy 390 px: odznaczenie/zapis, zaznaczenie/zapis, ponowny odczyt z API, zamknięcie i ponowne otwarcie panelu ze szkicem. OK. Dowody workspace-skills-390.png, workspace-skills-results.json.
+- Po rzeczywistym restarcie samej instancji testowej API nadal zwraca źródło i SHA e4bb5d960d87126ff3b3a8af1a104b7db67560ba oraz przypisanie skilla.
+- Następne: zatwierdzenie poprawek galerii i wysyłki po błędzie.

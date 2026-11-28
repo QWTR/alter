@@ -4,13 +4,15 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowUp, ChevronDown, Crown, FileText, Loader2, MessageCircle, Paperclip, Pencil, Square, Trash2, User, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { api, guest, invalidate, uploadFile, useData, type Agent, type Attachment, type Avatar, type Run } from '../api';
+import { api, guest, invalidate, uploadFile, useData, type Agent, type Attachment, type Avatar, type Run, type Skill } from '../api';
 import { formatTime, useT, type Key } from '../i18n';
 import { navigate } from '../router';
 import { useAgentStatuses, statusLine } from './agentStatus';
 import { Markdown } from './Markdown';
 import { MediaResults } from './Media';
 import { Drawer, Orb, toast } from './ui';
+import { GitHubSkills } from './GitHubSkills';
+import { useChatDraft } from '../useChatDraft';
 
 /** ws: '?project=…' (or '' for a member's own workspace) → workspace endpoints; undefined → the owner's own. */
 export interface AgentChatOpen { id: string; ws?: string; name?: string; avatar?: Avatar }
@@ -67,10 +69,11 @@ export function AgentChat({ id, ws, name, avatar, onClose, embedded }: AgentChat
   const runsUrl = wsMode ? `/api/ws/agents/${id}/runs${q}` : `/api/runs?agentId=${id}`;
   const base = wsMode ? `/api/ws/agents/${id}` : `/api/agents/${id}`;
   const { data: agents } = useData<Agent[]>(listUrl, 4000);
+  const { data: skills } = useData<Skill[]>(!guest ? '/api/skills' : null);
   const { data: runs } = useData<Run[]>(runsUrl, 2000);
   const live = useAgentStatuses();
   const a = agents?.find((x) => x.id === id);
-  const [text, setText] = useState('');
+  const [text, setText] = useChatDraft(`agent-task:${id}`);
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState<Attachment[]>([]);
   const [adding, setAdding] = useState(0);
@@ -78,6 +81,8 @@ export function AgentChat({ id, ws, name, avatar, onClose, embedded }: AgentChat
   const pick = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(false);
   const [instr, setInstr] = useState('');
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const list = [...(runs ?? [])].reverse();
   const working = !!a?.running || list.some((r) => r.status === 'running');
@@ -118,12 +123,14 @@ export function AgentChat({ id, ws, name, avatar, onClose, embedded }: AgentChat
     } catch (e) { toast((e as Error).message, 'error'); }
   };
   const saveInstr = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
-      await api(`${base}${wsMode ? q : ''}`, { method: 'PUT', body: { instructions: instr } });
+      await api(`${base}${wsMode ? q : ''}`, { method: 'PUT', body: { instructions: instr, ...(!guest ? { skills: selectedSkills } : {}) } });
       setEditing(false);
       invalidate(listUrl, '/api/agents');
       toast(t('common.saved'), 'ok');
-    } catch (e) { toast((e as Error).message, 'error'); }
+    } catch (e) { toast((e as Error).message, 'error'); } finally { setSaving(false); }
   };
 
   return (
@@ -144,15 +151,23 @@ export function AgentChat({ id, ws, name, avatar, onClose, embedded }: AgentChat
           {editing ? (
             <div style={{ display: 'grid', gap: 8 }}>
               <textarea className="textarea" rows={6} value={instr} onChange={(e) => setInstr(e.target.value)} />
+              {!guest && <>
+                <b className="small">{t('agents.skills')}</b>
+                <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+                  {(skills ?? []).map(skill => <button key={skill.id} type="button" className={`badge${selectedSkills.includes(skill.id) ? ' accent' : ''}`} aria-pressed={selectedSkills.includes(skill.id)} title={skill.description + (skill.source ? `\nSHA: ${skill.source.sha}` : '')} onClick={() => setSelectedSkills(ids => ids.includes(skill.id) ? ids.filter(id => id !== skill.id) : [...ids, skill.id])}>{skill.name}</button>)}
+                </div>
+                <GitHubSkills onInstalled={id => setSelectedSkills(ids => [...new Set([...ids, id])])} />
+              </>}
               <div className="row" style={{ justifyContent: 'flex-end' }}>
                 <button className="btn sm" onClick={() => setEditing(false)}>{t('common.cancel')}</button>
-                <button className="btn primary sm" onClick={saveInstr} disabled={!instr.trim()}>{t('common.save')}</button>
+                <button className="btn primary sm" onClick={saveInstr} disabled={saving || !instr.trim()}>{t('common.save')}</button>
               </div>
             </div>
           ) : (
             <div className="ac-instr-body">
               <Long text={a.instructions} limit={500} />
-              <button className="btn ghost sm" onClick={() => { setInstr(a.instructions); setEditing(true); }}><Pencil size={13} />{t('common.edit')}</button>
+              {!!a.skills.length && <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>{a.skills.map(id => <span className="badge" key={id}>{skills?.find(s => s.id === id)?.name ?? id}</span>)}</div>}
+              <button className="btn ghost sm" onClick={() => { setInstr(a.instructions); setSelectedSkills(a.skills); setEditing(true); }}><Pencil size={13} />{t('common.edit')}</button>
             </div>
           )}
         </details>
