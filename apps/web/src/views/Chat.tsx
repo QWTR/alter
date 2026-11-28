@@ -26,6 +26,7 @@ import { Logo, PALETTES, Segmented, ease, softSpring, spring, toast } from '../c
 import { useT, type Key } from '../i18n';
 import { navigate, useRoute } from '../router';
 import { setRunningChats } from '../liveChats';
+import { commandSummary } from '../commandSummary';
 
 let pending: string | null = null;
 let pendingExtra: SendExtra | undefined;
@@ -89,7 +90,7 @@ function useStepLabel() {
         if (v) return t('chat.step.rendering', { file: v[1].split(/[\\/]/).pop()!.replace(/["']/g, '') });
         if (/ff\.mjs"?\s+probe/.test(arg)) return t('chat.step.probing');
         if (/ff\.mjs/.test(arg)) return t('chat.step.editingVideo');
-        return t('chat.step.running', { cmd: arg.slice(0, 60) });
+        return t('chat.step.running', { cmd: commandSummary(arg) });
       }
       case 'Glob': case 'Grep': return t('chat.step.searching');
       case 'WebSearch': return t('chat.step.web', { q: arg.slice(0, 60) });
@@ -860,16 +861,17 @@ export function ChatView() {
                             {writingFile ? t('preview.writing', { file: writingFile }) : live.text && !lastStep ? t('chat.step.writingAnswer') : stepLabel(lastStep)}
                           </motion.span>
                         </AnimatePresence>
-                        <span className="faint">· {elapsed < 60 ? `${elapsed} s` : `${Math.floor(elapsed / 60)} min ${elapsed % 60} s`}</span>
+                        <span className="faint live-elapsed">· {elapsed < 60 ? `${elapsed} s` : `${Math.floor(elapsed / 60)} min ${elapsed % 60} s`}</span>
                       </div>
                     )}
                     {!!toolSteps.length && (
                       <div className="steps">
                         <AnimatePresence initial={false}>
                           {toolSteps.slice(-6).map((s, i) => (
-                            <motion.span key={`${toolSteps.length - 6 + i}-${s}`} className="step" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={spring}>
-                              <Wrench /> <span className="truncate">{stepLabel(s)}</span>
-                            </motion.span>
+                            <motion.details key={`${toolSteps.length - 6 + i}-${s}`} className="step tool-detail" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={spring}>
+                              <summary><Wrench /> <span className="truncate">{stepLabel(s)}</span></summary>
+                              <pre>{s}</pre>
+                            </motion.details>
                           ))}
                         </AnimatePresence>
                       </div>

@@ -542,6 +542,14 @@ button.chip-select { cursor: pointer; }
 /* live status + preview */
 .live-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--accent-strong); margin: 2px 0 8px; min-width: 0; }
 .live-status .spinner { width: 13px; height: 13px; flex: none; }
+.live-elapsed { white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
+.tool-detail { display: block; min-width: 0; }
+.tool-detail summary { display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 0; }
+.tool-detail summary::before { content: '›'; flex: none; }
+.tool-detail[open] summary::before { transform: rotate(90deg); }
+.tool-detail summary svg { flex: none; }
+.tool-detail summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.tool-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.5; margin: 8px 0 2px; user-select: text; }
 .preview-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--border); background: var(--bg-2, var(--bg)); }
 .preview-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
 .preview-frame { position: relative; flex: 1; min-height: 0; padding: 12px; }
