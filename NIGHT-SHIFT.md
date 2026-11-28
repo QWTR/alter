@@ -132,3 +132,15 @@ Kontrola skryptu startowego wykryła niezgodność UTF-8 bez BOM z Windows Power
 - Szerokości 360/390/768/1440 bez overflow; catalog-*.png i catalog-results.json w katalogu artefaktów. Tabs w ustawieniach przewijają wybraną zakładkę po ustaleniu uprawnień lokalnego użytkownika.
 - Weryfikacja: npm test 11/11, npm run typecheck OK, npm run build:web OK (dotychczasowe ostrzeżenie o dużym bundlu), git diff --check OK.
 - Zrestartowano wyłącznie serwer testowy 4317 (PID 18040) w celu załadowania cache backendu. Caddy 3232, relay 7340, Repair 17268 bez restartu. Produkcji nie wdrażano; brak push i płatnych operacji.
+
+## Oficjalny build 0.20.0 — na osobne polecenie właściciela
+
+- Właściciel zatwierdził oficjalny build i push na GitHuba. Wersja aplikacji, frontendu, desktopu, lockfile i stała VERSION: **0.20.0**. Notatki: `RELEASE-NOTES-0.20.0.md`.
+- `npm test`: **11/11**; `npm run typecheck`: **OK**; `npm run build:web`: **OK**; `npm run dist -w @alter/desktop`: **OK** (Electron 44.11.5, Windows x64 / NSIS).
+- Instalator: `apps/desktop/release/ALTTER-Setup-0.20.0.exe`, 127910478 bajtów; SHA-256 `1099b78be442f4e917802b7ac9f55206e64d5aaaefa7f5e1c57e4c97afd2d85e`.
+- Podpis kodu nie jest skonfigurowany: instalator **NotSigned**. Nie instalowano go na produkcyjnym VPS; nie zmieniano autostartu ani protokołu `altter://`.
+- Sprawdzono ASAR i zasoby wydania: wersja 0.20.0, nowy katalog w JS i endpointy skilli w bundlu; skan prywatnych plików i poświadczeń przeszedł.
+- Rzeczywiście uruchomiono spakowany serwer przez dołączony runtime Electron/Node z osobnymi danymi i portem 4318. Status: 0.20.0; HTML 200; 15 skilli wbudowanych; nowy endpoint podglądu waliduje wejście (400). Proces testowy zatrzymano po sprawdzeniu. Dowody: `release-0.20.0-inspection.json`, `release-0.20.0-smoke.json` w katalogu artefaktów.
+- Paczka szybkiej aktualizacji `ALTTER-app.zip`: 8609923 bajty. Wydanie zachowuje niezmienione APK 0.15.0 z poprzedniego release'u; zawiera też `SHA256SUMS.txt`.
+- Docelowy adres wydania: https://github.com/QWTR/alter/releases/tag/v0.20.0 . Kod i tag mają być wypchnięte atomowo, a GitHub Release opublikowany dopiero po przesłaniu i sprawdzeniu wszystkich załączników.
+- Caddy, relay, ALTTER Repair i serwer VROOM nie były restartowane podczas przygotowania wydania.
