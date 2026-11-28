@@ -50,3 +50,12 @@
 - Test przeglądarkowy przy 390 px: odznaczenie/zapis, zaznaczenie/zapis, ponowny odczyt z API, zamknięcie i ponowne otwarcie panelu ze szkicem. OK. Dowody workspace-skills-390.png, workspace-skills-results.json.
 - Po rzeczywistym restarcie samej instancji testowej API nadal zwraca źródło i SHA e4bb5d960d87126ff3b3a8af1a104b7db67560ba oraz przypisanie skilla.
 - Następne: zatwierdzenie poprawek galerii i wysyłki po błędzie.
+
+## Etap 6 — galeria i lokalne wyniki Studio
+- Odtworzono błąd audio w UI: galeria próbowała wyświetlać WAV jako img (media-before-audio.png). Naprawiono przez natywny odtwarzacz audio.
+- Galeria obsługuje Enter/Spację, widoczne zamknięcie i Escape; wynik z folderu projektu prowadzi z powrotem do jego workspace.
+- Test media-after: audio działa, MP4 odtwarza się (czas rośnie), 1080x1920, 6.058667 s; przejście do właściwego projektu i zamknięcie Escape OK; brak wyjątków JS.
+- MP4: G:\ALTTER-Repair\altter-plan-test-data\workspace\renders\night-vroom.mp4 (H.264 + AAC 48 kHz stereo). Sprawdzono obie sceny w wyeksportowanych klatkach; powiększono tekst pomocniczy do 44 px i poprawiono kontrast. Audio syntetyczne, bez lektora i bez płatnych wywołań.
+- Kod sceny: examples/night-shift/vroom-demo.tsx; odtworzenie: node scripts/night-shift-render.cjs (jeden worker).
+- Podgląd strony: odpowiedź testowa → otwarcie prawdziwego HTML → wskazanie #hero-title → ręczna zmiana pliku w teście → odświeżenie pokazuje nowy nagłówek. Dowody page-picked.png, page-edited.png, page-results.json. Nie jest to test edycji przez model.
+- Umiejętność użyta przy teście renderowania: Remotion (lokalny silnik).

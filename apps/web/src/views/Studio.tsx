@@ -3,10 +3,10 @@
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowRight, Box, Captions, Check, Clapperboard, Download, Film, Image as ImageIcon, Images, Layers, Megaphone, MonitorPlay, Paintbrush, Paperclip,
-  KeyRound, Palette, Play, Scissors, Smartphone, Sparkles, Trash2, Type, WandSparkles, X, type LucideIcon,
+  KeyRound, Palette, Play, Scissors, Smartphone, Sparkles, Trash2, Type, WandSparkles, X, FolderKanban, type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { api, invalidate, setCached, uploadFile, useData, type Attachment, type Brand, type MediaItem, type StudioInfo } from '../api';
+import { api, invalidate, setCached, uploadFile, useData, type Attachment, type Brand, type MediaItem, type StudioInfo, type Project } from '../api';
 import { ProgressBar } from '../components/Media';
 import { Field, Modal, ModalHead, PageHead, Segmented, softSpring, spring, stagger, Switch, toast } from '../components/ui';
 import { useT, type Key } from '../i18n';
@@ -273,6 +273,14 @@ function Brief({ recipe, brand, onClose }: { recipe: Recipe | null; brand: Brand
 function Gallery({ renders }: { renders: MediaItem[] }) {
   const t = useT();
   const [open, setOpen] = useState<MediaItem | null>(null);
+  const { data: projects } = useData<Project[]>('/api/projects');
+  const sourceProject = open?.folder ? projects?.find(p => p.folder === open.folder) : undefined;
+  useEffect(() => {
+    if (!open) return;
+    const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(null); };
+    window.addEventListener('keydown', escape);
+    return () => window.removeEventListener('keydown', escape);
+  }, [open]);
   const remove = async (m: MediaItem) => {
     if (!confirm(t('studio.deleteConfirm', { name: m.name }))) return;
     await api('/api/studio/renders', { method: 'DELETE', body: { url: m.url } });
@@ -290,7 +298,7 @@ function Gallery({ renders }: { renders: MediaItem[] }) {
       ) : (
         <div className="render-grid">
           {renders.map((m, i) => (
-            <motion.div key={m.url} className="render-tile" {...stagger(i)} onClick={() => setOpen(m)}>
+            <motion.div key={m.url} className="render-tile" role="button" tabIndex={0} aria-label={m.name} {...stagger(i)} onClick={() => setOpen(m)} onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault();setOpen(m); } }}>
               {m.kind === 'video' ? <video src={m.url} muted preload="metadata" onMouseEnter={(e) => e.currentTarget.play().catch(() => {})} onMouseLeave={(e) => e.currentTarget.pause()} loop playsInline /> : m.kind === 'image' ? <img src={m.url} alt="" loading="lazy" /> : <div className="render-audio"><Film /></div>}
               <div className="render-meta">
                 {m.kind === 'video' && <Play size={12} />}
@@ -308,7 +316,11 @@ function Gallery({ renders }: { renders: MediaItem[] }) {
         {open && (
           <motion.div className="lightbox" onClick={() => setOpen(null)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.div initial={{ scale: 0.94 }} animate={{ scale: 1 }} exit={{ scale: 0.96 }} transition={softSpring} onClick={(e) => e.stopPropagation()} style={{ display: 'grid', placeItems: 'center' }}>
-              {open.kind === 'video' ? <video src={open.url} controls autoPlay loop playsInline className="lightbox-media" /> : <img src={open.url} alt={open.name} className="lightbox-media" />}
+              {open.kind === 'video' ? <video src={open.url} controls autoPlay loop playsInline className="lightbox-media" /> : open.kind === 'audio' ? <audio src={open.url} controls autoPlay /> : <img src={open.url} alt={open.name} className="lightbox-media" />}
+              <div className="row" style={{ marginTop: 12, gap: 8, maxWidth: '90vw' }}>
+                <button type="button" className="btn sm" onClick={() => setOpen(null)} aria-label={t('common.close')}><X size={16} />{t('common.close')}</button>
+                {sourceProject && <button type="button" className="btn sm" title={sourceProject.name} onClick={() => { setOpen(null);navigate(`/workspace/${sourceProject.id}`); }}><FolderKanban size={16} /><span className="truncate">{sourceProject.name}</span><ArrowRight size={16} /></button>}
+              </div>
             </motion.div>
             <span className="lightbox-name">{open.name}</span>
           </motion.div>
