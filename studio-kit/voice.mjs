@@ -8,8 +8,8 @@
 // timings from ElevenLabs (same shape as voice-times.mjs), so captions and scenes follow the voice.
 // Neither VoiceStudio running nor a key: prints NO_VOICE_KEY and exits 3.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
+import { dirname, join, resolve } from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
 
 const argv = process.argv.slice(2);
 const opt = {};
@@ -20,7 +20,7 @@ for (let i = 0; i < argv.length; i++) {
 }
 const key = process.env.ALTER_ELEVENLABS_KEY || process.env.ELEVENLABS_API_KEY;
 const VS = (process.env.ALTER_VOICESTUDIO_URL || 'http://127.0.0.1:3900/elevenlabs').replace(/\/+$/, '');
-const vsPing = async () => { try { return (await fetch(`${VS}/v1/voices`, { signal: AbortSignal.timeout(2500) })).ok; } catch { return false; } };
+const vsPing = async () => { try { return (await fetch(`${VS}/health`, { signal: AbortSignal.timeout(2500) })).ok; } catch { return false; } };
 // installed through ALTTER but asleep: wake it in the background (no window) and wait up to 90 s
 const vsUp = async () => {
   if (await vsPing()) return true;
@@ -43,6 +43,11 @@ const API = engine === 'voicestudio' ? VS : 'https://api.elevenlabs.io';
 const H = engine === 'voicestudio' ? {} : { 'xi-api-key': key };
 
 async function voices() {
+  if (engine === 'voicestudio') {
+    const r = await fetch(`${VS}/v1/audio/voices`);
+    if (!r.ok) throw new Error(`VoiceStudio voices: HTTP ${r.status}`);
+    return ((await r.json()).voices ?? []).filter((v) => v.type !== 'openai_alias').map((v) => ({ id: v.voice_id ?? v.id, name: v.name, category: v.type, labels: {}, description: v.description ?? '' }));
+  }
   const r = await fetch(`${API}/v1/voices`, { headers: H });
   if (r.status === 401) throw new Error(`${NAME} refused the key (${(await r.text()).slice(0, 160)}) — the key may lack the "Voices" permission or be wrong`);
   if (!r.ok) throw new Error(`${NAME} voices: HTTP ${r.status}`);
@@ -79,6 +84,7 @@ async function main() {
     console.log(`Voice: ${pick?.name ?? (engine === 'voicestudio' ? 'default' : 'Brian')} (${voiceId})`);
   }
 
+  if (engine === 'voicestudio') return speakVoiceStudio(text, out, num);
   const body = {
     text,
     model_id: typeof opt.model === 'string' ? opt.model : 'eleven_multilingual_v2',
@@ -124,4 +130,21 @@ async function main() {
   console.log(`TIMES ${out}.json  (${duration.toFixed(1)} s, ${words.length} words, ${lines.length} lines)`);
   }
 }
+// VoiceStudio: OpenAI-compatible /v1/audio/speech; word timings from ALTTER's local Whisper (voice-times.mjs, CPU)
+async function speakVoiceStudio(text, out, num) {
+  const voice = typeof opt.voice === 'string' ? opt.voice : 'default';
+  const lang = typeof opt.lang === 'string' && /^[a-z]{2}$/.test(opt.lang) ? opt.lang : undefined;
+  console.log(`Reading ${text.split(/s+/).length} words with VoiceStudio…`);
+  const r = await fetch(`${VS}/v1/audio/speech`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: 'omnivoice', input: text, voice, speed: Math.max(0.7, Math.min(1.2, num('speed', 1))), response_format: 'mp3', ...(lang ? { language: lang } : {}) }) });
+  if (!r.ok) { console.error(`VoiceStudio: HTTP ${r.status} ${(await r.text()).slice(0, 300)}`); process.exitCode = 1; return; }
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, Buffer.from(await r.arrayBuffer()));
+  const t = spawnSync(process.execPath, [join(import.meta.dirname, 'voice-times.mjs'), out, '--text', text, ...(lang ? ['--lang', lang] : [])], { encoding: 'utf8', windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
+  let times = { duration: 0, lines: [], words: [] };
+  try { times = JSON.parse(t.stdout.slice(t.stdout.indexOf('{'))); } catch {}
+  writeFileSync(out + '.json', JSON.stringify({ duration: times.duration, lines: times.lines, words: times.words }, null, 1));
+  console.log(`OUTPUT ${out}`);
+  console.log(`TIMES ${out}.json  (${Number(times.duration).toFixed(1)} s, ${times.words.length} words, ${times.lines.length} lines)`);
+}
+
 await main().catch((e) => { console.error(/refused the key/.test(e.message) ? `NO_VOICE_KEY: ${e.message}. Ask the user to connect it again: [[altter:connect:elevenlabs]]` : e.message); process.exitCode = 1; });
